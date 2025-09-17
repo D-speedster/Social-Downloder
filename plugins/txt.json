@@ -1,0 +1,49 @@
+{
+  "start_text": "سلام. لینک یوتیوب را ارسال کنید.",
+  "video": "ویدیو",
+  "sound": "صدا",
+  "cover": "کاور",
+  "file_name": "عنوان: {name}",
+  "select_type": "نوع فایل را انتخاب کنید.",
+  "youtube_error": "خطا در پردازش لینک. دوباره تلاش کنید.",
+  "rate_limit": "لطفاً {seconds} ثانیه دیگر تلاش کنید.",
+  "telegram_file": "فایل تلگرام",
+  "download_link": "لینک دانلود",
+  "file_or_link": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nنحوه دریافت را انتخاب کنید:",
+  "file_or_link2": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nلینک مستقیم: <a href=\"{link}\">دانلود</a>",
+  "file_or_link3": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nوضعیت: {status}\nپیشرفت: {sending}",
+  "file_or_link4": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nوضعیت: {status}\nپیشرفت: {sending}",
+  "dashboard_title": "داشبورد دانلودها",
+  "dashboard_pending": "در صف (تا ۵ مورد اخیر)",
+  "dashboard_ready": "آماده (تا ۵ مورد اخیر)",
+  "dashboard_empty": "— موردی برای نمایش نیست —",
+  "dashboard_item": "• {title}\n  وضعیت: {status}\n  حجم: {size}\n  لینک: {link}",
+  "refresh": "بروزرسانی",
+  "close": "بستن",
+
+  "main_youtube": "دانلود یوتیوب",
+  "main_instagram": "دانلود اینستاگرام",
+  "main_dashboard": "داشبورد",
+  "main_settings": "تنظیمات",
+
+  "prompt_send_youtube": "لینک یوتیوب را ارسال کنید.",
+  "prompt_send_instagram": "لینک اینستاگرام را ارسال کنید.",
+
+  "settings_title": "تنظیمات",
+  "settings_quality": "کیفیت",
+  "settings_language": "زبان",
+  "settings_clear_history": "حذف تاریخچه",
+
+  "back": "بازگشت",
+  "yes": "بله",
+  "no": "خیر",
+
+  "quality_auto": "خودکار",
+  "quality_1080p": "1080p",
+  "quality_720p": "720p",
+  "quality_audio": "فقط صدا",
+
+  "settings_updated": "به‌روزرسانی شد.",
+  "settings_cleared": "حذف شد.",
+  "settings_cancelled": "لغو شد."
+}

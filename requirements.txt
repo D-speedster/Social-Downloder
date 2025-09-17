@@ -1,0 +1,8 @@
+mysql-connector-python
+Pyrogram==1.4
+instaloader
+pytube
+python-dateutil
+tgcrypto
+jdatetime
+yt-dlp
