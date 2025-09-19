@@ -12,7 +12,7 @@ load_dotenv()
 # Security: Validate configuration before starting
 try:
     BOT_TOKEN = config.BOT_TOKEN
-    APP_ID = config.APP_ID
+    API_ID = config.API_ID  # Changed from APP_ID to API_ID
     API_HASH = config.API_HASH
 except AttributeError as e:
     print(f"Configuration error: {e}")
@@ -79,7 +79,7 @@ try:
     client = Client(
         "ytdownloader3_dev2",
         bot_token=BOT_TOKEN,
-        api_id=APP_ID,
+        api_id=API_ID,  # Changed from APP_ID to API_ID
         api_hash=API_HASH,
         plugins=plugins,
         workers=MAX_WORKERS,

@@ -24,7 +24,7 @@ async def test_bot_token():
         import config
         
         logger.info("Testing bot token...")
-        logger.info(f"API_ID length: {len(str(config.API_ID))}")
+        logger.info(f"API_ID: {config.API_ID}")
         logger.info(f"API_HASH length: {len(config.API_HASH)}")
         logger.info(f"BOT_TOKEN length: {len(config.BOT_TOKEN)}")
         

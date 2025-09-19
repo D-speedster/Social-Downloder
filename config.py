@@ -19,7 +19,7 @@ db_config = {
 
 # Security: No hardcoded tokens - must be set via environment variables
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-APP_ID = os.environ.get("API_ID")
+API_ID = os.environ.get("API_ID")
 API_HASH = os.environ.get("API_HASH")
 
 # Validate required environment variables
@@ -27,7 +27,7 @@ if not BOT_TOKEN:
     print("ERROR: BOT_TOKEN environment variable is required")
     sys.exit(1)
     
-if not APP_ID:
+if not API_ID:
     print("ERROR: API_ID environment variable is required")
     sys.exit(1)
     
@@ -37,10 +37,13 @@ if not API_HASH:
 
 # Convert API_ID to int with error handling
 try:
-    APP_ID = int(APP_ID)
+    API_ID = int(API_ID)
 except (ValueError, TypeError):
     print("ERROR: API_ID must be a valid integer")
     sys.exit(1)
+
+# Keep APP_ID for backward compatibility
+APP_ID = API_ID
 
 youtube_next_fetch = 1  # time in minute
 

@@ -138,7 +138,11 @@ def check_config():
         
         # Check API credentials (without logging sensitive data)
         if hasattr(config, 'API_ID'):
-            logger.info(f"API_ID: configured (length: {len(str(config.API_ID))})")
+            api_id = getattr(config, 'API_ID', None)
+            if api_id and str(api_id).strip() and str(api_id) != 'None':
+                logger.info(f"API_ID: configured (length: {len(str(config.API_ID))})")
+            else:
+                logger.error("API_ID: not configured")
         else:
             logger.error("API_ID: not configured")
         
