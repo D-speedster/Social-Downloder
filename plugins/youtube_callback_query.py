@@ -28,7 +28,7 @@ txt =constant.TEXT
 data = constant.DATA
 
 
-@Client.on_callback_query(filters.regex(r'^(1|2|3|_file|_link|\d+(vd|vc))$'))
+@Client.on_callback_query(filters.regex(r'^(1|2|3|_file|_link|\d+(vd|vc)|download_video|download_audio)$'))
 async def answer(client: Client, callback_query: CallbackQuery):
     # Get video info from step for yt-dlp handlers
     info = step.get('link', {})
@@ -52,8 +52,93 @@ async def answer(client: Client, callback_query: CallbackQuery):
         except Exception:
             return u
     
-    if callback_query.data == '1':
-        # Video formats
+    if callback_query.data == 'download_video':
+        # Direct video download with best quality
+        if isinstance(info, dict) and 'formats' in info and info.get('title'):
+            # Get best video format with audio
+            video_formats = [f for f in info['formats'] 
+                            if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
+            
+            if video_formats:
+                # Sort by height and get best quality
+                video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                best_format = video_formats[0]
+                
+                # Set format info
+                step['format_id'] = best_format['format_id']
+                step['sort'] = "🎥 ویدیو"
+                filesize = best_format.get('filesize') or best_format.get('filesize_approx')
+                if not filesize:
+                    duration = info.get('duration') or 0
+                    kbps = best_format.get('tbr')
+                    if duration and kbps:
+                        try:
+                            filesize = int((kbps * 1000 / 8) * duration)
+                        except Exception:
+                            filesize = None
+                step['filesize'] = f"{(filesize/1024/1024):.2f} MB" if filesize else "نامشخص"
+                step['ext'] = best_format.get('ext')
+                step['size_bytes'] = int(filesize) if filesize else None
+                step['format_url'] = best_format.get('url')
+                
+                # Show file or link options
+                await callback_query.edit_message_caption(
+                    caption=txt['file_or_link'].format(name=info.get('title'), sort=step['sort'], size=step['filesize']),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(txt['telegram_file'], callback_data='_file')],
+                        [InlineKeyboardButton(txt['download_link'], callback_data='_link')]
+                    ])
+                )
+            else:
+                await callback_query.answer("❌ فرمت ویدیویی یافت نشد.", show_alert=True)
+        else:
+            await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست.", show_alert=True)
+            
+    elif callback_query.data == 'download_audio':
+        # Direct audio download with best quality
+        if isinstance(info, dict) and 'formats' in info and info.get('title'):
+            # Get best audio format
+            audio_formats = [f for f in info['formats'] 
+                           if (f.get('vcodec', 'none') == 'none' and f.get('acodec', 'none') != 'none') or \
+                              (f.get('vcodec', 'none') == 'none' and f.get('ext') in ['m4a', 'webm', 'mp3', 'ogg', 'aac', 'flac', 'wav'])]
+            
+            if audio_formats:
+                # Sort by bitrate and get best quality
+                audio_formats.sort(key=lambda x: (x.get('abr', 0) or x.get('tbr', 0) or 0), reverse=True)
+                best_format = audio_formats[0]
+                
+                # Set format info
+                step['format_id'] = best_format['format_id']
+                step['sort'] = "🔊 صدا"
+                filesize = best_format.get('filesize') or best_format.get('filesize_approx')
+                if not filesize:
+                    duration = info.get('duration') or 0
+                    kbps = best_format.get('tbr') or best_format.get('abr')
+                    if duration and kbps:
+                        try:
+                            filesize = int((kbps * 1000 / 8) * duration)
+                        except Exception:
+                            filesize = None
+                step['filesize'] = f"{(filesize/1024/1024):.2f} MB" if filesize else "نامشخص"
+                step['ext'] = best_format.get('ext')
+                step['size_bytes'] = int(filesize) if filesize else None
+                step['format_url'] = best_format.get('url')
+                
+                # Show file or link options
+                await callback_query.edit_message_caption(
+                    caption=txt['file_or_link'].format(name=info.get('title'), sort=step['sort'], size=step['filesize']),
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton(txt['telegram_file'], callback_data='_file')],
+                        [InlineKeyboardButton(txt['download_link'], callback_data='_link')]
+                    ])
+                )
+            else:
+                await callback_query.answer("❌ فرمت صوتی یافت نشد.", show_alert=True)
+        else:
+            await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست.", show_alert=True)
+            
+    elif callback_query.data == '1':
+        # Video formats (legacy)
         formats = []
         if isinstance(info, dict) and 'formats' in info and info.get('title'):
             # Using yt-dlp format selection

@@ -1,9 +1,12 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.errors import FloodWait
+from pyrogram.enums import ParseMode
 from plugins.start import step, join
 from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from yt_dlp import YoutubeDL
+import yt_dlp
 from plugins import constant
 import os
 import json
@@ -35,6 +38,109 @@ performance_logger.addHandler(file_handler)
 performance_logger.propagate = False
 
 txt = constant.TEXT
+
+
+async def display_video_info_with_cover(client: Client, message, info):
+    """Display video cover, title, duration and download options"""
+    try:
+        # Get video information
+        title = info.get('title', 'عنوان نامشخص')
+        duration = info.get('duration', 0)
+        thumbnail_url = info.get('thumbnail', None)
+        uploader = info.get('uploader', 'نامشخص')
+        view_count = info.get('view_count', 0)
+        
+        # Format duration
+        if duration:
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            seconds = duration % 60
+            if hours > 0:
+                duration_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+            else:
+                duration_str = f"{minutes:02d}:{seconds:02d}"
+        else:
+            duration_str = "نامشخص"
+        
+        # Format view count
+        if view_count:
+            if view_count >= 1000000:
+                view_str = f"{view_count/1000000:.1f}M"
+            elif view_count >= 1000:
+                view_str = f"{view_count/1000:.1f}K"
+            else:
+                view_str = str(view_count)
+        else:
+            view_str = "نامشخص"
+        
+        # Create caption with video info
+        caption = f"🎬 **{title}**\n\n"
+        caption += f"⏱ مدت زمان: {duration_str}\n"
+        caption += f"👤 کانال: {uploader}\n"
+        caption += f"👁 بازدید: {view_str}\n\n"
+        caption += "📥 **گزینه دانلود را انتخاب کنید:**"
+        
+        # Create glass-style buttons
+        keyboard = [
+            [InlineKeyboardButton("🎥 ویدیو (با صدا)", callback_data='download_video')],
+            [InlineKeyboardButton("🔊 فقط صدا", callback_data='download_audio')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Send photo with caption if thumbnail exists
+        if thumbnail_url:
+            try:
+                await message.edit_text("در حال دانلود کاور...")
+                # Send photo and store the new message
+                photo_message = await client.send_photo(
+                    chat_id=message.chat.id,
+                    photo=thumbnail_url,
+                    caption=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                # Delete the original message after sending photo
+                try:
+                    await message.delete()
+                except:
+                    pass  # Ignore if message is already deleted
+            except Exception as e:
+                print(f"Error sending photo: {e}")
+                # Fallback to text message
+                try:
+                    await message.edit_text(caption, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+                except Exception as edit_error:
+                    print(f"Error editing message: {edit_error}")
+                    # Send new message if edit fails
+                    await client.send_message(
+                        chat_id=message.chat.id,
+                        text=caption,
+                        reply_markup=reply_markup,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+        else:
+            # No thumbnail, send text message
+            try:
+                await message.edit_text(caption, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+            except Exception as edit_error:
+                print(f"Error editing message: {edit_error}")
+                # Send new message if edit fails
+                await client.send_message(
+                    chat_id=message.chat.id,
+                    text=caption,
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            
+    except Exception as e:
+        print(f"Error in display_video_info_with_cover: {e}")
+        # Fallback to simple message
+        keyboard = [
+            [InlineKeyboardButton("🎥 ویدیو (با صدا)", callback_data='download_video')],
+            [InlineKeyboardButton("🔊 فقط صدا", callback_data='download_audio')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await message.edit_text("نوع فایل را انتخاب کنید:", reply_markup=reply_markup)
 
 
 @Client.on_message(filters.regex(r"^(?:https?://)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)/") & filters.private & join)
@@ -157,15 +263,8 @@ async def show_video(client: Client, message: Message):
         step['duration'] = info.get('duration', 0)
         step['thumbnail'] = info.get('thumbnail', None)
 
-        keyboard = [
-            [InlineKeyboardButton(txt['video'], callback_data='1')],
-            [InlineKeyboardButton(txt['sound'], callback_data='2')],
-            [InlineKeyboardButton(txt['cover'], callback_data='3')]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        # Send the selection message and log total time
-        await processing_message.edit_text(txt['select_type'], reply_markup=reply_markup)
+        # Download and display cover with video info
+        await display_video_info_with_cover(client, processing_message, info)
         
         end_time = time.time()
         total_time = end_time - start_time
@@ -180,9 +279,22 @@ async def show_video(client: Client, message: Message):
 
     except Exception as e:
         print(f"Error processing YouTube link: {e}")
+        error_msg = str(e).lower()
         # If cookies are invalid or verification is required, show explicit error
-        if "Sign in to confirm you’re not a bot" in str(e) or "account cookies are no longer valid" in str(e) or "cookies" in str(e).lower():
-            await processing_message.edit_text("کوکی‌های یوتیوب نامعتبر است. فایل cookies/youtube.txt را به‌روزرسانی کنید.")
+        if any(keyword in error_msg for keyword in ["sign in to confirm", "not a bot", "cookies", "authentication", "login"]):
+            try:
+                await processing_message.edit_text(
+                    "⚠️ **مشکل احراز هویت یوتیوب**\n\n"
+                    "کوکی‌های یوتیوب نامعتبر یا منقضی شده است.\n"
+                    "لطفاً فایل `cookies/youtube.txt` را به‌روزرسانی کنید.\n\n"
+                    "📝 **راهنمای به‌روزرسانی کوکی:**\n"
+                    "1. وارد حساب یوتیوب خود شوید\n"
+                    "2. کوکی‌های جدید را استخراج کنید\n"
+                    "3. فایل cookies/youtube.txt را جایگزین کنید",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                await processing_message.edit_text("کوکی‌های یوتیوب نامعتبر است. فایل cookies/youtube.txt را به‌روزرسانی کنید.")
             return
         # Try alternative extraction methods without cookies
         try:
@@ -222,13 +334,8 @@ async def show_video(client: Client, message: Message):
             step['duration'] = info.get('duration', 0)
             step['thumbnail'] = info.get('thumbnail', None)
 
-            keyboard = [
-                [InlineKeyboardButton(txt['video'], callback_data='1')],
-                [InlineKeyboardButton(txt['sound'], callback_data='2')],
-                [InlineKeyboardButton(txt['cover'], callback_data='3')]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await processing_message.edit_text(txt['select_type'], reply_markup=reply_markup)
+            # Download and display cover with video info (fallback)
+            await display_video_info_with_cover(client, processing_message, info)
             
             # Log fallback total time
             end_time = time.time()
@@ -242,5 +349,17 @@ async def show_video(client: Client, message: Message):
                 performance_logger.info(f"[USER:{user_id}] ✅ GOOD FALLBACK: {total_time:.2f}s (Target: <8s)")
         except Exception as fallback_error:
             print(f"Fallback extraction also failed: {fallback_error}")
-            await processing_message.edit_text(txt['youtube_error'])
+            try:
+                await processing_message.edit_text(
+                    "❌ **خطا در پردازش لینک یوتیوب**\n\n"
+                    "متأسفانه امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
+                    "لطفاً موارد زیر را بررسی کنید:\n\n"
+                    "🔗 لینک معتبر باشد\n"
+                    "🌐 اتصال اینترنت برقرار باشد\n"
+                    "🔒 ویدیو در دسترس عموم باشد\n\n"
+                    "در صورت تکرار مشکل، لطفاً دوباره تلاش کنید.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                await processing_message.edit_text("خطا در پردازش لینک یوتیوب. لطفاً دوباره تلاش کنید.")
             return
