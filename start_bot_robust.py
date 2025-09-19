@@ -55,10 +55,34 @@ class BotManager:
                 "plugins/bot_database.db-wal"
             ]
             
-            for db_file in db_files:
+            # Also clean session files
+            session_files = []
+            for file in os.listdir('.'):
+                if file.endswith('.session') or file.endswith('.session-journal'):
+                    session_files.append(file)
+            
+            all_files = db_files + session_files
+            
+            for db_file in all_files:
                 if os.path.exists(db_file):
-                    os.remove(db_file)
-                    self.logger.info(f"Removed database lock file: {db_file}")
+                    try:
+                        os.remove(db_file)
+                        self.logger.info(f"Removed lock/session file: {db_file}")
+                    except OSError as e:
+                        if "being used by another process" in str(e) or "Device or resource busy" in str(e):
+                            self.logger.warning(f"File {db_file} is locked by another process")
+                            # Try to kill any python processes that might be holding the file
+                            try:
+                                if os.name != 'nt':  # Unix/Linux
+                                    subprocess.run(['pkill', '-f', 'bot.py'], check=False)
+                                    time.sleep(2)
+                                    os.remove(db_file)
+                                    self.logger.info(f"Force removed: {db_file}")
+                            except:
+                                pass
+                        else:
+                            raise e
+                            
         except Exception as e:
             self.logger.warning(f"Could not clean database files: {e}")
     
@@ -115,15 +139,37 @@ class BotManager:
             # Clean up database files before starting
             self.cleanup_database_files()
             
-            # Start bot process
+            # Check if bot.py exists
+            if not os.path.exists(BOT_SCRIPT):
+                self.logger.error(f"Bot script not found: {BOT_SCRIPT}")
+                return False
+            
+            # Start bot process with better error handling
             self.process = subprocess.Popen(
                 [sys.executable, BOT_SCRIPT],
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1,
-                universal_newlines=True
+                universal_newlines=True,
+                cwd=os.getcwd()
             )
+            
+            # Wait a moment to see if process starts successfully
+            time.sleep(1)
+            
+            if self.process.poll() is not None:
+                # Process already exited
+                exit_code = self.process.poll()
+                stdout, stderr = self.process.communicate()
+                
+                self.logger.error(f"Bot failed to start, exited immediately with code {exit_code}")
+                if stdout:
+                    self.logger.error(f"STDOUT: {stdout}")
+                if stderr:
+                    self.logger.error(f"STDERR: {stderr}")
+                
+                return False
             
             return True
             
@@ -137,33 +183,83 @@ class BotManager:
             return False
         
         try:
+            output_lines = []
+            error_lines = []
+            
             # Read output line by line
             while self.running and self.process.poll() is None:
                 line = self.process.stdout.readline()
                 if line:
+                    line_stripped = line.strip()
+                    output_lines.append(line_stripped)
+                    
                     # Log bot output
-                    self.logger.info(f"BOT: {line.strip()}")
+                    self.logger.info(f"BOT: {line_stripped}")
                     
                     # Check for specific error patterns
                     if "database is locked" in line.lower():
                         self.logger.warning("Database lock detected, will restart...")
+                        error_lines.append("Database lock error")
                         self.process.terminate()
                         return False
                     
                     if "bot startup failed" in line.lower():
                         self.logger.warning("Bot startup failed, will restart...")
+                        error_lines.append("Bot startup failed")
                         self.process.terminate()
                         return False
+                    
+                    # Check for authentication errors
+                    if "unauthorized" in line.lower() or "invalid token" in line.lower():
+                        self.logger.error("Authentication error detected - check bot token")
+                        error_lines.append("Authentication error")
+                        self.process.terminate()
+                        return False
+                    
+                    # Check for network errors
+                    if "network" in line.lower() and "error" in line.lower():
+                        self.logger.warning("Network error detected")
+                        error_lines.append("Network error")
                 
                 time.sleep(0.1)
             
+            # Process ended - capture any remaining output
+            try:
+                remaining_output, remaining_error = self.process.communicate(timeout=5)
+                if remaining_output:
+                    for line in remaining_output.split('\n'):
+                        if line.strip():
+                            self.logger.info(f"BOT: {line.strip()}")
+                            output_lines.append(line.strip())
+                if remaining_error:
+                    for line in remaining_error.split('\n'):
+                        if line.strip():
+                            self.logger.error(f"BOT ERROR: {line.strip()}")
+                            error_lines.append(line.strip())
+            except subprocess.TimeoutExpired:
+                self.logger.warning("Timeout waiting for process output")
+            
             # Process ended
             exit_code = self.process.poll()
+            
+            # Log detailed exit information
             if exit_code == 0:
                 self.logger.info("Bot exited normally")
                 return True
             else:
-                self.logger.warning(f"Bot exited with code {exit_code}")
+                self.logger.error(f"Bot exited with code {exit_code}")
+                
+                # Log last few lines for debugging
+                if output_lines:
+                    self.logger.error("Last output lines:")
+                    for line in output_lines[-5:]:
+                        self.logger.error(f"  > {line}")
+                
+                if error_lines:
+                    self.logger.error("Error summary:")
+                    for error in error_lines:
+                        self.logger.error(f"  ! {error}")
+                
                 return False
                 
         except Exception as e:
