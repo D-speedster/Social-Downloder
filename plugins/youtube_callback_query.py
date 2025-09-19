@@ -5,6 +5,7 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode
 import json
 import os
 import re
@@ -286,6 +287,16 @@ async def answer(client: Client, callback_query: CallbackQuery):
         except Exception as e:
             print(f"Error checking blocked_until: {e}")
 
+        # نمایش فوری پیام شروع دانلود به کاربر
+        await safe_edit_text(
+            f"🚀 **شروع دانلود**\n\n"
+            f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+            f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+            f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+            f"⏳ در حال آماده‌سازی دانلود...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
         global previousprogress_download, previousprogress_upload
         previousprogress_download = 0
         previousprogress_upload = 0
@@ -329,13 +340,34 @@ async def answer(client: Client, callback_query: CallbackQuery):
         def progress_hook(d):
             global previousprogress_download
             if d['status'] == 'downloading':
+                # بهبود محاسبه درصد پیشرفت برای فرگمنت‌ها
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
                 downloaded_bytes = d.get('downloaded_bytes', 0)
-                percent = int(downloaded_bytes / total_bytes * 100) if total_bytes else previousprogress_download
-                # Only update every 5% to reduce UI spam and improve performance
-                if total_bytes and percent > previousprogress_download and (percent - previousprogress_download) >= 5:
+                
+                # اگر فرگمنت‌ها وجود دارند، از آنها استفاده کن
+                fragment_index = d.get('fragment_index')
+                fragment_count = d.get('fragment_count')
+                
+                if fragment_index is not None and fragment_count is not None and fragment_count > 0:
+                    # محاسبه درصد بر اساس فرگمنت‌ها
+                    percent = int((fragment_index / fragment_count) * 100)
+                elif total_bytes and downloaded_bytes:
+                    # محاسبه درصد بر اساس بایت‌ها
+                    percent = int((downloaded_bytes / total_bytes) * 100)
+                else:
+                    # اگر هیچ اطلاعاتی نداریم، از درصد قبلی استفاده کن
+                    percent = previousprogress_download
+                
+                # فقط هر 3% به‌روزرسانی کن تا UI spam نشود
+                if percent > previousprogress_download and (percent - previousprogress_download) >= 3:
                     previousprogress_download = percent
                     size_str = f"{(total_bytes/1024/1024):.2f} MB" if total_bytes else (step.get('filesize') or 'نامشخص')
+                    
+                    # نمایش اطلاعات فرگمنت در صورت وجود
+                    status_text = "در حال دانلود در سرور..."
+                    if fragment_index is not None and fragment_count is not None:
+                        status_text = f"در حال دانلود قسمت {fragment_index + 1} از {fragment_count}..."
+                    
                     # Update job status occasionally to reduce DB writes
                     try:
                         if step.get('job_id') and percent % 10 == 0:  # Update DB every 10%
@@ -343,7 +375,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                                 step['job_id'],
                                 'downloading',
                                 link=step.get('format_url'),
-                                size_bytes=int(total_bytes)
+                                size_bytes=int(total_bytes) if total_bytes else None
                             )
                     except Exception:
                         pass
@@ -354,7 +386,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                                     info.get('title'), 
                                     step['sort'],
                                     size_str,
-                                    "در حال دانلود در سرور..."
+                                    status_text
                                 ),
                                 percent
                             ),
@@ -438,6 +470,16 @@ async def answer(client: Client, callback_query: CallbackQuery):
         if os.path.exists(cookies_path):
             ydl_opts['cookiefile'] = cookies_path
 
+        # نمایش پیام آماده‌سازی قبل از شروع دانلود
+        await safe_edit_text(
+            f"🔄 **آماده‌سازی دانلود**\n\n"
+            f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+            f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+            f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+            f"⚙️ در حال اتصال به سرور یوتیوب...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
         try:
             await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).download([info['webpage_url']]))
         except Exception as e:
