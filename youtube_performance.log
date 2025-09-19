@@ -1,0 +1,7 @@
+2025-09-19 14:29:06,329 - INFO - [USER:79049016] YouTube link processing started for: https://www.youtube.com/watch?v=TJ4INx5lfe4
+2025-09-19 14:29:08,197 - INFO - [USER:79049016] Processing message sent after: 1.87 seconds
+2025-09-19 14:29:08,197 - INFO - [USER:79049016] Starting yt-dlp extraction...
+2025-09-19 14:29:19,108 - INFO - [USER:79049016] yt-dlp extraction completed in: 10.91 seconds
+2025-09-19 14:29:19,366 - INFO - [USER:79049016] TOTAL PROCESSING TIME: 13.04 seconds
+2025-09-19 14:29:19,367 - INFO - [USER:79049016] Breakdown - Message: 1.87s, Extraction: 10.91s, UI: 0.26s
+2025-09-19 14:29:19,416 - WARNING - [USER:79049016] ⚠️ SLOW PROCESSING: 13.04s (Target: <8s)

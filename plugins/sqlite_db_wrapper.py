@@ -25,8 +25,36 @@ class DB:
                 """CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
-                    last_download TEXT NOT NULL
+                    last_download TEXT NOT NULL,
+                    joined_at TEXT NOT NULL DEFAULT '',
+                    total_requests INTEGER NOT NULL DEFAULT 0,
+                    daily_requests INTEGER NOT NULL DEFAULT 0,
+                    daily_date TEXT NOT NULL DEFAULT '',
+                    blocked_until TEXT NOT NULL DEFAULT ''
                 )"""
+            )
+            
+            # Create waiting_messages table for custom admin messages
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS waiting_messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    platform TEXT NOT NULL UNIQUE,
+                    message_type TEXT NOT NULL DEFAULT 'text',
+                    message_content TEXT NOT NULL,
+                    file_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )"""
+            )
+            
+            # Insert default waiting messages if they don't exist
+            self.cursor.execute(
+                """INSERT OR IGNORE INTO waiting_messages (platform, message_type, message_content) 
+                   VALUES ('youtube', 'text', 'در حال پردازش لینک یوتیوب...')"""
+            )
+            self.cursor.execute(
+                """INSERT OR IGNORE INTO waiting_messages (platform, message_type, message_content) 
+                   VALUES ('instagram', 'text', 'در حال پردازش لینک اینستاگرام...')"""
             )
             
             self.mydb.commit()
@@ -102,6 +130,86 @@ class DB:
             self.mydb.commit()
         except sqlite3.Error as error:
             print(f"Failed to update last download of user: {error}")
+
+    def get_waiting_message(self, platform: str) -> str:
+        """Get custom waiting message for a platform"""
+        try:
+            query = 'SELECT message_content FROM waiting_messages WHERE platform = ?'
+            self.cursor.execute(query, (platform,))
+            record = self.cursor.fetchone()
+            if record:
+                return record[0]
+            return None
+        except sqlite3.Error as error:
+            print(f"Failed to get waiting message: {error}")
+            return None
+    
+    def get_waiting_message_full(self, platform: str) -> dict:
+        """Get full waiting message info for a platform"""
+        try:
+            query = 'SELECT message_type, message_content, file_id FROM waiting_messages WHERE platform = ?'
+            self.cursor.execute(query, (platform,))
+            record = self.cursor.fetchone()
+            if record:
+                return {
+                    'type': record[0],
+                    'content': record[1],
+                    'file_id': record[2]
+                }
+            return None
+        except sqlite3.Error as error:
+            print(f"Failed to get waiting message full: {error}")
+            return None
+    
+    def set_waiting_message(self, platform: str, message_type: str, message_content: str, file_id: str = None) -> bool:
+        """Set custom waiting message for a platform"""
+        try:
+            query = '''INSERT OR REPLACE INTO waiting_messages 
+                      (platform, message_type, message_content, file_id, updated_at) 
+                      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)'''
+            record = (platform, message_type, message_content, file_id)
+            self.cursor.execute(query, record)
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as error:
+            print(f"Failed to set waiting message: {error}")
+            return False
+    
+    def get_all_waiting_messages(self) -> list:
+        """Get all waiting messages for admin panel"""
+        try:
+            query = 'SELECT platform, message_type, message_content, file_id FROM waiting_messages'
+            self.cursor.execute(query)
+            records = self.cursor.fetchall()
+            return [{
+                'platform': record[0],
+                'type': record[1],
+                'content': record[2],
+                'file_id': record[3]
+            } for record in records]
+        except sqlite3.Error as error:
+            print(f"Failed to get all waiting messages: {error}")
+            return []
+
+    def get_blocked_until(self, user_id: int) -> str:
+        """Get blocked_until timestamp for a user"""
+        try:
+            query = 'SELECT blocked_until FROM users WHERE user_id = ?'
+            self.cursor.execute(query, (user_id,))
+            record = self.cursor.fetchone()
+            return record[0] if record and record[0] else ''
+        except sqlite3.Error as error:
+            print(f"Failed to get blocked_until: {error}")
+            return ''
+    
+    def set_blocked_until(self, user_id: int, until_str: str) -> None:
+        """Set blocked_until timestamp for a user"""
+        try:
+            query = 'UPDATE users SET blocked_until = ? WHERE user_id = ?'
+            self.cursor.execute(query, (until_str, user_id))
+            self.mydb.commit()
+        except sqlite3.Error as error:
+            print(f"Failed to set blocked_until: {error}")
 
     def close(self):
         """Close database connection"""

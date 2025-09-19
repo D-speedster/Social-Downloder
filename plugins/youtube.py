@@ -1,13 +1,38 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from plugins.start import step, join
-from plugins.db_wrapper import DB
+from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from yt_dlp import YoutubeDL
 from plugins import constant
 import os
 import json
 import asyncio
+import shutil
+import time
+import logging
+
+# Configure logging for performance monitoring
+import os
+log_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'youtube_performance.log')
+
+# Create performance logger with specific handler
+performance_logger = logging.getLogger('youtube_performance')
+performance_logger.setLevel(logging.INFO)
+
+# Remove any existing handlers to avoid duplicates
+for handler in performance_logger.handlers[:]:
+    performance_logger.removeHandler(handler)
+
+# Add file handler for performance logging
+file_handler = logging.FileHandler(log_path, encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+performance_logger.addHandler(file_handler)
+
+# Prevent propagation to root logger
+performance_logger.propagate = False
 
 txt = constant.TEXT
 
@@ -35,9 +60,35 @@ async def show_video(client: Client, message: Message):
                 return
     except Exception as e:
         print(f"Error checking blocked_until: {e}")
+        # Continue execution even if blocked_until check fails
+        pass
 
     url = message.text
-    processing_message = await message.reply_text("در حال پردازش لینک یوتیوب...")
+    
+    # Start timing the process
+    start_time = time.time()
+    performance_logger.info(f"[USER:{user_id}] YouTube link processing started for: {url}")
+    
+    # Get custom waiting message from database
+    db = DB()
+    custom_message_data = db.get_waiting_message_full('youtube')
+    
+    # Send initial processing message with timing
+    if custom_message_data and custom_message_data.get('type') == 'gif':
+        processing_message = await message.reply_animation(
+            animation=custom_message_data['content'],
+            caption="در حال پردازش لینک یوتیوب..."
+        )
+    elif custom_message_data and custom_message_data.get('type') == 'sticker':
+        await message.reply_sticker(sticker=custom_message_data['content'])
+        processing_message = await message.reply_text("در حال پردازش لینک یوتیوب...")
+    else:
+        # Text message (default or custom)
+        waiting_text = custom_message_data.get('content', "در حال پردازش لینک یوتیوب...") if custom_message_data else "در حال پردازش لینک یوتیوب..."
+        processing_message = await message.reply_text(waiting_text)
+    
+    message_sent_time = time.time()
+    performance_logger.info(f"[USER:{user_id}] Processing message sent after: {message_sent_time - start_time:.2f} seconds")
 
     try:
         # Configure yt-dlp with cookies for authentication (conditionally)
@@ -46,19 +97,52 @@ async def show_video(client: Client, message: Message):
         if not use_cookies:
             print(f"Warning: YouTube cookies file not found at {cookies_path}")
 
+        # Security: Use environment variable for ffmpeg path or auto-detect
+        ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        if not ffmpeg_path:
+            # Try common locations
+            common_paths = [
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "ffmpeg",  # If in PATH
+                "/usr/bin/ffmpeg",  # Linux
+                "/usr/local/bin/ffmpeg"  # macOS
+            ]
+            for path in common_paths:
+                if shutil.which(path) or os.path.exists(path):
+                    ffmpeg_path = path
+                    break
+        
         ydl_opts = {
             'quiet': True,
-            'ffmpeg_location': "C:\\ffmpeg\\bin\\ffmpeg.exe",
             'simulate': True,
-            'extractor_retries': 3,
-            'fragment_retries': 3,
-            'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)}
+            'extractor_retries': 1,  # Reduced from 3 to 1 for faster processing
+            'fragment_retries': 1,   # Reduced from 3 to 1 for faster processing
+            'retry_sleep_functions': {'http': lambda n: min(2 ** n, 10)},  # Faster retry with lower max wait
+            'socket_timeout': 15,    # Reduced from 30 to 15 seconds
+            'no_warnings': True,
+            'extract_flat': False,   # Don't extract playlist info to speed up
+            'skip_download': True,   # Explicitly skip download in simulate mode
+            'format': 'best[height<=720]',  # Limit initial format check to reduce processing time
+            'ignoreerrors': True,    # Continue on minor errors
+            'no_check_certificate': True,  # Skip SSL verification for speed
         }
+        
+        if ffmpeg_path:
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            
         if use_cookies:
             ydl_opts['cookiefile'] = cookies_path
 
         # Run extraction in a background thread to avoid blocking the event loop
+        extraction_start = time.time()
+        performance_logger.info(f"[USER:{user_id}] Starting yt-dlp extraction...")
+        
         info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+        
+        extraction_end = time.time()
+        extraction_time = extraction_end - extraction_start
+        performance_logger.info(f"[USER:{user_id}] yt-dlp extraction completed in: {extraction_time:.2f} seconds")
+        
         with open("yt_dlp_info.json", "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False, indent=4)
         print("Extracted info written to yt_dlp_info.json")
@@ -73,7 +157,20 @@ async def show_video(client: Client, message: Message):
             [InlineKeyboardButton(txt['cover'], callback_data='3')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Send the selection message and log total time
         await processing_message.edit_text(txt['select_type'], reply_markup=reply_markup)
+        
+        end_time = time.time()
+        total_time = end_time - start_time
+        performance_logger.info(f"[USER:{user_id}] TOTAL PROCESSING TIME: {total_time:.2f} seconds")
+        performance_logger.info(f"[USER:{user_id}] Breakdown - Message: {message_sent_time - start_time:.2f}s, Extraction: {extraction_time:.2f}s, UI: {end_time - extraction_end:.2f}s")
+        
+        # Alert if processing time exceeds target
+        if total_time > 8.0:
+            performance_logger.warning(f"[USER:{user_id}] ⚠️ SLOW PROCESSING: {total_time:.2f}s (Target: <8s)")
+        else:
+            performance_logger.info(f"[USER:{user_id}] ✅ GOOD PERFORMANCE: {total_time:.2f}s (Target: <8s)")
 
     except Exception as e:
         print(f"Error processing YouTube link: {e}")
@@ -86,11 +183,24 @@ async def show_video(client: Client, message: Message):
             fallback_opts = {
                 'quiet': True,
                 'simulate': True,
-                'extractor_retries': 3,
-                'fragment_retries': 3,
-                'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)}
+                'extractor_retries': 1,  # Reduced for faster fallback
+                'fragment_retries': 1,   # Reduced for faster fallback
+                'retry_sleep_functions': {'http': lambda n: min(2 ** n, 5)},  # Even faster retry in fallback
+                'socket_timeout': 10,    # Shorter timeout for fallback
+                'extract_flat': False,
+                'skip_download': True,
+                'ignoreerrors': True,
+                'no_check_certificate': True
             }
+            fallback_start = time.time()
+            performance_logger.info(f"[USER:{user_id}] Starting fallback extraction...")
+            
             info = await asyncio.to_thread(lambda: YoutubeDL(fallback_opts).extract_info(url, download=False))
+            
+            fallback_end = time.time()
+            fallback_time = fallback_end - fallback_start
+            performance_logger.info(f"[USER:{user_id}] Fallback extraction completed in: {fallback_time:.2f} seconds")
+            
             with open("yt_dlp_info_fallback.json", "w", encoding="utf-8") as f:
                 json.dump(info, f, ensure_ascii=False, indent=4)
             print("Fallback extracted info written to yt_dlp_info_fallback.json")
@@ -106,6 +216,17 @@ async def show_video(client: Client, message: Message):
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await processing_message.edit_text(txt['select_type'], reply_markup=reply_markup)
+            
+            # Log fallback total time
+            end_time = time.time()
+            total_time = end_time - start_time
+            performance_logger.info(f"[USER:{user_id}] FALLBACK TOTAL TIME: {total_time:.2f} seconds")
+            performance_logger.info(f"[USER:{user_id}] Fallback breakdown - Message: {message_sent_time - start_time:.2f}s, Extraction: {fallback_time:.2f}s")
+            
+            if total_time > 8.0:
+                performance_logger.warning(f"[USER:{user_id}] ⚠️ SLOW FALLBACK: {total_time:.2f}s (Target: <8s)")
+            else:
+                performance_logger.info(f"[USER:{user_id}] ✅ GOOD FALLBACK: {total_time:.2f}s (Target: <8s)")
         except Exception as fallback_error:
             print(f"Fallback extraction also failed: {fallback_error}")
             await processing_message.edit_text(txt['youtube_error'])

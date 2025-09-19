@@ -1,7 +1,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from plugins import constant
-from plugins.db_wrapper import DB
+from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from dateutil import parser
 import os, re, time
@@ -65,12 +65,30 @@ def download_instagram(_: Client, message: Message):
     # Try to send typing action compatibly
     try:
         from pyrogram.enums import ChatAction as _ChatAction
-        _.send_chat_action(message.chat.id, _ChatAction.TYPING)
+        client.send_chat_action(message.chat.id, _ChatAction.TYPING)
     except Exception:
-        _.send_chat_action(message.chat.id, "typing")
+        try:
+            client.send_chat_action(message.chat.id, "typing")
+        except Exception:
+            pass  # Ignore if typing action fails
 
-    # Status message
-    status_msg = message.reply_text("⏳ در حال آماده‌سازی لینک اینستاگرام...")
+    # Get custom waiting message from database
+    db = DB()
+    custom_message_data = db.get_waiting_message_full('instagram')
+    
+    # Send waiting message based on type
+    if custom_message_data and custom_message_data.get('type') == 'gif':
+        status_msg = message.reply_animation(
+            animation=custom_message_data['content'],
+            caption="⏳ در حال آماده‌سازی لینک اینستاگرام..."
+        )
+    elif custom_message_data and custom_message_data.get('type') == 'sticker':
+        message.reply_sticker(sticker=custom_message_data['content'])
+        status_msg = message.reply_text("⏳ در حال آماده‌سازی لینک اینستاگرام...")
+    else:
+        # Text message (default or custom)
+        waiting_text = custom_message_data.get('content', "⏳ در حال آماده‌سازی لینک اینستاگرام...") if custom_message_data else "⏳ در حال آماده‌سازی لینک اینستاگرام..."
+        status_msg = message.reply_text(waiting_text)
 
     try:
         from yt_dlp import YoutubeDL
@@ -116,20 +134,32 @@ def download_instagram(_: Client, message: Message):
             'quiet': True,
             'noplaylist': True,
             'progress_hooks': [on_download_hook],
+            'socket_timeout': 30,
+            'no_warnings': True,
+            'extract_flat': False,
+            'writesubtitles': False,
+            'writeautomaticsub': False,
         }
-        # NEW: Instagram cookies support if available
+        # Instagram cookies support if available
         try:
-            cookies_path = os.path.join(os.getcwd(), 'cookies', 'instagram.txt')
-            if os.path.exists(cookies_path):
+            cookies_dir = os.path.join(os.getcwd(), 'cookies')
+            os.makedirs(cookies_dir, exist_ok=True)
+            cookies_path = os.path.join(cookies_dir, 'instagram.txt')
+            if os.path.exists(cookies_path) and os.path.getsize(cookies_path) > 0:
                 ydl_opts['cookiefile'] = cookies_path
-            else:
-                print(f"Warning: Instagram cookies file not found at {cookies_path}")
-        except Exception as _e:
-            print("Failed to set Instagram cookies:", _e)
+        except Exception as e:
+            print(f"Failed to set Instagram cookies: {e}")
 
         with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(message.text, download=True)
-            file_path = ydl.prepare_filename(info)
+            try:
+                info = ydl.extract_info(message.text, download=True)
+                if not info:
+                    raise Exception("No video information extracted")
+                file_path = ydl.prepare_filename(info)
+                if not os.path.exists(file_path):
+                    raise Exception("Downloaded file not found")
+            except Exception as e:
+                raise Exception(f"Download failed: {str(e)}")
 
         # determine title and type
         title = info.get('title') or "Instagram"
@@ -196,12 +226,19 @@ def download_instagram(_: Client, message: Message):
         # Update request counters and last_download with current time (no per-minute limit)
         DB().increment_request(message.from_user.id, datetime.now().isoformat())
 
-        # delete local file after upload
+        # Clean up: delete local file after upload
         try:
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
-        except Exception:
-            pass
+                # Also clean up any temporary files
+                temp_files = [f for f in os.listdir(out_dir) if f.startswith('tmp') or f.endswith('.part')]
+                for temp_file in temp_files:
+                    try:
+                        os.remove(os.path.join(out_dir, temp_file))
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"Cleanup error: {e}")
 
     except Exception as e:
         # Improved guidance for login-required / rate-limit cases

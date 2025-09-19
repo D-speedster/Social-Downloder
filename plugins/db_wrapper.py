@@ -16,20 +16,46 @@ else:
 
 class DB:
     def __init__(self):
+        self.mydb = None
+        self.cursor = None
+        self.db_type = None
+        
         if USE_MYSQL and mysql is not None:
             try:
+                # Validate MySQL config before connecting
+                if not db_config.get('password'):
+                    print("Warning: MySQL password is empty. This may be a security risk.")
+                    
                 # Try to connect to MySQL first
-                self.mydb = mysql.connector.connect(**db_config)
-                self.cursor = self.mydb.cursor()
+                self.mydb = mysql.connector.connect(
+                    **db_config,
+                    autocommit=True,  # Enable autocommit for better performance
+                    connection_timeout=10,  # Add connection timeout
+                    auth_plugin='mysql_native_password'  # Specify auth plugin
+                )
+                self.cursor = self.mydb.cursor(buffered=True)  # Use buffered cursor
                 self.db_type = 'mysql'
                 print("Connected to MySQL database successfully!")
                 return
             except Exception as error:
                 print(f"MySQL connection failed: {error}")
                 print("Falling back to SQLite database...")
-        # Fallback to SQLite
+                
+        # Fallback to SQLite with better security
         db_path = os.path.join(os.path.dirname(__file__), 'bot_database.db')
-        self.mydb = sqlite3.connect(db_path, check_same_thread=False, timeout=30)
+        
+        # Security: Ensure database directory exists and has proper permissions
+        db_dir = os.path.dirname(db_path)
+        if not os.path.exists(db_dir):
+            os.makedirs(db_dir, mode=0o750)  # Restrict directory permissions
+            
+        self.mydb = sqlite3.connect(
+            db_path, 
+            check_same_thread=False, 
+            timeout=30,
+            isolation_level=None  # Enable autocommit mode
+        )
+        
         # Better concurrency and durability for SQLite
         try:
             self.mydb.execute('PRAGMA journal_mode=WAL;')
@@ -37,8 +63,11 @@ class DB:
             self.mydb.execute('PRAGMA temp_store=MEMORY;')
             self.mydb.execute('PRAGMA mmap_size=134217728;')  # 128MB
             self.mydb.execute('PRAGMA busy_timeout=5000;')
-        except Exception:
-            pass
+            self.mydb.execute('PRAGMA foreign_keys=ON;')  # Enable foreign key constraints
+            self.mydb.execute('PRAGMA secure_delete=ON;')  # Secure delete for sensitive data
+        except Exception as e:
+            print(f"Warning: Failed to set SQLite pragmas: {e}")
+            
         self.cursor = self.mydb.cursor()
         self.db_type = 'sqlite'
         print("Connected to SQLite database successfully!")

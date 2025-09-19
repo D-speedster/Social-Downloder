@@ -11,7 +11,7 @@ import instaloader
 from instaloader import InstaloaderException
 from datetime import datetime as _dt
 from plugins import constant
-from plugins.db_wrapper import DB
+from plugins.sqlite_db_wrapper import DB
 # NEW: for server status and async sleep
 import shutil, platform, asyncio, os as _os
 
@@ -29,6 +29,10 @@ admin_step = {
     'cookies': 0,
     # NEW: broadcast state machine (0: idle, 1: waiting for content)
     'broadcast': 0,
+    # NEW: waiting message management
+    'waiting_msg': 0,
+    'waiting_msg_type': '',
+    'waiting_msg_platform': '',
 }
 
 insta = {'level': 0, 'id': "default", 'pass': "defult"}
@@ -50,10 +54,11 @@ def admin_inline_maker() -> list:
             InlineKeyboardButton(txt.get('sponser', 'اسپانسر'), callback_data='sp'),
         ],
         [
+            InlineKeyboardButton("💬 پیام انتظار", callback_data='waiting_msg'),
             InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),
-            InlineKeyboardButton(fj_label, callback_data='fj_toggle'),
         ],
         [
+            InlineKeyboardButton(fj_label, callback_data='fj_toggle'),
             InlineKeyboardButton(power_label, callback_data='pw'),
         ],
     ]
@@ -64,7 +69,8 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
         [
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📣 ارسال پیام", "📢 تنظیم اسپانسر"],
-            ["🔌 خاموش/روشن", "⬅️ بازگشت"],
+            ["💬 پیام انتظار", "🔌 خاموش/روشن"],
+            ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
     )
@@ -135,10 +141,21 @@ async def admin_menu_power(_: Client, message: Message):
     new_state = 'OFF' if current == 'ON' else 'ON'
     data['bot_status'] = new_state
     try:
+        # Create backup before writing
+        backup_path = PATH + '/database.json.bak'
+        if os.path.exists(PATH + '/database.json'):
+            shutil.copy2(PATH + '/database.json', backup_path)
+        
         with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
             json.dump(data, outfile, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Failed to write bot_status: {e}")
+        # Try to restore backup if write failed
+        try:
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, PATH + '/database.json')
+        except Exception:
+            pass
     await message.reply_text(
         f"وضعیت ربات: {'🔴 خاموش' if new_state == 'OFF' else '🟢 روشن'}",
         reply_markup=admin_reply_kb()
@@ -252,6 +269,12 @@ async def handle_cookie_file(_: Client, message: Message):
     try:
         doc = message.document
         name = (doc.file_name or '').strip()
+        
+        # Security: Check file size (max 10MB for cookies)
+        if doc.file_size > 10 * 1024 * 1024:
+            await message.reply_text("❌ فایل خیلی بزرگ است. حداکثر اندازه: 10MB")
+            return
+            
         dest_name = _detect_cookie_dest(name)
         if not dest_name:
             await message.reply_text(
@@ -259,25 +282,42 @@ async def handle_cookie_file(_: Client, message: Message):
                 "- instagram.txt برای اینستاگرام\n"
                 "- youtube.txt برای یوتیوب")
             return
+            
         cookies_dir = os.path.join(os.getcwd(), 'cookies')
-        os.makedirs(cookies_dir, exist_ok=True)
-        tmp_path = os.path.join(cookies_dir, f"__upload_{int(time.time())}_{name or 'cookies.txt'}")
+        os.makedirs(cookies_dir, exist_ok=True, mode=0o700)  # Secure permissions
+        
+        # Use secure temporary filename
+        import secrets
+        secure_suffix = secrets.token_hex(8)
+        tmp_path = os.path.join(cookies_dir, f"tmp_{secure_suffix}_{dest_name}")
+        
         saved_path = await message.download(file_name=tmp_path)
         final_path = os.path.join(cookies_dir, dest_name)
-        try:
-            if os.path.exists(final_path):
-                os.remove(final_path)
-        except Exception:
-            pass
-        try:
-            shutil.move(saved_path, final_path)
-        except Exception:
-            # fallback copy
-            shutil.copyfile(saved_path, final_path)
+        
+        # Create backup of existing cookies
+        if os.path.exists(final_path):
+            backup_path = final_path + '.bak'
             try:
-                os.remove(saved_path)
+                shutil.copy2(final_path, backup_path)
             except Exception:
                 pass
+                
+        try:
+            shutil.move(saved_path, final_path)
+            # Set secure file permissions
+            os.chmod(final_path, 0o600)
+        except Exception as e:
+            print(f"Cookie file move error: {e}")
+            # fallback copy
+            try:
+                shutil.copyfile(saved_path, final_path)
+                os.chmod(final_path, 0o600)
+                os.remove(saved_path)
+            except Exception as e2:
+                print(f"Cookie file copy error: {e2}")
+                await message.reply_text("❌ خطا در ذخیره فایل کوکی")
+                return
+                
         await message.reply_text(f"✅ کوکی‌ها ذخیره شد: {dest_name}")
     except FloodWait as fw:
         await asyncio.sleep(fw.value)
@@ -298,12 +338,21 @@ def _server_status_text() -> str:
     uptime = now - START_TIME
     # Disk usage for current drive
     try:
-        du = shutil.disk_usage(str(_os.getcwd().split(':')[0] + ':\\') if _os.name == 'nt' else '/')
+        if _os.name == 'nt':
+            # Windows: get current drive
+            current_drive = _os.getcwd().split(':')[0] + ':\\'
+        else:
+            # Unix-like: use root
+            current_drive = '/'
+        
+        du = shutil.disk_usage(current_drive)
         total_gb = du.total / (1024**3)
         used_gb = (du.total - du.free) / (1024**3)
         free_gb = du.free / (1024**3)
-        disk_line = f"💽 دیسک: {used_gb:.1f}GB استفاده‌شده / {total_gb:.1f}GB کل (آزاد: {free_gb:.1f}GB)"
-    except Exception:
+        usage_percent = (used_gb / total_gb * 100) if total_gb > 0 else 0
+        disk_line = f"💽 دیسک: {used_gb:.1f}GB/{total_gb:.1f}GB ({usage_percent:.1f}% استفاده)"
+    except Exception as e:
+        print(f"Disk usage error: {e}")
         disk_line = "💽 دیسک: نامشخص"
     # Load avg (POSIX only)
     try:
@@ -384,10 +433,21 @@ async def answer(_, callback_query: CallbackQuery):
         new_state = 'OFF' if current == 'ON' else 'ON'
         data['bot_status'] = new_state
         try:
+            # Create backup before writing
+            backup_path = PATH + '/database.json.bak'
+            if os.path.exists(PATH + '/database.json'):
+                shutil.copy2(PATH + '/database.json', backup_path)
+            
             with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
                 json.dump(data, outfile, indent=4, ensure_ascii=False)
         except Exception as e:
             print(f"Failed to write bot_status: {e}")
+            # Try to restore backup if write failed
+            try:
+                if os.path.exists(backup_path):
+                    shutil.copy2(backup_path, PATH + '/database.json')
+            except Exception:
+                pass
         await callback_query.edit_message_text(
             f"وضعیت ربات: {'🔴 خاموش' if new_state == 'OFF' else '🟢 روشن'}",
             reply_markup=InlineKeyboardMarkup(admin_inline_maker())
@@ -451,10 +511,21 @@ async def force_join_toggle(_: Client, cq: CallbackQuery):
     new_state = not data.get('force_join', True)
     data['force_join'] = new_state
     try:
+        # Create backup before writing
+        backup_path = PATH + '/database.json.bak'
+        if os.path.exists(PATH + '/database.json'):
+            shutil.copy2(PATH + '/database.json', backup_path)
+        
         with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
             json.dump(data, outfile, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Failed to write force_join: {e}")
+        # Try to restore backup if write failed
+        try:
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, PATH + '/database.json')
+        except Exception:
+            pass
     try:
         await cq.answer(f"قفل عضویت: {'روشن' if new_state else 'خاموش'}", show_alert=False)
     except Exception:
@@ -560,6 +631,179 @@ def set_sp(_: Client, message: Message):
          json.dump(data, outfile, indent=4, ensure_ascii=False)
          message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
      admin_step['sp'] = 0
+
+
+# Waiting Message Management Handlers
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_msg$'))
+async def waiting_msg_menu(client: Client, callback_query: CallbackQuery):
+    """Show waiting message management menu"""
+    db = DB()
+    messages = db.get_all_waiting_messages()
+    
+    text = "💬 <b>مدیریت پیام‌های انتظار</b>\n\n"
+    text += "پیام‌های فعلی:\n"
+    for msg_data in messages:
+        platform = msg_data.get('platform', 'نامشخص')
+        msg_type = msg_data.get('type', 'text')
+        content = msg_data.get('content', 'نامشخص')
+        if msg_type == 'text':
+            preview = content[:30] + '...' if len(content) > 30 else content
+        else:
+            preview = f"{msg_type.upper()}: {content[:20]}..."
+        text += f"• {platform}: {preview}\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 تغییر پیام یوتیوب", callback_data='edit_waiting_youtube')],
+        [InlineKeyboardButton("📝 تغییر پیام اینستاگرام", callback_data='edit_waiting_instagram')],
+        [InlineKeyboardButton("🔙 بازگشت", callback_data='back_admin')]
+    ]
+    
+    await callback_query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^edit_waiting_(youtube|instagram)$'))
+async def edit_waiting_message(client: Client, callback_query: CallbackQuery):
+    """Start editing waiting message for specific platform"""
+    platform = callback_query.data.split('_')[-1]
+    admin_step['waiting_msg'] = 1
+    admin_step['waiting_msg_platform'] = platform
+    
+    text = f"💬 <b>تغییر پیام انتظار {platform.title()}</b>\n\n"
+    text += "نوع پیام مورد نظر را انتخاب کنید:\n\n"
+    text += "• متن: پیام متنی ساده\n"
+    text += "• گیف: فایل GIF متحرک\n"
+    text += "• استیکر: استیکر تلگرام\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 متن", callback_data=f'waiting_type_text_{platform}')],
+        [InlineKeyboardButton("🎬 گیف", callback_data=f'waiting_type_gif_{platform}')],
+        [InlineKeyboardButton("😊 استیکر", callback_data=f'waiting_type_sticker_{platform}')],
+        [InlineKeyboardButton("🔙 بازگشت", callback_data='waiting_msg')]
+    ]
+    
+    await callback_query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_type_(text|gif|sticker)_(youtube|instagram)$'))
+async def set_waiting_message_type(client: Client, callback_query: CallbackQuery):
+    """Set the type of waiting message"""
+    parts = callback_query.data.split('_')
+    msg_type = parts[2]
+    platform = parts[3]
+    
+    admin_step['waiting_msg'] = 2
+    admin_step['waiting_msg_type'] = msg_type
+    admin_step['waiting_msg_platform'] = platform
+    
+    if msg_type == 'text':
+        text = f"📝 <b>پیام متنی برای {platform.title()}</b>\n\n"
+        text += "لطفاً متن پیام انتظار جدید را ارسال کنید:\n\n"
+        text += "مثال: ⏳ در حال پردازش لینک شما..."
+    elif msg_type == 'gif':
+        text = f"🎬 <b>گیف برای {platform.title()}</b>\n\n"
+        text += "لطفاً فایل GIF مورد نظر را ارسال کنید."
+    else:  # sticker
+        text = f"😊 <b>استیکر برای {platform.title()}</b>\n\n"
+        text += "لطفاً استیکر مورد نظر را ارسال کنید."
+    
+    keyboard = [[InlineKeyboardButton("❌ لغو", callback_data='waiting_msg')]]
+    
+    await callback_query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^💬 پیام انتظار$'))
+async def waiting_msg_menu_text(client: Client, message: Message):
+    """Show waiting message management menu via text"""
+    db = DB()
+    messages = db.get_all_waiting_messages()
+    
+    text = "💬 <b>مدیریت پیام‌های انتظار</b>\n\n"
+    text += "پیام‌های فعلی:\n"
+    for msg_data in messages:
+        platform = msg_data.get('platform', 'نامشخص')
+        msg_type = msg_data.get('type', 'text')
+        content = msg_data.get('content', 'نامشخص')
+        if msg_type == 'text':
+            preview = content[:30] + '...' if len(content) > 30 else content
+        else:
+            preview = f"{msg_type.upper()}: {content[:20]}..."
+        text += f"• {platform}: {preview}\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("📝 تغییر پیام یوتیوب", callback_data='edit_waiting_youtube')],
+        [InlineKeyboardButton("📝 تغییر پیام اینستاگرام", callback_data='edit_waiting_instagram')],
+    ]
+    
+    await message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# Handle waiting message content input
+waiting_msg_filter = filters.create(
+    lambda _, __, message: admin_step.get('waiting_msg') == 2
+)
+
+@Client.on_message(waiting_msg_filter & filters.user(ADMIN), group=7)
+async def handle_waiting_message_input(client: Client, message: Message):
+    """Handle waiting message content input"""
+    msg_type = admin_step.get('waiting_msg_type')
+    platform = admin_step.get('waiting_msg_platform')
+    
+    if not msg_type or not platform:
+        await message.reply_text("خطا در دریافت اطلاعات. لطفاً دوباره تلاش کنید.")
+        admin_step['waiting_msg'] = 0
+        return
+    
+    db = DB()
+    
+    try:
+        if msg_type == 'text':
+            if not message.text:
+                await message.reply_text("لطفاً یک متن ارسال کنید.")
+                return
+            content = message.text.strip()
+            
+        elif msg_type == 'gif':
+            if not message.animation:
+                await message.reply_text("لطفاً یک فایل GIF ارسال کنید.")
+                return
+            content = message.animation.file_id
+            
+        elif msg_type == 'sticker':
+            if not message.sticker:
+                await message.reply_text("لطفاً یک استیکر ارسال کنید.")
+                return
+            content = message.sticker.file_id
+        
+        # Save to database
+        db.set_waiting_message(platform, msg_type, content)
+        
+        # Reset admin step
+        admin_step['waiting_msg'] = 0
+        admin_step['waiting_msg_type'] = ''
+        admin_step['waiting_msg_platform'] = ''
+        
+        await message.reply_text(
+            f"✅ پیام انتظار {platform.title()} با موفقیت تغییر کرد!\n\n"
+            f"نوع: {msg_type.upper()}\n"
+            f"محتوا: {'متن ذخیره شد' if msg_type == 'text' else 'فایل ذخیره شد'}"
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to save waiting message: {e}")
+        await message.reply_text("خطا در ذخیره‌سازی پیام. لطفاً دوباره تلاش کنید.")
+        admin_step['waiting_msg'] = 0
 
 
 @Client.on_message(filters.text & filters.user(ADMIN), group=3)

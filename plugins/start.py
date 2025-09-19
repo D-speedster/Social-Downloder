@@ -119,52 +119,82 @@ def _resolve_sponsor_chat_id(client: Client, sponsor_tag: str):
 
 
 async def join_check(_, client: Client, message: Message):
+    # Security: Check if user exists
+    try:
+        if not message.from_user or not message.from_user.id:
+            print("[JOIN] No user information available")
+            return False
+    except Exception:
+        return False
+        
     # Admins bypass sponsor check
     try:
-        if message.from_user and message.from_user.id in ADMIN:
+        if message.from_user.id in ADMIN:
             print(f"[JOIN] admin bypass user={message.from_user.id}")
             return True
     except Exception:
         pass
+        
     # Respect force-join toggle (default: True)
     try:
         fj = data.get('force_join', True)
     except Exception:
         fj = True
     if not fj:
-        print(f"[JOIN] force_join disabled -> allow user={getattr(message.from_user,'id',None)}")
+        print(f"[JOIN] force_join disabled -> allow user={message.from_user.id}")
         return True
+        
     try:
         sponsor_tag = data.get('sponser')
-        chat_ref = _resolve_sponsor_chat_id(client, sponsor_tag)
-        uid = getattr(message.from_user, 'id', None)
-        print(f"[JOIN] user={uid} sponsor={sponsor_tag} resolved={chat_ref}")
-        if not chat_ref:
+        if not sponsor_tag or not sponsor_tag.strip():
             print("[JOIN] no sponsor configured -> allow")
             return True
+            
+        chat_ref = _resolve_sponsor_chat_id(client, sponsor_tag)
+        uid = message.from_user.id
+        print(f"[JOIN] user={uid} sponsor={sponsor_tag} resolved={chat_ref}")
+        
+        if not chat_ref:
+            print("[JOIN] failed to resolve sponsor -> allow")
+            return True
+            
         # Resolve username to chat id if needed
         if isinstance(chat_ref, str):
-            chat = await client.get_chat(chat_ref)
-            chat_id = chat.id
-            print(f"[JOIN] resolved username to chat_id={chat_id} title={getattr(chat,'title',None)} username={getattr(chat,'username',None)}")
+            try:
+                chat = await client.get_chat(chat_ref)
+                chat_id = chat.id
+                print(f"[JOIN] resolved username to chat_id={chat_id} title={getattr(chat,'title',None)} username={getattr(chat,'username',None)}")
+            except Exception as e:
+                print(f"[JOIN] failed to resolve chat {chat_ref}: {e}")
+                return True  # Allow on resolution failure
         else:
             chat_id = chat_ref
             print(f"[JOIN] using numeric chat_id={chat_id}")
-        status = await client.get_chat_member(chat_id=chat_id, user_id=uid)
-        st = getattr(status, 'status', None)
-        print(f"[JOIN] member status for user={uid} in chat_id={chat_id} -> {st}")
-        # اگر کاربر عضو باشد (member, administrator, creator, restricted) اجازه دسترسی دارد
-        if (
-            st in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER, ChatMemberStatus.RESTRICTED)
-            or (isinstance(st, str) and st.lower() in ("member", "administrator", "creator", "restricted"))
-            or (hasattr(st, 'value') and str(st.value).lower() in ("member", "administrator", "creator", "restricted"))
-        ):
-            return True
-        else:
-            # اگر کاربر left یا kicked باشد
+        try:
+            status = await client.get_chat_member(chat_id=chat_id, user_id=uid)
+            st = getattr(status, 'status', None)
+            print(f"[JOIN] member status for user={uid} in chat_id={chat_id} -> {st}")
+            # اگر کاربر عضو باشد (member, administrator, creator, restricted) اجازه دسترسی دارد
+            if (
+                st in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER, ChatMemberStatus.RESTRICTED)
+                or (isinstance(st, str) and st.lower() in ("member", "administrator", "creator", "restricted"))
+                or (hasattr(st, 'value') and str(st.value).lower() in ("member", "administrator", "creator", "restricted"))
+            ):
+                return True
+            else:
+                # اگر کاربر left یا kicked باشد
+                _store_pending_link_if_any(message)
+                await message.reply_text(
+                    "برای حمایت از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمهٔ 'جوین شدم' بزنید.",
+                    reply_markup=sponsor_join_markup()
+                )
+                return False
+        except Exception as admin_error:
+            print(f"[JOIN] CHAT_ADMIN_REQUIRED or other error: {admin_error}")
+            # اگر ربات ادمین نیست، کاربر را به عضویت دعوت می‌کنیم
             _store_pending_link_if_any(message)
             await message.reply_text(
-                "برای حمایت از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمهٔ ‘جوین شدم’ بزنید.",
+                "برای حمایت از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمهٔ 'جوین شدم' بزنید.",
                 reply_markup=sponsor_join_markup()
             )
             return False
@@ -189,27 +219,42 @@ join = filters.create(join_check)
 
 
 def get_random_string():
-    # choose from all lowercase letter
-    letters = string.ascii_lowercase
-    result_str = ''.join(random.choice(letters) for i in range(7))
+    # Use secure random generation
+    import secrets
+    letters = string.ascii_lowercase + string.digits
+    result_str = ''.join(secrets.choice(letters) for i in range(8))
     return result_str
 
 
 @Client.on_message(filters.command("start"), group=-2)
 async def start(client: Client, message: Message):
-    check_user = DB().check_user_register(message.from_user.id)
-    welcome_text = (
-        "🔴 به ربات YouTube | Instagtam Save خوش آمدید\n\n"
-        "⛱ شما میتونید لینک های یوتیوب و اینستاگرام خود را برای ربات ارسال کرده و فایل آن ها رو توی سریع ترین زمان ممکن با کیفیت دلخواه دریافت کنید"
-    )
-    if check_user:
-        await message.reply_text(welcome_text, reply_markup=build_main_menu(message.from_user.id))
-        step['start'] = 1
-    else:
-        now = datetime.now().isoformat()
-        DB().register_user(message.from_user.id, now)
-        await message.reply_text(welcome_text, reply_markup=build_main_menu(message.from_user.id))
-        step['start'] = 1
+    try:
+        user_id = message.from_user.id if message.from_user else None
+        if not user_id:
+            await message.reply_text("❌ خطا در شناسایی کاربر")
+            return
+            
+        check_user = DB().check_user_register(user_id)
+        welcome_text = (
+            "🔴 به ربات YouTube | Instagram Save خوش آمدید\n\n"
+            "⛱ شما می‌توانید لینک‌های یوتیوب و اینستاگرام خود را برای ربات ارسال کرده و فایل آن‌ها را در سریع‌ترین زمان ممکن با کیفیت دلخواه دریافت کنید"
+        )
+        
+        if check_user:
+            await message.reply_text(welcome_text, reply_markup=build_main_menu(user_id))
+            step['start'] = 1
+        else:
+            now = datetime.now().isoformat()
+            try:
+                DB().register_user(user_id, now)
+                await message.reply_text(welcome_text, reply_markup=build_main_menu(user_id))
+                step['start'] = 1
+            except Exception as e:
+                print(f"Error registering user {user_id}: {e}")
+                await message.reply_text("❌ خطا در ثبت کاربر. لطفاً مجدداً تلاش کنید.")
+    except Exception as e:
+        print(f"Start command error: {e}")
+        await message.reply_text("❌ خطای غیرمنتظره رخ داد")
 
 
 # === Slash command handlers ===
@@ -395,10 +440,25 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                 pending = PENDING_LINKS.pop(uid, None)
                 if pending:
                     try:
+                        # Security: Validate pending data
+                        if not isinstance(pending, dict) or 'chat_id' not in pending or 'message_id' not in pending:
+                            print(f"[PENDING] Invalid pending data for user={uid}")
+                            await client.send_message(chat_id=uid, text="❗️ داده‌های معلق نامعتبر. لطفاً دوباره لینک را ارسال کنید.")
+                            return
+                            
                         # Notify user
                         await client.send_message(chat_id=pending['chat_id'], text="🔁 عضویت تایید شد — در حال پردازش لینکی که قبلاً ارسال کرده بودید…")
-                        # Fetch original message
-                        orig_msg = await client.get_messages(pending['chat_id'], pending['message_id'])
+                        
+                        # Fetch original message with timeout
+                        try:
+                            orig_msg = await client.get_messages(pending['chat_id'], pending['message_id'])
+                            if not orig_msg:
+                                raise Exception("Message not found")
+                        except Exception as e:
+                            print(f"[PENDING] Failed to fetch original message: {e}")
+                            await client.send_message(chat_id=pending['chat_id'], text="❗️ پیام اصلی یافت نشد. لطفاً دوباره لینک را ارسال کنید.")
+                            return
+                            
                         text = pending.get('text') or ''
                         # Lazy imports to avoid circular
                         if YOUTUBE_REGEX.search(text):
@@ -409,11 +469,12 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                             download_instagram(client, orig_msg)
                         else:
                             # Not a supported link anymore; prompt user
-                            await client.send_message(chat_id=pending['chat_id'], text="حالا می‌تونید لینکتون رو بفرستید ✍️")
+                            await client.send_message(chat_id=pending['chat_id'], text="حالا می‌توانید لینک را بفرستید ✍️")
                     except Exception as perr:
                         print(f"[PENDING] failed to auto-process pending link for user={uid}: {perr}")
                         try:
-                            await client.send_message(chat_id=pending.get('chat_id', uid), text="❗️ خطا در پردازش خودکار لینک. لطفاً دوباره لینکتون رو ارسال کنید.")
+                            chat_id = pending.get('chat_id', uid) if isinstance(pending, dict) else uid
+                            await client.send_message(chat_id=chat_id, text="❗️ خطا در پردازش خودکار لینک. لطفاً دوباره لینک را ارسال کنید.")
                         except Exception:
                             pass
                 else:

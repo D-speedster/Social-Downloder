@@ -55,7 +55,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
     if callback_query.data == '1':
         # Video formats
         formats = []
-        if isinstance(info, dict) and 'formats' in info:
+        if isinstance(info, dict) and 'formats' in info and info.get('title'):
             # Using yt-dlp format selection
             video_formats = [f for f in info['formats'] 
                             if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
@@ -86,6 +86,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 btn_text = f"{fmt.get('height', 'N/A')}p - {size_str}"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vd")])
         
+        if not formats:
+            await callback_query.answer("❌ فرمت ویدیویی یافت نشد. لطفاً دوباره تلاش کنید.", show_alert=True)
+            return
+            
         await callback_query.edit_message_text(
             txt['file_name'].format(name=info.get('title', 'Unknown')),
             reply_markup=InlineKeyboardMarkup(formats)
@@ -94,7 +98,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
     elif callback_query.data == '2':
         # Audio formats
         formats = []
-        if isinstance(info, dict) and 'formats' in info:
+        if isinstance(info, dict) and 'formats' in info and info.get('title'):
             # Using yt-dlp format selection
             audio_formats = [f for f in info['formats'] 
                            if (f.get('vcodec', 'none') == 'none' and f.get('acodec', 'none') != 'none') or \
@@ -127,6 +131,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 btn_text = f"{fmt.get('abr', fmt.get('tbr', 'N/A'))}kbps - {size_str}"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vc")])
         
+        if not formats:
+            await callback_query.answer("❌ فرمت صوتی یافت نشد. لطفاً دوباره تلاش کنید.", show_alert=True)
+            return
+            
         await callback_query.edit_message_text(
             txt['file_name'].format(name=info.get('title', 'Unknown')),
             reply_markup=InlineKeyboardMarkup(formats)
@@ -139,6 +147,11 @@ async def answer(client: Client, callback_query: CallbackQuery):
         selected_format = next((f for f in info['formats'] if f['format_id'] == format_id), None)
         if not selected_format:
             await callback_query.answer("❌ فرمت انتخاب شده نامعتبر است.", show_alert=True)
+            return
+        
+        # Prevent duplicate message sending by checking if info is valid
+        if not info or not info.get('title'):
+            await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست. لطفاً دوباره تلاش کنید.", show_alert=True)
             return
 
         step['format_id'] = format_id
@@ -234,12 +247,13 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
                 downloaded_bytes = d.get('downloaded_bytes', 0)
                 percent = int(downloaded_bytes / total_bytes * 100) if total_bytes else previousprogress_download
-                if total_bytes and percent > previousprogress_download:
+                # Only update every 5% to reduce UI spam and improve performance
+                if total_bytes and percent > previousprogress_download and (percent - previousprogress_download) >= 5:
                     previousprogress_download = percent
                     size_str = f"{(total_bytes/1024/1024):.2f} MB" if total_bytes else (step.get('filesize') or 'نامشخص')
                     # Update job status occasionally to reduce DB writes
                     try:
-                        if step.get('job_id'):
+                        if step.get('job_id') and percent % 10 == 0:  # Update DB every 10%
                             DB().update_job_status(
                                 step['job_id'],
                                 'downloading',
@@ -303,16 +317,39 @@ async def answer(client: Client, callback_query: CallbackQuery):
         if not os.path.exists(cookies_path):
             print(f"Warning: YouTube cookies file not found at {cookies_path}")
             
+        # Security: Use environment variable for ffmpeg path or auto-detect
+        ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        if not ffmpeg_path:
+            # Try common locations
+            common_paths = [
+                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                "ffmpeg",  # If in PATH
+                "/usr/bin/ffmpeg",  # Linux
+                "/usr/local/bin/ffmpeg"  # macOS
+            ]
+            for path in common_paths:
+                if shutil.which(path) or os.path.exists(path):
+                    ffmpeg_path = path
+                    break
+            
         ydl_opts = {
             'format': step['format_id'],
             'outtmpl': file_path,
             'progress_hooks': [progress_hook],
             'noplaylist': True,
-            'extractor_retries': 3,
-            'fragment_retries': 3,
-            'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
+            'extractor_retries': 2,  # Reduced from 3 to 2 for faster processing
+            'fragment_retries': 2,   # Reduced from 3 to 2 for faster processing
+            'retry_sleep_functions': {'http': lambda n: min(2 ** n, 15)},  # Faster retry with lower max wait
             'http_chunk_size': 10485760,  # 10MB chunks for better stability
+            'socket_timeout': 20,    # Reduced from 30 to 20 seconds
+            'no_warnings': True,
+            'ignoreerrors': False,   # Don't ignore errors during actual download
+            'concurrent_fragment_downloads': 4,  # Enable concurrent downloads for faster speed
         }
+        
+        if ffmpeg_path:
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            
         if os.path.exists(cookies_path):
             ydl_opts['cookiefile'] = cookies_path
 
@@ -327,10 +364,17 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     'outtmpl': file_path,
                     'progress_hooks': [progress_hook],
                     'noplaylist': True,
-                    'extractor_retries': 3,
-                    'fragment_retries': 3,
-                    'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
+                    'extractor_retries': 1,  # Reduced for faster fallback
+                    'fragment_retries': 1,   # Reduced for faster fallback
+                    'retry_sleep_functions': {'http': lambda n: min(2 ** n, 10)},  # Even faster retry in fallback
+                    'socket_timeout': 15,    # Shorter timeout for fallback
+                    'no_warnings': True,
+                    'concurrent_fragment_downloads': 2,  # Lower concurrency for fallback
                 }
+                
+                if ffmpeg_path:
+                    fallback_opts['ffmpeg_location'] = ffmpeg_path
+                    
                 if os.path.exists(cookies_path):
                     fallback_opts['cookiefile'] = cookies_path
                 await asyncio.to_thread(lambda: YoutubeDL(fallback_opts).download([info['webpage_url']]))
@@ -348,7 +392,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
             global previousprogress_upload
             total_size = total
             liveprogress = int(current / total_size * 100) if total_size else 0
-            if liveprogress > previousprogress_upload:
+            # Only update every 5% to reduce UI spam and improve performance
+            if liveprogress > previousprogress_upload and (liveprogress - previousprogress_upload) >= 5:
                 previousprogress_upload = liveprogress
                 try:
                     asyncio.run_coroutine_threadsafe(
