@@ -8925,3 +8925,237 @@ AttributeError: 'DB' object has no attribute 'get_system_stats'
 2025-09-19 15:25:51,706 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
 2025-09-19 15:25:51,706 - pyrogram.connection.connection - INFO - close:66 - Disconnected
 2025-09-19 15:25:51,706 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-19 15:32:27,718 - __main__ - INFO - <module>:40 - Bot starting up...
+2025-09-19 15:32:27,718 - __main__ - INFO - <module>:41 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 15:32:27,718 - __main__ - INFO - <module>:42 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 15:32:27,732 - __main__ - INFO - <module>:52 - Database initialized successfully
+2025-09-19 15:32:27,732 - __main__ - INFO - <module>:59 - Using 16 workers
+2025-09-19 15:32:27,732 - __main__ - INFO - <module>:72 - Starting bot client...
+2025-09-19 15:32:28,021 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-19 15:32:28,298 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-19 15:32:28,301 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-19 15:32:29,321 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-19 15:32:29,321 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-19 15:32:29,321 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-19 15:32:29,321 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-19 15:32:29,323 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_root_msg") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_stats") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_server") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_broadcast") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_power") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_back") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_panel") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("show_admin_root") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_cookies_cmd") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_cookie_file") in group 7 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("sp_check_cb") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("force_join_toggle") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("send_to_all") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_broadcast") in group 5 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_broadcast") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_sp") in group 6 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("waiting_msg_menu") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("edit_waiting_message") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("set_waiting_message_type") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("waiting_msg_menu_text") in group 0 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_waiting_message_input") in group 7 from "plugins.admin"
+2025-09-19 15:32:30,107 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_insta_acc") in group 3 from "plugins.admin"
+2025-09-19 15:32:30,127 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("dashboard_cmd") in group 0 from "plugins.dashboard"
+2025-09-19 15:32:30,127 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("dashboard_cb") in group 0 from "plugins.dashboard"
+2025-09-19 15:32:30,150 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("download_instagram") in group 0 from "plugins.instagram"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("maintenance_gate_msg") in group -3 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("maintenance_gate_cb") in group -3 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("start") in group -2 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_command_handler") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("settings_command_handler") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("language_command_handler") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("upgrade_command_handler") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("account_info_message") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("account_info_callback") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_menu_message") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("help_menu_callback") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("menu_dashboard_cmd_alias") in group 0 from "plugins.start"
+2025-09-19 15:32:30,151 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("verify_join_callback") in group 0 from "plugins.start"
+2025-09-19 15:32:30,249 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("show_video") in group 0 from "plugins.youtube"
+2025-09-19 15:32:30,250 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.youtube_callback_query"
+2025-09-19 15:32:30,250 - pyrogram.client - INFO - load_plugins:775 - [ytdownloader3_dev2] Successfully loaded 42 plugins from "plugins"
+2025-09-19 15:32:30,250 - pyrogram.dispatcher - INFO - start:154 - Started 16 HandlerTasks
+2025-09-19 15:33:10,444 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-19 15:33:10,765 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-19 15:33:10,765 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-19 15:33:11,802 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-19 15:33:11,802 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-19 15:33:11,802 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-19 15:33:11,802 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-19 15:33:11,805 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-19 15:33:18,650 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-19 15:33:18,650 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-19 15:33:18,650 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-19 15:33:18,651 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-19 15:38:35,264 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-19 15:38:35,265 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-19 15:38:35,265 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-19 15:38:35,265 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-19 15:38:35,265 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-19 15:38:35,521 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-19 15:38:35,522 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-19 15:38:36,413 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-19 15:38:36,413 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-19 15:38:36,413 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-19 15:38:36,413 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-19 15:38:36,413 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-19 19:39:15,058 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-19 19:39:15,061 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-19 19:39:15,062 - pyrogram.connection.transport.tcp.tcp - INFO - send:103 - Send exception: ConnectionResetError Connection lost
+2025-09-19 19:39:15,062 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "updates.GetState" due to: Connection lost
+2025-09-19 19:39:15,062 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-19 19:39:15,062 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-19 19:39:15,062 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-19 19:39:22,408 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-19 19:39:22,408 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-19 19:39:23,754 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-19 19:39:23,754 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-19 19:39:23,754 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-19 19:39:23,754 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-19 19:39:23,754 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-19 19:40:27,659 - __main__ - INFO - <module>:40 - Bot starting up...
+2025-09-19 19:40:27,659 - __main__ - INFO - <module>:41 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:40:27,659 - __main__ - INFO - <module>:42 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:40:27,662 - __main__ - INFO - <module>:52 - Database initialized successfully
+2025-09-19 19:40:27,662 - __main__ - INFO - <module>:59 - Using 16 workers
+2025-09-19 19:40:27,662 - __main__ - INFO - <module>:72 - Starting bot client...
+2025-09-19 19:40:28,815 - __main__ - ERROR - <module>:75 - Bot startup failed: database is locked
+2025-09-19 19:40:45,044 - __main__ - INFO - <module>:40 - Bot starting up...
+2025-09-19 19:40:45,044 - __main__ - INFO - <module>:41 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:40:45,044 - __main__ - INFO - <module>:42 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:40:45,047 - __main__ - INFO - <module>:52 - Database initialized successfully
+2025-09-19 19:40:45,048 - __main__ - INFO - <module>:59 - Using 16 workers
+2025-09-19 19:40:45,048 - __main__ - INFO - <module>:72 - Starting bot client...
+2025-09-19 19:40:46,226 - __main__ - ERROR - <module>:75 - Bot startup failed: database is locked
+2025-09-19 19:42:12,695 - __main__ - INFO - <module>:40 - Bot starting up...
+2025-09-19 19:42:12,695 - __main__ - INFO - <module>:41 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:42:12,695 - __main__ - INFO - <module>:42 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:42:12,698 - __main__ - INFO - <module>:52 - Database initialized successfully
+2025-09-19 19:42:12,698 - __main__ - INFO - <module>:59 - Using 16 workers
+2025-09-19 19:42:12,698 - __main__ - INFO - <module>:72 - Starting bot client...
+2025-09-19 19:42:13,876 - __main__ - ERROR - <module>:75 - Bot startup failed: database is locked
+2025-09-19 19:46:20,139 - __main__ - INFO - <module>:40 - Bot starting up...
+2025-09-19 19:46:20,139 - __main__ - INFO - <module>:41 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:46:20,139 - __main__ - INFO - <module>:42 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:46:20,144 - __main__ - INFO - <module>:52 - Database initialized successfully
+2025-09-19 19:46:20,144 - __main__ - INFO - <module>:59 - Using 16 workers
+2025-09-19 19:46:20,145 - __main__ - INFO - <module>:72 - Starting bot client...
+2025-09-19 19:46:21,322 - __main__ - ERROR - <module>:75 - Bot startup failed: database is locked
+2025-09-19 19:49:12,265 - __main__ - INFO - <module>:42 - Bot starting up...
+2025-09-19 19:49:12,265 - __main__ - INFO - <module>:43 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:49:12,265 - __main__ - INFO - <module>:44 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:49:12,268 - __main__ - INFO - <module>:54 - Database initialized successfully
+2025-09-19 19:49:12,268 - __main__ - INFO - <module>:76 - Using 16 workers
+2025-09-19 19:49:12,268 - __main__ - INFO - <module>:89 - Starting bot client...
+2025-09-19 19:49:13,429 - __main__ - ERROR - <module>:94 - Bot startup failed: database is locked
+2025-09-19 19:49:13,430 - __main__ - INFO - <module>:101 - Database connection closed
+2025-09-19 19:49:13,430 - __main__ - INFO - cleanup_database:61 - Database connection closed successfully
+2025-09-19 19:49:20,684 - __main__ - INFO - <module>:42 - Bot starting up...
+2025-09-19 19:49:20,685 - __main__ - INFO - <module>:43 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:49:20,685 - __main__ - INFO - <module>:44 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:49:20,688 - __main__ - INFO - <module>:54 - Database initialized successfully
+2025-09-19 19:49:20,688 - __main__ - INFO - <module>:76 - Using 16 workers
+2025-09-19 19:49:20,688 - __main__ - INFO - <module>:89 - Starting bot client...
+2025-09-19 19:49:21,855 - __main__ - ERROR - <module>:94 - Bot startup failed: database is locked
+2025-09-19 19:49:21,856 - __main__ - INFO - <module>:101 - Database connection closed
+2025-09-19 19:49:21,856 - __main__ - INFO - cleanup_database:61 - Database connection closed successfully
+2025-09-19 19:49:29,052 - __main__ - INFO - <module>:42 - Bot starting up...
+2025-09-19 19:49:29,052 - __main__ - INFO - <module>:43 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:49:29,052 - __main__ - INFO - <module>:44 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:49:29,055 - __main__ - INFO - <module>:54 - Database initialized successfully
+2025-09-19 19:49:29,055 - __main__ - INFO - <module>:76 - Using 16 workers
+2025-09-19 19:49:29,055 - __main__ - INFO - <module>:89 - Starting bot client...
+2025-09-19 19:49:30,211 - __main__ - ERROR - <module>:94 - Bot startup failed: database is locked
+2025-09-19 19:49:30,212 - __main__ - INFO - <module>:101 - Database connection closed
+2025-09-19 19:49:30,212 - __main__ - INFO - cleanup_database:61 - Database connection closed successfully
+2025-09-19 19:49:37,478 - __main__ - INFO - <module>:42 - Bot starting up...
+2025-09-19 19:49:37,478 - __main__ - INFO - <module>:43 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:49:37,478 - __main__ - INFO - <module>:44 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:49:37,481 - __main__ - INFO - <module>:54 - Database initialized successfully
+2025-09-19 19:49:37,481 - __main__ - INFO - <module>:76 - Using 16 workers
+2025-09-19 19:49:37,482 - __main__ - INFO - <module>:89 - Starting bot client...
+2025-09-19 19:49:38,659 - __main__ - ERROR - <module>:94 - Bot startup failed: database is locked
+2025-09-19 19:49:38,659 - __main__ - INFO - <module>:101 - Database connection closed
+2025-09-19 19:49:38,659 - __main__ - INFO - cleanup_database:61 - Database connection closed successfully
+2025-09-19 19:49:59,053 - __main__ - INFO - <module>:42 - Bot starting up...
+2025-09-19 19:49:59,053 - __main__ - INFO - <module>:43 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-19 19:49:59,053 - __main__ - INFO - <module>:44 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-19 19:49:59,057 - __main__ - INFO - <module>:54 - Database initialized successfully
+2025-09-19 19:49:59,058 - __main__ - INFO - <module>:76 - Using 16 workers
+2025-09-19 19:49:59,058 - __main__ - INFO - <module>:89 - Starting bot client...
+2025-09-19 19:49:59,298 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-19 19:49:59,527 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-19 19:49:59,528 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-19 19:50:00,602 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-19 19:50:00,607 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-19 19:50:00,607 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-19 19:50:00,607 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-19 19:50:00,613 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_root_msg") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_stats") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_server") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_broadcast") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_power") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_back") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_panel") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("show_admin_root") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_cookies_cmd") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_cookie_file") in group 7 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("sp_check_cb") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("force_join_toggle") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("send_to_all") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_broadcast") in group 5 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_broadcast") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_sp") in group 6 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("waiting_msg_menu") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("edit_waiting_message") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,373 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("set_waiting_message_type") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,374 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("waiting_msg_menu_text") in group 0 from "plugins.admin"
+2025-09-19 19:50:01,374 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_waiting_message_input") in group 7 from "plugins.admin"
+2025-09-19 19:50:01,374 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_insta_acc") in group 3 from "plugins.admin"
+2025-09-19 19:50:01,399 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("dashboard_cmd") in group 0 from "plugins.dashboard"
+2025-09-19 19:50:01,400 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("dashboard_cb") in group 0 from "plugins.dashboard"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("download_instagram") in group 0 from "plugins.instagram"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("maintenance_gate_msg") in group -3 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("maintenance_gate_cb") in group -3 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("start") in group -2 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_command_handler") in group 0 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("settings_command_handler") in group 0 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("language_command_handler") in group 0 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("upgrade_command_handler") in group 0 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("account_info_message") in group 0 from "plugins.start"
+2025-09-19 19:50:01,420 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("account_info_callback") in group 0 from "plugins.start"
+2025-09-19 19:50:01,421 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_menu_message") in group 0 from "plugins.start"
+2025-09-19 19:50:01,421 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("help_menu_callback") in group 0 from "plugins.start"
+2025-09-19 19:50:01,421 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("menu_dashboard_cmd_alias") in group 0 from "plugins.start"
+2025-09-19 19:50:01,421 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("verify_join_callback") in group 0 from "plugins.start"
+2025-09-19 19:50:01,533 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("show_video") in group 0 from "plugins.youtube"
+2025-09-19 19:50:01,534 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.youtube_callback_query"
+2025-09-19 19:50:01,534 - pyrogram.client - INFO - load_plugins:775 - [ytdownloader3_dev2] Successfully loaded 42 plugins from "plugins"
+2025-09-19 19:50:01,534 - pyrogram.dispatcher - INFO - start:154 - Started 16 HandlerTasks
+2025-09-19 19:50:33,395 - pyrogram.dispatcher - ERROR - handler_worker:253 - 'DB' object has no attribute 'get_system_stats'
+Traceback (most recent call last):
+  File "C:\Users\speedster\AppData\Local\Programs\Python\Python313\Lib\site-packages\pyrogram\dispatcher.py", line 240, in handler_worker
+    await handler.callback(self.client, *args)
+  File "C:\Users\speedster\Desktop\DownloaderYT-V1\plugins\admin.py", line 390, in answer
+    stats = DB().get_system_stats()
+            ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DB' object has no attribute 'get_system_stats'
+2025-09-19 19:51:03,640 - root - INFO - signal_handler:75 - Stop signal received (SIGINT). Exiting...
+2025-09-19 19:51:03,657 - pyrogram.dispatcher - INFO - stop:167 - Stopped 16 HandlerTasks
+2025-09-19 19:51:03,657 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-19 19:51:03,658 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-19 19:51:03,658 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-19 19:51:03,658 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-19 19:51:03,666 - __main__ - INFO - <module>:101 - Database connection closed
+2025-09-19 19:51:03,667 - __main__ - INFO - cleanup_database:61 - Database connection closed successfully

@@ -4,6 +4,8 @@ import config as config
 from logging import basicConfig, ERROR, INFO
 import os
 import sys
+import atexit
+import signal
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -50,6 +52,21 @@ try:
     db = DB()
     db.setup()
     logger.info("Database initialized successfully")
+    
+    # Register cleanup function
+    def cleanup_database():
+        try:
+            if db:
+                db.close()
+                logger.info("Database connection closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing database: {e}")
+    
+    # Register cleanup for normal exit and signals
+    atexit.register(cleanup_database)
+    signal.signal(signal.SIGTERM, lambda signum, frame: cleanup_database())
+    signal.signal(signal.SIGINT, lambda signum, frame: cleanup_database())
+    
 except Exception as e:
     logger.error(f"Database initialization failed: {e}")
     sys.exit(1)
@@ -71,6 +88,16 @@ try:
     
     logger.info("Starting bot client...")
     client.run()
+except KeyboardInterrupt:
+    logger.info("Bot stopped by user")
 except Exception as e:
     logger.error(f"Bot startup failed: {e}")
     sys.exit(1)
+finally:
+    # Ensure database is closed
+    try:
+        if 'db' in locals():
+            db.close()
+            logger.info("Database connection closed")
+    except Exception as e:
+        logger.error(f"Error closing database in finally block: {e}")
