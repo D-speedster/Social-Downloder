@@ -115,16 +115,22 @@ async def show_video(client: Client, message: Message):
         ydl_opts = {
             'quiet': True,
             'simulate': True,
-            'extractor_retries': 1,  # Reduced from 3 to 1 for faster processing
-            'fragment_retries': 1,   # Reduced from 3 to 1 for faster processing
-            'retry_sleep_functions': {'http': lambda n: min(2 ** n, 10)},  # Faster retry with lower max wait
-            'socket_timeout': 15,    # Reduced from 30 to 15 seconds
+            'extractor_retries': 0,  # No retries for maximum speed
+            'fragment_retries': 0,   # No retries for maximum speed
+            'socket_timeout': 8,     # Aggressive timeout for speed
+            'connect_timeout': 5,    # Connection timeout
             'no_warnings': True,
-            'extract_flat': False,   # Don't extract playlist info to speed up
-            'skip_download': True,   # Explicitly skip download in simulate mode
-            'format': 'best[height<=720]',  # Limit initial format check to reduce processing time
-            'ignoreerrors': True,    # Continue on minor errors
-            'no_check_certificate': True,  # Skip SSL verification for speed
+            'extract_flat': False,
+            'skip_download': True,
+            'format': 'best[height<=480]/best',  # Prioritize lower quality for faster extraction
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'prefer_insecure': True, # Skip HTTPS when possible for speed
+            'youtube_include_dash_manifest': False,  # Skip DASH manifest for speed
+            'writesubtitles': False, # Skip subtitle extraction
+            'writeautomaticsub': False, # Skip auto subtitles
+            'writethumbnail': False, # Skip thumbnail download
+            'writeinfojson': False,  # Skip info json writing
         }
         
         if ffmpeg_path:
@@ -183,14 +189,21 @@ async def show_video(client: Client, message: Message):
             fallback_opts = {
                 'quiet': True,
                 'simulate': True,
-                'extractor_retries': 1,  # Reduced for faster fallback
-                'fragment_retries': 1,   # Reduced for faster fallback
-                'retry_sleep_functions': {'http': lambda n: min(2 ** n, 5)},  # Even faster retry in fallback
-                'socket_timeout': 10,    # Shorter timeout for fallback
+                'extractor_retries': 0,  # No retries for maximum speed
+                'fragment_retries': 0,   # No retries for maximum speed
+                'socket_timeout': 5,     # Very aggressive timeout for fallback
+                'connect_timeout': 3,    # Fast connection timeout
                 'extract_flat': False,
                 'skip_download': True,
                 'ignoreerrors': True,
-                'no_check_certificate': True
+                'no_check_certificate': True,
+                'prefer_insecure': True,
+                'youtube_include_dash_manifest': False,
+                'writesubtitles': False,
+                'writeautomaticsub': False,
+                'writethumbnail': False,
+                'writeinfojson': False,
+                'format': 'worst/best'  # Use worst quality for fastest fallback
             }
             fallback_start = time.time()
             performance_logger.info(f"[USER:{user_id}] Starting fallback extraction...")

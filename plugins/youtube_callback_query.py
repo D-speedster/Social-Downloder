@@ -438,15 +438,12 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         DB().update_job_status(step['job_id'], 'completed')
                 except Exception:
                     pass
-                await _safe_edit_progress(
-                    _format_status_text(
-                        info.get('title'), 
-                        step['sort'],
-                        step['filesize'],
-                        "کار به پایان رسید ✅"
-                    ),
-                    100
-                )
+                # Delete the processing message and sticker after successful upload
+                try:
+                    await callback_query.message.delete()
+                except Exception:
+                    pass
+                
                 # Bot tag under the sent media
                 try:
                     if sent_msg:

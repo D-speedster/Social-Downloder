@@ -5,3 +5,10 @@
 2025-09-19 14:29:19,366 - INFO - [USER:79049016] TOTAL PROCESSING TIME: 13.04 seconds
 2025-09-19 14:29:19,367 - INFO - [USER:79049016] Breakdown - Message: 1.87s, Extraction: 10.91s, UI: 0.26s
 2025-09-19 14:29:19,416 - WARNING - [USER:79049016] ⚠️ SLOW PROCESSING: 13.04s (Target: <8s)
+2025-09-19 14:47:24,167 - INFO - [USER:79049016] YouTube link processing started for: https://www.youtube.com/watch?v=4_xPLR4fGgY
+2025-09-19 14:47:25,062 - INFO - [USER:79049016] Processing message sent after: 0.89 seconds
+2025-09-19 14:47:25,062 - INFO - [USER:79049016] Starting yt-dlp extraction...
+2025-09-19 14:47:33,684 - INFO - [USER:79049016] yt-dlp extraction completed in: 8.62 seconds
+2025-09-19 14:47:34,039 - INFO - [USER:79049016] TOTAL PROCESSING TIME: 9.87 seconds
+2025-09-19 14:47:34,040 - INFO - [USER:79049016] Breakdown - Message: 0.89s, Extraction: 8.62s, UI: 0.35s
+2025-09-19 14:47:34,040 - WARNING - [USER:79049016] ⚠️ SLOW PROCESSING: 9.87s (Target: <8s)
