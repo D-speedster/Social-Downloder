@@ -1,5 +1,7 @@
 import sqlite3
 import os
+from datetime import datetime, date
+from datetime import datetime as _dt, timedelta as _td
 
 
 class DB:
@@ -210,6 +212,53 @@ class DB:
             self.mydb.commit()
         except sqlite3.Error as error:
             print(f"Failed to set blocked_until: {error}")
+
+    def increment_request(self, user_id: int, now_str: str) -> None:
+        """Increase total and daily counters and update last_download."""
+        try:
+            # Ensure user exists
+            if not self.check_user_register(user_id):
+                self.register_user(user_id, now_str)
+            
+            # Update last_download
+            self.cursor.execute('UPDATE users SET last_download = ? WHERE user_id = ?', (now_str, user_id))
+            
+            # Get current counters
+            self.cursor.execute('SELECT daily_date, daily_requests, total_requests, blocked_until FROM users WHERE user_id = ?', (user_id,))
+            row = self.cursor.fetchone()
+            daily_date = row[0] if row else ''
+            daily_requests = int(row[1] or 0) if row else 0
+            total_requests = int(row[2] or 0) if row else 0
+            blocked_until = row[3] or '' if row else ''
+            
+            # Reset daily counter if new day
+            today = date.today().isoformat()
+            if daily_date != today:
+                daily_requests = 0
+                daily_date = today
+            
+            # Increment counters
+            daily_requests += 1
+            total_requests += 1
+            
+            # Update counters
+            self.cursor.execute('UPDATE users SET daily_date = ?, daily_requests = ?, total_requests = ? WHERE user_id = ?',
+                                (daily_date, daily_requests, total_requests, user_id))
+            
+            # Enforce 1-hour block after 10 daily requests
+            try:
+                bu = _dt.fromisoformat(blocked_until) if blocked_until else None
+            except Exception:
+                bu = None
+            
+            now_dt = _dt.now()
+            if daily_requests == 10 and (bu is None or bu <= now_dt):
+                until_str = (now_dt + _td(hours=1)).isoformat(timespec='seconds')
+                self.cursor.execute('UPDATE users SET blocked_until = ? WHERE user_id = ?', (until_str, user_id))
+            
+            self.mydb.commit()
+        except Exception as e:
+            print(f"Failed to increment request: {e}")
 
     def close(self):
         """Close database connection"""
