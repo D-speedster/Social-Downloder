@@ -122,15 +122,25 @@ async def download_instagram(_: Client, message: Message):
                     last["p"], last["t"] = percent, now
                     text = _format_status_text(title or "Instagram", type_label, size_mb, "در حال دانلود ...")
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data="ignore")]])
-                    # Use sync version for yt-dlp hook
+                    # Use async version for yt-dlp hook
                     try:
-                        status_msg.edit_text(text, reply_markup=kb)
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(status_msg.edit_text(text, reply_markup=kb))
+                        else:
+                            loop.run_until_complete(status_msg.edit_text(text, reply_markup=kb))
                     except Exception:
                         pass
                 elif st == 'finished':
-                    # Use sync version for yt-dlp hook
+                    # Use async version for yt-dlp hook
                     try:
-                        status_msg.edit_text("🔁 دانلود پایان یافت. در حال آماده‌سازی برای ارسال…")
+                        import asyncio
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(status_msg.edit_text("🔁 دانلود پایان یافت. در حال آماده‌سازی برای ارسال…"))
+                        else:
+                            loop.run_until_complete(status_msg.edit_text("🔁 دانلود پایان یافت. در حال آماده‌سازی برای ارسال…"))
                     except Exception:
                         pass
             except Exception:
@@ -148,26 +158,63 @@ async def download_instagram(_: Client, message: Message):
             'writesubtitles': False,
             'writeautomaticsub': False,
         }
-        # Instagram cookies support if available
-        try:
-            cookies_dir = os.path.join(os.getcwd(), 'cookies')
-            os.makedirs(cookies_dir, exist_ok=True)
-            cookies_path = os.path.join(cookies_dir, 'instagram.txt')
-            if os.path.exists(cookies_path) and os.path.getsize(cookies_path) > 0:
-                ydl_opts['cookiefile'] = cookies_path
-        except Exception as e:
-            print(f"Failed to set Instagram cookies: {e}")
-
-        with YoutubeDL(ydl_opts) as ydl:
+        # Instagram cookies support from cookie pool
+        from cookie_manager import cookie_manager
+        
+        cookie_content = cookie_manager.get_cookie('instagram')
+        use_cookies = cookie_content is not None
+        
+        if use_cookies:
             try:
-                info = ydl.extract_info(message.text, download=True)
-                if not info:
-                    raise Exception("No video information extracted")
-                file_path = ydl.prepare_filename(info)
-                if not os.path.exists(file_path):
-                    raise Exception("Downloaded file not found")
+                import tempfile
+                temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_cookie_file.write(cookie_content)
+                temp_cookie_file.close()
+                ydl_opts['cookiefile'] = temp_cookie_file.name
             except Exception as e:
-                raise Exception(f"Download failed: {str(e)}")
+                print(f"Failed to set Instagram cookies: {e}")
+                use_cookies = False
+        else:
+            print("Warning: No Instagram cookies available in pool")
+
+        temp_cookie_file_path = None
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info = ydl.extract_info(message.text, download=True)
+                    if not info:
+                        raise Exception("No video information extracted")
+                    file_path = ydl.prepare_filename(info)
+                    if not os.path.exists(file_path):
+                        raise Exception("Downloaded file not found")
+                    
+                    # Update cookie usage stats on success
+                    if use_cookies:
+                        # Find cookie ID to update usage
+                        cookies = cookie_manager.get_cookies('instagram', active_only=True)
+                        for cookie in cookies:
+                            if cookie.get('data') == cookie_content:
+                                cookie_manager.update_usage('instagram', cookie['id'])
+                                break
+                        
+                except Exception as e:
+                    # Mark cookie as invalid if download failed with cookies
+                    if use_cookies:
+                        # Find cookie ID to mark as invalid
+                        cookies = cookie_manager.get_cookies('instagram', active_only=True)
+                        for cookie in cookies:
+                            if cookie.get('data') == cookie_content:
+                                cookie_manager.mark_invalid('instagram', cookie['id'])
+                                break
+                    raise Exception(f"Download failed: {str(e)}")
+        finally:
+            # Clean up temporary cookie file
+            if use_cookies and 'temp_cookie_file' in locals():
+                temp_cookie_file_path = temp_cookie_file.name
+                try:
+                    os.unlink(temp_cookie_file_path)
+                except:
+                    pass
 
         # determine title and type
         title = info.get('title') or "Instagram"

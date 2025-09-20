@@ -19,7 +19,13 @@ PATH = constant.PATH
 txt = constant.TEXT
 data = constant.DATA
 
-ADMIN = [79049016]
+ADMIN = [79049016 , 429273267 , 528815211]  # شناسه کاربری خود را اینجا اضافه کنید
+
+# برای پیدا کردن شناسه کاربری خود:
+# 1. ربات را اجرا کنید
+# 2. /start را ارسال کنید  
+# 3. در لاگ‌های ربات، شناسه کاربری شما نمایش داده می‌شود
+# 4. آن را به لیست بالا اضافه کنید: ADMIN = [79049016, YOUR_USER_ID]
 
 # Track bot start time for uptime
 START_TIME = _dt.now()
@@ -55,10 +61,13 @@ def admin_inline_maker() -> list:
         ],
         [
             InlineKeyboardButton("💬 پیام انتظار", callback_data='waiting_msg'),
-            InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),
+            InlineKeyboardButton("🍪 مدیریت کوکی", callback_data='cookies'),
         ],
         [
+            InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),
             InlineKeyboardButton(fj_label, callback_data='fj_toggle'),
+        ],
+        [
             InlineKeyboardButton(power_label, callback_data='pw'),
         ],
     ]
@@ -69,8 +78,9 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
         [
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📣 ارسال پیام", "📢 تنظیم اسپانسر"],
-            ["💬 پیام انتظار", "🔌 خاموش/روشن"],
-            ["🔐 خاموش/روشن اسپانسری", "⬅️ بازگشت"],
+            ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
+            ["🔌 خاموش/روشن", "🔐 خاموش/روشن اسپانسری"],
+            ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
     )
@@ -196,6 +206,19 @@ async def admin_menu_sponsor_toggle(_: Client, message: Message):
 # Duplicate waiting message and power toggle handlers removed
 
 
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🍪 مدیریت کوکی$'))
+async def admin_menu_cookies(_: Client, message: Message):
+    keyboard = [
+        [InlineKeyboardButton("📺 کوکی یوتیوب", callback_data='cookie_youtube')],
+        [InlineKeyboardButton("📷 کوکی اینستاگرام", callback_data='cookie_instagram')],
+        [InlineKeyboardButton("⬅️ بازگشت", callback_data='admin_back')]
+    ]
+    await message.reply(
+        "🍪 <b>مدیریت استخر کوکی</b>\n\n"
+        "برای مدیریت کوکی‌های هر پلتفرم، روی دکمه مربوطه کلیک کنید:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^⬅️ بازگشت$'))
 async def admin_menu_back(_: Client, message: Message):
     print("[ADMIN] back pressed by", message.from_user.id)
@@ -242,7 +265,7 @@ sp_filter = filters.create(set_sp_custom)
 
 async def admin_panel_custom(_, __, query):
     # Only match our specific admin action tokens, avoid catching 'admin_root'
-    return bool(re.match(r'^(st|srv|gm|sg|sp|pw)$', query.data))
+    return bool(re.match(r'^(st|srv|gm|sg|sp|pw|waiting_msg|cookies|fj_toggle|sp_check|cookie_youtube|cookie_instagram|edit_waiting_youtube|edit_waiting_instagram|admin_back|add_cookie_youtube|add_cookie_instagram|list_cookies_youtube|list_cookies_instagram|clear_cookies_youtube|clear_cookies_instagram)$', query.data))
 
 
 static_data_filter = filters.create(admin_panel_custom)
@@ -573,6 +596,459 @@ async def handle_waiting_message_input(client: Client, message: Message):
         print(f"[ERROR] Failed to save waiting message: {e}")
         await message.reply_text("خطا در ذخیره‌سازی پیام. لطفاً دوباره تلاش کنید.")
         admin_step['waiting_msg'] = 0
+
+
+# Admin callback query handler
+@Client.on_callback_query(static_data_filter & filters.user(ADMIN))
+async def admin_callback_handler(client: Client, callback_query: CallbackQuery):
+    action = callback_query.data
+    
+    if action == 'st':
+        # آمار کاربران
+        stats = DB().get_system_stats()
+        text = (
+            "\u200F<b>📊 آمار سیستم</b>\n\n"
+            f"👥 مجموع کاربران: <b>{stats.get('total_users', 0)}</b>\n"
+            f"🆕 کاربران امروز: <b>{stats.get('users_today', 0)}</b>\n"
+            f"✅ کاربران فعال امروز: <b>{stats.get('active_today', 0)}</b>\n"
+            f"📈 مجموع درخواست‌ها: <b>{stats.get('total_requests_sum', 0)}</b>\n"
+            f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n\n"
+            f"🗂 مجموع وظایف: <b>{stats.get('total_jobs', 0)}</b>\n"
+            f"⏳ در انتظار: <b>{stats.get('jobs_pending', 0)}</b>\n"
+            f"🟡 آماده: <b>{stats.get('jobs_ready', 0)}</b>\n"
+            f"✅ تکمیل‌شده: <b>{stats.get('jobs_completed', 0)}</b>\n"
+        )
+        await callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
+        
+    elif action == 'srv':
+        # وضعیت سرور
+        await callback_query.edit_message_text(_server_status_text(), reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
+        
+    elif action == 'gm':
+        # ارسال پیام
+        admin_step['broadcast'] = 1
+        await callback_query.edit_message_text(
+            "لطفاً پیام مورد نظر برای ارسال همگانی را ارسال کنید.\n\n"
+            "- هر نوع پیام پشتیبانی می‌شود (متن، عکس، ویدیو، فایل، ...).\n"
+            "- برای لغو /cancel را بفرستید.",
+            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
+        )
+        
+    elif action == 'sp':
+        # تنظیم اسپانسر
+        admin_step['sp'] = 1
+        await callback_query.edit_message_text(
+            "لطفاً یوزرنیم کانال اسپانسر را ارسال کنید:\n\n"
+            "نمونه: @example یا -1001234567890 یا https://t.me/example",
+            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
+        )
+        
+    elif action == 'pw':
+        # تغییر وضعیت ربات
+        current = data.get('bot_status', 'ON')
+        new_state = 'OFF' if current == 'ON' else 'ON'
+        data['bot_status'] = new_state
+        try:
+            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+                json.dump(data, outfile, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Failed to write bot_status: {e}")
+        await callback_query.edit_message_text(
+            f"وضعیت ربات: {'🔴 خاموش' if new_state == 'OFF' else '🟢 روشن'}",
+            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
+        )
+        
+    elif action == 'fj_toggle':
+        # تغییر وضعیت اسپانسری
+        current = data.get('force_join', True)
+        new_state = not current
+        data['force_join'] = new_state
+        try:
+            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+                json.dump(data, outfile, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Failed to write force_join: {e}")
+        await callback_query.edit_message_text(
+            f"وضعیت اسپانسری: {'🔴 خاموش' if not new_state else '🟢 روشن'}",
+            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
+        )
+        
+    elif action == 'cookies':
+        # مدیریت کوکی
+        keyboard = [
+            [InlineKeyboardButton("📺 کوکی یوتیوب", callback_data='cookie_youtube')],
+            [InlineKeyboardButton("📷 کوکی اینستاگرام", callback_data='cookie_instagram')],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data='admin_back')]
+        ]
+        await callback_query.edit_message_text(
+            "🍪 <b>مدیریت استخر کوکی</b>\n\n"
+            "برای مدیریت کوکی‌های هر پلتفرم، روی دکمه مربوطه کلیک کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'cookie_youtube':
+        # مدیریت کوکی یوتیوب
+        keyboard = [
+            [InlineKeyboardButton("➕ افزودن کوکی", callback_data='add_cookie_youtube')],
+            [InlineKeyboardButton("📋 مشاهده کوکی‌ها", callback_data='list_cookies_youtube')],
+            [InlineKeyboardButton("🗑 حذف همه", callback_data='clear_cookies_youtube')],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data='cookies')]
+        ]
+        await callback_query.edit_message_text(
+            "📺 <b>مدیریت کوکی یوتیوب</b>\n\n"
+            "عملیات مورد نظر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'cookie_instagram':
+        # مدیریت کوکی اینستاگرام
+        keyboard = [
+            [InlineKeyboardButton("➕ افزودن کوکی", callback_data='add_cookie_instagram')],
+            [InlineKeyboardButton("📋 مشاهده کوکی‌ها", callback_data='list_cookies_instagram')],
+            [InlineKeyboardButton("🗑 حذف همه", callback_data='clear_cookies_instagram')],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data='cookies')]
+        ]
+        await callback_query.edit_message_text(
+            "📷 <b>مدیریت کوکی اینستاگرام</b>\n\n"
+            "عملیات مورد نظر را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'admin_back':
+        # بازگشت به پنل اصلی
+        await callback_query.edit_message_text(
+            "پنل مدیریت",
+            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
+        )
+        
+    elif action == 'add_cookie_youtube':
+        # افزودن کوکی یوتیوب
+        admin_step['add_cookie'] = 'youtube'
+        await callback_query.edit_message_text(
+            "📺 <b>افزودن کوکی یوتیوب</b>\n\n"
+            "لطفاً محتوای کوکی یوتیوب را ارسال کنید:\n\n"
+            "📋 فرمت‌های پشتیبانی شده:\n"
+            "• فرمت Netscape (.txt)\n"
+            "• فرمت JSON\n\n"
+            "💡 نکته: می‌توانید فایل کوکی را مستقیماً ارسال کنید یا محتوای آن را کپی کنید.\n\n"
+            "❌ برای لغو /cancel را بفرستید.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_youtube')]])
+        )
+        
+    elif action == 'add_cookie_instagram':
+        # افزودن کوکی اینستاگرام
+        admin_step['add_cookie'] = 'instagram'
+        await callback_query.edit_message_text(
+            "📷 <b>افزودن کوکی اینستاگرام</b>\n\n"
+            "لطفاً محتوای کوکی اینستاگرام را ارسال کنید:\n\n"
+            "📋 فرمت‌های پشتیبانی شده:\n"
+            "• فرمت Netscape (.txt)\n"
+            "• فرمت JSON\n\n"
+            "💡 نکته: می‌توانید فایل کوکی را مستقیماً ارسال کنید یا محتوای آن را کپی کنید.\n\n"
+            "❌ برای لغو /cancel را بفرستید.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_instagram')]])
+        )
+        
+    elif action == 'list_cookies_youtube':
+        # مشاهده کوکی‌های یوتیوب
+        from cookie_manager import cookie_manager
+        cookies = cookie_manager.get_cookies('youtube', active_only=False)
+        stats = cookie_manager.get_cookie_stats('youtube')
+        
+        if not cookies:
+            text = "📺 <b>کوکی‌های یوتیوب</b>\n\n❌ هیچ کوکی‌ای یافت نشد."
+        else:
+            text = (
+                f"📺 <b>کوکی‌های یوتیوب</b>\n\n"
+                f"📊 آمار کلی:\n"
+                f"• مجموع: {stats['total']}\n"
+                f"• فعال: {stats['active']}\n"
+                f"• غیرفعال: {stats['inactive']}\n"
+                f"• مجموع استفاده: {stats['total_usage']}\n\n"
+                f"📋 لیست کوکی‌ها:\n"
+            )
+            
+            for i, cookie in enumerate(cookies[:10], 1):  # نمایش حداکثر 10 کوکی
+                status = "🟢" if cookie.get('active', True) else "🔴"
+                usage = cookie.get('usage_count', 0)
+                desc = cookie.get('description', f"کوکی {cookie.get('id', i)}")
+                text += f"{i}. {status} {desc} (استفاده: {usage})\n"
+            
+            if len(cookies) > 10:
+                text += f"\n... و {len(cookies) - 10} کوکی دیگر"
+        
+        await callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_youtube')]])
+        )
+        
+    elif action == 'list_cookies_instagram':
+        # مشاهده کوکی‌های اینستاگرام
+        from cookie_manager import cookie_manager
+        cookies = cookie_manager.get_cookies('instagram', active_only=False)
+        stats = cookie_manager.get_cookie_stats('instagram')
+        
+        if not cookies:
+            text = "📷 <b>کوکی‌های اینستاگرام</b>\n\n❌ هیچ کوکی‌ای یافت نشد."
+        else:
+            text = (
+                f"📷 <b>کوکی‌های اینستاگرام</b>\n\n"
+                f"📊 آمار کلی:\n"
+                f"• مجموع: {stats['total']}\n"
+                f"• فعال: {stats['active']}\n"
+                f"• غیرفعال: {stats['inactive']}\n"
+                f"• مجموع استفاده: {stats['total_usage']}\n\n"
+                f"📋 لیست کوکی‌ها:\n"
+            )
+            
+            for i, cookie in enumerate(cookies[:10], 1):  # نمایش حداکثر 10 کوکی
+                status = "🟢" if cookie.get('active', True) else "🔴"
+                usage = cookie.get('usage_count', 0)
+                desc = cookie.get('description', f"کوکی {cookie.get('id', i)}")
+                text += f"{i}. {status} {desc} (استفاده: {usage})\n"
+            
+            if len(cookies) > 10:
+                text += f"\n... و {len(cookies) - 10} کوکی دیگر"
+        
+        await callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_instagram')]])
+        )
+        
+    elif action == 'clear_cookies_youtube':
+        # حذف همه کوکی‌های یوتیوب
+        keyboard = [
+            [InlineKeyboardButton("✅ بله، حذف کن", callback_data='confirm_clear_youtube')],
+            [InlineKeyboardButton("❌ لغو", callback_data='cookie_youtube')]
+        ]
+        await callback_query.edit_message_text(
+            "⚠️ <b>هشدار</b>\n\n"
+            "آیا مطمئن هستید که می‌خواهید تمام کوکی‌های یوتیوب را حذف کنید؟\n\n"
+            "❗️ این عمل قابل بازگشت نیست!",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'clear_cookies_instagram':
+        # حذف همه کوکی‌های اینستاگرام
+        keyboard = [
+            [InlineKeyboardButton("✅ بله، حذف کن", callback_data='confirm_clear_instagram')],
+            [InlineKeyboardButton("❌ لغو", callback_data='cookie_instagram')]
+        ]
+        await callback_query.edit_message_text(
+            "⚠️ <b>هشدار</b>\n\n"
+            "آیا مطمئن هستید که می‌خواهید تمام کوکی‌های اینستاگرام را حذف کنید؟\n\n"
+            "❗️ این عمل قابل بازگشت نیست!",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'confirm_clear_youtube':
+        # تأیید حذف کوکی‌های یوتیوب
+        from cookie_manager import cookie_manager
+        success = cookie_manager.clear_cookies('youtube')
+        
+        if success:
+            text = "✅ تمام کوکی‌های یوتیوب با موفقیت حذف شدند."
+        else:
+            text = "❌ خطا در حذف کوکی‌ها. لطفاً دوباره تلاش کنید."
+        
+        await callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_youtube')]])
+        )
+        
+    elif action == 'confirm_clear_instagram':
+        # تأیید حذف کوکی‌های اینستاگرام
+        from cookie_manager import cookie_manager
+        success = cookie_manager.clear_cookies('instagram')
+        
+        if success:
+            text = "✅ تمام کوکی‌های اینستاگرام با موفقیت حذف شدند."
+        else:
+            text = "❌ خطا در حذف کوکی‌ها. لطفاً دوباره تلاش کنید."
+        
+        await callback_query.edit_message_text(
+            text,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت", callback_data='cookie_instagram')]])
+        )
+        
+    elif action == 'edit_waiting_youtube':
+        # تغییر پیام انتظار یوتیوب
+        admin_step['waiting_msg'] = 1
+        admin_step['waiting_msg_platform'] = 'youtube'
+        
+        keyboard = [
+            [InlineKeyboardButton("📝 متن", callback_data='waiting_type_text_youtube')],
+            [InlineKeyboardButton("🎬 GIF", callback_data='waiting_type_gif_youtube')],
+            [InlineKeyboardButton("😊 استیکر", callback_data='waiting_type_sticker_youtube')],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data='waiting_msg')]
+        ]
+        
+        await callback_query.edit_message_text(
+            "📺 <b>تغییر پیام انتظار یوتیوب</b>\n\n"
+            "نوع پیام انتظار را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    elif action == 'edit_waiting_instagram':
+        # تغییر پیام انتظار اینستاگرام
+        admin_step['waiting_msg'] = 1
+        admin_step['waiting_msg_platform'] = 'instagram'
+        
+        keyboard = [
+            [InlineKeyboardButton("📝 متن", callback_data='waiting_type_text_instagram')],
+            [InlineKeyboardButton("🎬 GIF", callback_data='waiting_type_gif_instagram')],
+            [InlineKeyboardButton("😊 استیکر", callback_data='waiting_type_sticker_instagram')],
+            [InlineKeyboardButton("⬅️ بازگشت", callback_data='waiting_msg')]
+        ]
+        
+        await callback_query.edit_message_text(
+            "📷 <b>تغییر پیام انتظار اینستاگرام</b>\n\n"
+            "نوع پیام انتظار را انتخاب کنید:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+    # Handle waiting message type selection
+    elif action.startswith('waiting_type_'):
+        parts = action.split('_')
+        msg_type = parts[2]  # text, gif, sticker
+        platform = parts[3]  # youtube, instagram
+        
+        admin_step['waiting_msg'] = 2
+        admin_step['waiting_msg_type'] = msg_type
+        admin_step['waiting_msg_platform'] = platform
+        
+        if msg_type == 'text':
+            prompt = "لطفاً متن پیام انتظار را ارسال کنید:"
+        elif msg_type == 'gif':
+            prompt = "لطفاً فایل GIF مورد نظر را ارسال کنید:"
+        elif msg_type == 'sticker':
+            prompt = "لطفاً استیکر مورد نظر را ارسال کنید:"
+        else:
+            prompt = "لطفاً محتوای مورد نظر را ارسال کنید:"
+            
+        await callback_query.edit_message_text(
+            f"📝 <b>تنظیم پیام انتظار {platform.title()}</b>\n\n"
+            f"{prompt}\n\n"
+            "❌ برای لغو /cancel را بفرستید.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ بازگشت", callback_data=f'edit_waiting_{platform}')
+            ]])
+        )
+         
+    try:
+        await callback_query.answer()
+    except Exception:
+        pass
+
+
+# Handle cookie input from admin
+@Client.on_message(filters.text & filters.user(ADMIN), group=8)
+async def handle_admin_cookie_input(client: Client, message: Message):
+    """Handle cookie content input from admin"""
+    # Check if admin is in cookie adding mode
+    if 'add_cookie' not in admin_step:
+        return
+        
+    platform = admin_step['add_cookie']
+    text = message.text.strip()
+    
+    # Cancel operation
+    if text.lower() == '/cancel':
+        del admin_step['add_cookie']
+        await message.reply_text("❌ عملیات لغو شد.")
+        return
+        
+    # Process cookie
+    try:
+        from cookie_manager import cookie_manager
+        
+        # Add cookie to pool
+        success = cookie_manager.add_cookie(platform, text)
+        
+        if success:
+            stats = cookie_manager.get_cookie_stats(platform)
+            await message.reply_text(
+                f"✅ کوکی {platform} با موفقیت اضافه شد!\n\n"
+                f"📊 آمار فعلی:\n"
+                f"• مجموع کوکی‌ها: {stats['total']}\n"
+                f"• فعال: {stats['active']}\n"
+                f"• غیرفعال: {stats['inactive']}"
+            )
+        else:
+            await message.reply_text(
+                f"❌ خطا در افزودن کوکی {platform}.\n\n"
+                "لطفاً فرمت کوکی را بررسی کنید."
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] Cookie processing error: {e}")
+        await message.reply_text(f"❌ خطا در پردازش کوکی: {str(e)}")
+        
+    # Reset admin step
+    del admin_step['add_cookie']
+
+
+# Handle cookie file input from admin
+@Client.on_message(filters.document & filters.user(ADMIN), group=9)
+async def handle_admin_cookie_file(client: Client, message: Message):
+    """Handle cookie file input from admin"""
+    # Check if admin is in cookie adding mode
+    if 'add_cookie' not in admin_step:
+        return
+        
+    platform = admin_step['add_cookie']
+    document = message.document
+    
+    # Check file type
+    if not document.file_name or not (document.file_name.endswith('.txt') or document.file_name.endswith('.json')):
+        await message.reply_text(
+            "❌ فرمت فایل پشتیبانی نمی‌شود.\n\n"
+            "فرمت‌های مجاز: .txt, .json"
+        )
+        return
+        
+    # Check file size (max 1MB)
+    if document.file_size > 1024 * 1024:
+        await message.reply_text("❌ حجم فایل بیش از حد مجاز است. (حداکثر 1MB)")
+        return
+        
+    try:
+        # Download and read file
+        file_path = await message.download()
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            
+        # Remove downloaded file
+        import os
+        os.remove(file_path)
+        
+        # Process cookie
+        from cookie_manager import cookie_manager
+        
+        success = cookie_manager.add_cookie(platform, content)
+        
+        if success:
+            stats = cookie_manager.get_cookie_stats(platform)
+            await message.reply_text(
+                f"✅ فایل کوکی {platform} با موفقیت پردازش شد!\n\n"
+                f"📊 آمار فعلی:\n"
+                f"• مجموع کوکی‌ها: {stats['total']}\n"
+                f"• فعال: {stats['active']}\n"
+                f"• غیرفعال: {stats['inactive']}"
+            )
+        else:
+            await message.reply_text(
+                f"❌ خطا در پردازش فایل کوکی {platform}.\n\n"
+                "لطفاً فرمت فایل را بررسی کنید."
+            )
+            
+    except Exception as e:
+        print(f"[ERROR] Cookie file processing error: {e}")
+        await message.reply_text(f"❌ خطا در پردازش فایل: {str(e)}")
+        
+    # Reset admin step
+    del admin_step['add_cookie']
 
 
 @Client.on_message(filters.text & filters.user(ADMIN), group=3)

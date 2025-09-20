@@ -197,11 +197,15 @@ async def show_video(client: Client, message: Message):
     performance_logger.info(f"[USER:{user_id}] Processing message sent after: {message_sent_time - start_time:.2f} seconds")
 
     try:
-        # Configure yt-dlp with cookies for authentication (conditionally)
-        cookies_path = os.path.join(os.getcwd(), 'cookies', 'youtube.txt')
-        use_cookies = os.path.exists(cookies_path)
+        # Configure yt-dlp with cookies from cookie pool
+        from cookie_manager import cookie_manager
+        
+        # Get a cookie from the pool
+        cookie_content = cookie_manager.get_cookie('youtube')
+        use_cookies = cookie_content is not None
+        
         if not use_cookies:
-            print(f"Warning: YouTube cookies file not found at {cookies_path}")
+            print("Warning: No YouTube cookies available in pool")
 
         # Security: Use environment variable for ffmpeg path or auto-detect
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
@@ -243,13 +247,38 @@ async def show_video(client: Client, message: Message):
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             
         if use_cookies:
-            ydl_opts['cookiefile'] = cookies_path
+            # Write cookie content to temporary file
+            import tempfile
+            temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+            temp_cookie_file.write(cookie_content)
+            temp_cookie_file.close()
+            ydl_opts['cookiefile'] = temp_cookie_file.name
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()
         performance_logger.info(f"[USER:{user_id}] Starting yt-dlp extraction...")
         
-        info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+        temp_cookie_file_path = None
+        try:
+            info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+            
+            # Update cookie usage stats
+            if use_cookies:
+                # Find cookie ID to update usage
+                cookies = cookie_manager.get_cookies('youtube', active_only=True)
+                for cookie in cookies:
+                    if cookie.get('data') == cookie_content:
+                        cookie_manager.update_usage('youtube', cookie['id'])
+                        break
+                
+        finally:
+            # Clean up temporary cookie file
+            if use_cookies and 'temp_cookie_file' in locals():
+                temp_cookie_file_path = temp_cookie_file.name
+                try:
+                    os.unlink(temp_cookie_file_path)
+                except:
+                    pass
         
         extraction_end = time.time()
         extraction_time = extraction_end - extraction_start
@@ -278,7 +307,18 @@ async def show_video(client: Client, message: Message):
             performance_logger.info(f"[USER:{user_id}] ✅ GOOD PERFORMANCE: {total_time:.2f}s (Target: <8s)")
 
     except Exception as e:
+        performance_logger.error(f"[USER:{user_id}] yt-dlp extraction failed: {str(e)}")
         print(f"Error processing YouTube link: {e}")
+        
+        # Mark cookie as invalid if extraction failed with cookies
+        if use_cookies:
+            # Find cookie ID to mark as invalid
+            cookies = cookie_manager.get_cookies('youtube', active_only=True)
+            for cookie in cookies:
+                if cookie.get('data') == cookie_content:
+                    cookie_manager.mark_invalid('youtube', cookie['id'])
+                    break
+        
         error_msg = str(e).lower()
         # If cookies are invalid or verification is required, show explicit error
         if any(keyword in error_msg for keyword in ["sign in to confirm", "not a bot", "cookies", "authentication", "login"]):
@@ -296,8 +336,14 @@ async def show_video(client: Client, message: Message):
             except:
                 await processing_message.edit_text("کوکی‌های یوتیوب نامعتبر است. فایل cookies/youtube.txt را به‌روزرسانی کنید.")
             return
-        # Try alternative extraction methods without cookies
+        
+        # Try alternative extraction methods with different cookie or without cookies
         try:
+            performance_logger.info(f"[USER:{user_id}] Attempting fallback extraction...")
+            
+            # Try with a different cookie first
+            fallback_cookie = cookie_manager.get_cookie('youtube')
+            
             fallback_opts = {
                 'quiet': True,
                 'simulate': True,
@@ -317,10 +363,41 @@ async def show_video(client: Client, message: Message):
                 'writeinfojson': False,
                 'format': 'worst/best'  # Use worst quality for fastest fallback
             }
+            
+            if ffmpeg_path:
+                fallback_opts['ffmpeg_location'] = ffmpeg_path
+            
+            temp_fallback_file = None
+            if fallback_cookie:
+                # Write fallback cookie content to temporary file
+                import tempfile
+                temp_fallback_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_fallback_file.write(fallback_cookie)
+                temp_fallback_file.close()
+                fallback_opts['cookiefile'] = temp_fallback_file.name
+            
             fallback_start = time.time()
             performance_logger.info(f"[USER:{user_id}] Starting fallback extraction...")
             
-            info = await asyncio.to_thread(lambda: YoutubeDL(fallback_opts).extract_info(url, download=False))
+            try:
+                info = await asyncio.to_thread(lambda: YoutubeDL(fallback_opts).extract_info(url, download=False))
+                
+                # Update cookie usage stats for successful fallback
+                if fallback_cookie:
+                    # Find cookie ID to update usage
+                    cookies = cookie_manager.get_cookies('youtube', active_only=True)
+                    for cookie in cookies:
+                        if cookie.get('data') == fallback_cookie:
+                            cookie_manager.update_usage('youtube', cookie['id'])
+                            break
+                    
+            finally:
+                # Clean up temporary fallback cookie file
+                if temp_fallback_file:
+                    try:
+                        os.unlink(temp_fallback_file.name)
+                    except:
+                        pass
             
             fallback_end = time.time()
             fallback_time = fallback_end - fallback_start
@@ -348,6 +425,7 @@ async def show_video(client: Client, message: Message):
             else:
                 performance_logger.info(f"[USER:{user_id}] ✅ GOOD FALLBACK: {total_time:.2f}s (Target: <8s)")
         except Exception as fallback_error:
+            performance_logger.error(f"[USER:{user_id}] Fallback extraction also failed: {str(fallback_error)}")
             print(f"Fallback extraction also failed: {fallback_error}")
             try:
                 await processing_message.edit_text(
