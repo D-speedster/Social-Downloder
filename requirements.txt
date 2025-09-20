@@ -1,8 +1,8 @@
 mysql-connector-python
-Pyrogram==1.4
+Pyrogram==2.0.106
 instaloader
 pytube
 python-dateutil
-tgcrypto
+tgcrypto4
 jdatetime
 yt-dlp

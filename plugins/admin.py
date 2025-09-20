@@ -607,7 +607,7 @@ async def cancel_broadcast(_, message: Message):
 
 
 @Client.on_message(sp_filter & filters.user(ADMIN), group=6)
-def set_sp(_: Client, message: Message):
+async def set_sp(_: Client, message: Message):
      raw = (message.text or '').strip()
      val = raw
      # Normalize input
@@ -615,7 +615,7 @@ def set_sp(_: Client, message: Message):
          # Extract username from t.me link
          uname = re.sub(r'^(https?://)?t\.me/', '', raw).strip('/')
          if uname.startswith('+'):
-             message.reply_text("لینک دعوت خصوصی (+) پشتیبانی نمی‌شود. لطفاً @username یا آی‌دی عددی -100… را ارسال کنید.")
+             await message.reply_text("لینک دعوت خصوصی (+) پشتیبانی نمی‌شود. لطفاً @username یا آی‌دی عددی -100… را ارسال کنید.")
              return
          val = '@' + uname
      elif re.match(r'^@[A-Za-z0-9_]{4,}$', raw):
@@ -623,13 +623,13 @@ def set_sp(_: Client, message: Message):
      elif re.match(r'^-100\d{8,14}$', raw):
          val = raw
      else:
-         message.reply_text("فرمت وارد شده صحیح نیست. نمونه‌ها: @example یا -1001234567890 یا https://t.me/example")
+         await message.reply_text("فرمت وارد شده صحیح نیست. نمونه‌ها: @example یا -1001234567890 یا https://t.me/example")
          return
 
      data['sponser'] = val
      with open(PATH + '/database.json', "w", encoding='utf-8') as outfile:
          json.dump(data, outfile, indent=4, ensure_ascii=False)
-         message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
+         await message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
      admin_step['sp'] = 0
 
 
@@ -807,5 +807,5 @@ async def handle_waiting_message_input(client: Client, message: Message):
 
 
 @Client.on_message(filters.text & filters.user(ADMIN), group=3)
-def set_insta_acc(_: Client, message: Message):
+async def set_insta_acc(_: Client, message: Message):
     pass  # unchanged existing logic follows...

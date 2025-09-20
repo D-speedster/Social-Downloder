@@ -1,4 +1,5 @@
 from pyrogram import Client
+from pyrogram.storage import MemoryStorage
 from plugins.sqlite_db_wrapper import DB
 import config as config
 from logging import basicConfig, ERROR, INFO
@@ -6,6 +7,7 @@ import os
 import sys
 import atexit
 import signal
+import asyncio
 from dotenv import load_dotenv
 import os
 load_dotenv()
@@ -75,29 +77,53 @@ except Exception as e:
 MAX_WORKERS = min(16, os.cpu_count() * 2) if os.cpu_count() else 8
 logger.info(f"Using {MAX_WORKERS} workers")
 
-try:
-    client = Client(
-        "ytdownloader3_dev2",
-        bot_token=BOT_TOKEN,
-        api_id=API_ID,  # Changed from APP_ID to API_ID
-        api_hash=API_HASH,
-        plugins=plugins,
-        workers=MAX_WORKERS,
-        sleep_threshold=60,  # Add sleep threshold to prevent flood
-    )
-    
-    logger.info("Starting bot client...")
-    client.run()
-except KeyboardInterrupt:
-    logger.info("Bot stopped by user")
-except Exception as e:
-    logger.error(f"Bot startup failed: {e}")
-    sys.exit(1)
-finally:
-    # Ensure database is closed
+async def main():
     try:
-        if 'db' in locals():
-            db.close()
-            logger.info("Database connection closed")
+        client = Client(
+            name="ytdownloader3_dev2",
+            bot_token=BOT_TOKEN,
+            api_id=API_ID,  # Changed from APP_ID to API_ID
+            api_hash=API_HASH,
+            plugins=plugins,
+            workers=MAX_WORKERS,
+            sleep_threshold=60,  # Add sleep threshold to prevent flood
+        )
+        
+        logger.info("Starting bot client...")
+        await client.start()
+        logger.info("Bot started successfully")
+        
+        # Keep the bot running
+        import pyrogram
+        await pyrogram.idle()
+        
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
     except Exception as e:
-        logger.error(f"Error closing database in finally block: {e}")
+        logger.error(f"Bot startup failed: {e}")
+        raise
+    finally:
+        # Ensure client is stopped
+        try:
+            if 'client' in locals():
+                await client.stop()
+                logger.info("Bot client stopped")
+        except Exception as e:
+            logger.error(f"Error stopping client: {e}")
+        
+        # Ensure database is closed
+        try:
+            if 'db' in locals():
+                db.close()
+                logger.info("Database connection closed")
+        except Exception as e:
+            logger.error(f"Error closing database in finally block: {e}")
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error(f"Bot failed: {e}")
+        sys.exit(1)

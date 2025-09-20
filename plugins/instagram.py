@@ -16,11 +16,11 @@ txt = constant.TEXT
 instaregex = r"^((?:https?:)?\/\/)?((?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|reel\/|tv\/|stories\/))([\w\-]+)(\S+)?$"
 
 @Client.on_message(filters.regex(instaregex) & filters.private & join)
-def download_instagram(_: Client, message: Message):
-    # Helpers (sync-safe)
-    def _safe_edit(msg, text, reply_markup=None):
+async def download_instagram(_: Client, message: Message):
+    # Helpers (async-safe)
+    async def _safe_edit(msg, text, reply_markup=None):
         try:
-            msg.edit_text(text, reply_markup=reply_markup)
+            await msg.edit_text(text, reply_markup=reply_markup)
         except MessageNotModified:
             pass
         except Exception:
@@ -57,7 +57,7 @@ def download_instagram(_: Client, message: Message):
                     bu = None
             if bu and now < bu:
                 seconds = int((bu - now).total_seconds())
-                message.reply_text(txt['rate_limit'].format(seconds=seconds))
+                await message.reply_text(txt['rate_limit'].format(seconds=seconds))
                 return
     except Exception as e:
         print(f"Error checking blocked_until: {e}")
@@ -65,10 +65,10 @@ def download_instagram(_: Client, message: Message):
     # Try to send typing action compatibly
     try:
         from pyrogram.enums import ChatAction as _ChatAction
-        client.send_chat_action(message.chat.id, _ChatAction.TYPING)
+        await client.send_chat_action(message.chat.id, _ChatAction.TYPING)
     except Exception:
         try:
-            client.send_chat_action(message.chat.id, "typing")
+            await client.send_chat_action(message.chat.id, "typing")
         except Exception:
             pass  # Ignore if typing action fails
 
@@ -78,17 +78,17 @@ def download_instagram(_: Client, message: Message):
     
     # Send waiting message based on type
     if custom_message_data and custom_message_data.get('type') == 'gif':
-        status_msg = message.reply_animation(
+        status_msg = await message.reply_animation(
             animation=custom_message_data['content'],
             caption="⏳ در حال آماده‌سازی لینک اینستاگرام..."
         )
     elif custom_message_data and custom_message_data.get('type') == 'sticker':
-        message.reply_sticker(sticker=custom_message_data['content'])
-        status_msg = message.reply_text("⏳ در حال آماده‌سازی لینک اینستاگرام...")
+        await message.reply_sticker(sticker=custom_message_data['content'])
+        status_msg = await message.reply_text("⏳ در حال آماده‌سازی لینک اینستاگرام...")
     else:
         # Text message (default or custom)
         waiting_text = custom_message_data.get('content', "⏳ در حال آماده‌سازی لینک اینستاگرام...") if custom_message_data else "⏳ در حال آماده‌سازی لینک اینستاگرام..."
-        status_msg = message.reply_text(waiting_text)
+        status_msg = await message.reply_text(waiting_text)
 
     try:
         from yt_dlp import YoutubeDL
@@ -122,9 +122,17 @@ def download_instagram(_: Client, message: Message):
                     last["p"], last["t"] = percent, now
                     text = _format_status_text(title or "Instagram", type_label, size_mb, "در حال دانلود ...")
                     kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data="ignore")]])
-                    _safe_edit(status_msg, text, reply_markup=kb)
+                    # Use sync version for yt-dlp hook
+                    try:
+                        status_msg.edit_text(text, reply_markup=kb)
+                    except Exception:
+                        pass
                 elif st == 'finished':
-                    _safe_edit(status_msg, "🔁 دانلود پایان یافت. در حال آماده‌سازی برای ارسال…")
+                    # Use sync version for yt-dlp hook
+                    try:
+                        status_msg.edit_text("🔁 دانلود پایان یافت. در حال آماده‌سازی برای ارسال…")
+                    except Exception:
+                        pass
             except Exception:
                 pass
 
@@ -172,7 +180,7 @@ def download_instagram(_: Client, message: Message):
             type_label = "📄 فایل"
 
         total_mb_text = f"{(total_bytes/1024/1024):.2f}" if total_bytes else "نامشخص"
-        _safe_edit(
+        await _safe_edit(
             status_msg,
             _format_status_text(title, type_label, total_mb_text, "در حال آپلود ..."),
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🚀 پیشرفت: 0٪", callback_data="ignore")]])
@@ -183,43 +191,47 @@ def download_instagram(_: Client, message: Message):
                 percent = int(current * 100 / total) if total else 0
                 kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data="ignore")]])
                 text = _format_status_text(title, type_label, total_mb_text, "در حال آپلود ...")
-                _safe_edit(status_msg, text, reply_markup=kb)
+                # Use sync version for progress callback
+                try:
+                    status_msg.edit_text(text, reply_markup=kb)
+                except Exception:
+                    pass
             except Exception:
                 pass
 
         sent = None
         try:
             if "ویدیو" in type_label:
-                sent = message.reply_video(
+                sent = await message.reply_video(
                     video=file_path,
                     caption=title or "",
                     progress=on_upload_progress
                 )
             else:
-                sent = message.reply_document(
+                sent = await message.reply_document(
                     document=file_path,
                     caption=title or "",
                     progress=on_upload_progress
                 )
             try:
-                _safe_edit(status_msg, "✅ فایل با موفقیت ارسال شد")
+                await _safe_edit(status_msg, "✅ فایل با موفقیت ارسال شد")
             except Exception:
                 pass
         except Exception:
             try:
-                sent = message.reply_document(
+                sent = await message.reply_document(
                     document=file_path,
                     caption=title or "",
                     progress=on_upload_progress
                 )
             except Exception:
-                message.reply_text("❌ خطا در ارسال فایل.")
+                await message.reply_text("❌ خطا در ارسال فایل.")
                 sent = None
 
         # Tag message under the media
         if sent:
             try:
-                sent.reply_text("📥 دریافت شده توسط ربات YouTube | Instagram Save Bot")
+                await sent.reply_text("📥 دریافت شده توسط ربات YouTube | Instagram Save Bot")
             except Exception:
                 pass
 
@@ -244,12 +256,12 @@ def download_instagram(_: Client, message: Message):
         # Improved guidance for login-required / rate-limit cases
         err = str(e)
         if any(s in err.lower() for s in ["login", "rate", "cookies", "cookie", "authentication", "not available"]):
-            message.reply_text(
+            await message.reply_text(
                 "❌ خطا در دانلود اینستاگرام: نیاز به احراز هویت یا دور زدن محدودیت است.\n"
                 "لطفاً کوکی‌های اینستاگرام را با دستور /setcookies آپلود کنید (فایل instagram.txt)."
             )
         else:
-            message.reply_text("❌ خطا در دانلود اینستاگرام: " + err)
+            await message.reply_text("❌ خطا در دانلود اینستاگرام: " + err)
         print("IG error:", e)
 
 

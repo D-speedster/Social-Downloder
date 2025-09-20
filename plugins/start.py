@@ -93,7 +93,7 @@ def build_main_menu(user_id: int):
 # ], resize_keyboard=True)
 
 
-def start_acc(_, client: Client, message: Message):
+async def start_acc(_, client: Client, message: Message):
     if step['start'] == 1:
         return True
 
