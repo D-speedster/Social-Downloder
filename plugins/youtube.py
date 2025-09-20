@@ -82,8 +82,8 @@ async def display_video_info_with_cover(client: Client, message, info):
         
         # Create glass-style buttons
         keyboard = [
-            [InlineKeyboardButton("🎥 ویدیو (با صدا)", callback_data='download_video')],
-            [InlineKeyboardButton("🔊 فقط صدا", callback_data='download_audio')]
+            [InlineKeyboardButton("🎥 ویدیو (با صدا)", callback_data='1')],
+            [InlineKeyboardButton("🔊 فقط صدا", callback_data='2')]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         

@@ -364,9 +364,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     size_str = f"{(total_bytes/1024/1024):.2f} MB" if total_bytes else (step.get('filesize') or 'نامشخص')
                     
                     # نمایش اطلاعات فرگمنت در صورت وجود
-                    status_text = "در حال دانلود در سرور..."
-                    if fragment_index is not None and fragment_count is not None:
-                        status_text = f"در حال دانلود قسمت {fragment_index + 1} از {fragment_count}..."
+                    status_text = "در حال دانلود..."
                     
                     # Update job status occasionally to reduce DB writes
                     try:

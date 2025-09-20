@@ -13804,3 +13804,162 @@ AttributeError: 'DB' object has no attribute 'get_system_stats'
 2025-09-20 12:18:56,662 - pyrogram.connection.connection - INFO - close:66 - Disconnected
 2025-09-20 12:18:56,663 - pyrogram.session.session - INFO - stop:180 - Session stopped
 2025-09-20 12:18:56,663 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:04,369 - __main__ - INFO - <module>:62 - Bot starting up...
+2025-09-20 12:29:04,369 - __main__ - INFO - <module>:63 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-20 12:29:04,369 - __main__ - INFO - <module>:64 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-20 12:29:04,371 - __main__ - INFO - <module>:74 - Database initialized successfully
+2025-09-20 12:29:04,371 - __main__ - INFO - <module>:96 - Using 16 workers
+2025-09-20 12:29:04,373 - __main__ - INFO - main:110 - Starting bot client...
+2025-09-20 12:29:04,626 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:06,914 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:29:07,917 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:10,760 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:29:11,765 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:14,155 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:29:15,165 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:29:15,166 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:29:15,166 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:29:15,166 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:17,452 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1236] The network connection was aborted by the local system
+2025-09-20 12:29:18,463 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:29:18,884 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-20 12:29:18,885 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-20 12:29:20,024 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-20 12:29:20,025 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-20 12:29:20,025 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-20 12:29:20,025 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-20 12:29:20,030 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-20 12:29:21,918 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_root_msg") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,918 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_stats") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,918 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_server") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_broadcast") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_power") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor_toggle") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_back") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_panel") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_cookies_cmd") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_cookie_file") in group 7 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("send_to_all") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_broadcast") in group 5 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_broadcast") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_sp") in group 6 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("waiting_msg_menu_text") in group 0 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_waiting_message_input") in group 7 from "plugins.admin"
+2025-09-20 12:29:21,919 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_insta_acc") in group 3 from "plugins.admin"
+2025-09-20 12:29:21,956 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("dashboard_cmd") in group 0 from "plugins.dashboard"
+2025-09-20 12:29:21,956 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("dashboard_cb") in group 0 from "plugins.dashboard"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("download_instagram") in group 0 from "plugins.instagram"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("maintenance_gate_msg") in group -3 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("maintenance_gate_cb") in group -3 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("start") in group -2 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_command_handler") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("settings_command_handler") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("language_command_handler") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("upgrade_command_handler") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("account_info_message") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("account_info_callback") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_menu_message") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("help_menu_callback") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("menu_dashboard_cmd_alias") in group 0 from "plugins.start"
+2025-09-20 12:29:21,987 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("verify_join_callback") in group 0 from "plugins.start"
+2025-09-20 12:29:22,114 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("show_video") in group 0 from "plugins.youtube"
+2025-09-20 12:29:22,115 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.youtube_callback_query"
+2025-09-20 12:29:22,115 - pyrogram.client - INFO - load_plugins:775 - [ytdownloader3_dev2] Successfully loaded 36 plugins from "plugins"
+2025-09-20 12:29:22,115 - pyrogram.dispatcher - INFO - start:154 - Started 16 HandlerTasks
+2025-09-20 12:29:22,115 - __main__ - INFO - main:112 - Bot started successfully
+2025-09-20 12:30:49,120 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-20 12:30:49,123 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-20 12:30:49,123 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: ConnectionAbortedError [WinError 1236] The network connection was aborted by the local system
+2025-09-20 12:30:49,123 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:30:49,124 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:30:49,126 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:30:52,001 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:30:53,002 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:30:55,891 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:30:56,892 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:00,246 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:31:01,261 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:31:01,262 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:31:01,262 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:31:01,262 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:04,606 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:31:05,613 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:08,900 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:31:09,910 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:13,526 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:31:14,538 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:31:14,538 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:31:14,538 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:31:14,539 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:18,255 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1225] The remote computer refused the network connection
+2025-09-20 12:31:19,265 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:23,435 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: [WinError 1236] The network connection was aborted by the local system
+2025-09-20 12:31:24,448 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:34,458 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:31:35,472 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:31:35,472 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:31:35,472 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:31:35,472 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:45,485 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:31:46,498 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:31:56,501 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:31:57,514 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:32:07,521 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:32:08,524 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:32:08,524 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:32:08,524 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:32:08,525 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:32:18,529 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:32:19,543 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:32:29,548 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:32:30,563 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:32:40,571 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:32:41,584 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:32:41,584 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:32:41,584 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:32:41,585 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:32:51,587 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:32:52,592 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:02,603 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:03,615 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:13,619 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:14,631 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:33:14,632 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:33:14,632 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:33:14,633 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:24,637 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:25,645 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:35,661 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:36,668 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:46,670 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:47,677 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:33:47,677 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:33:47,677 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:33:47,677 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:33:57,687 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:33:58,703 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:34:08,718 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:34:09,733 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:34:19,778 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:34:20,779 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:34:20,779 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:34:20,779 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:34:20,779 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:34:30,786 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:34:31,798 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:34:41,811 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:34:42,813 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:34:52,825 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:34:53,839 - pyrogram.connection.connection - WARNING - connect:61 - Connection failed! Trying again...
+2025-09-20 12:34:53,839 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:34:53,839 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:34:53,839 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:35:03,849 - pyrogram.connection.connection - WARNING - connect:50 - Unable to connect due to network issues: Connection timed out
+2025-09-20 12:35:04,864 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-20 12:35:08,941 - root - INFO - signal_handler:75 - Stop signal received (SIGINT). Exiting...
+2025-09-20 12:35:08,957 - pyrogram.dispatcher - INFO - stop:167 - Stopped 16 HandlerTasks
+2025-09-20 12:35:08,958 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-20 12:35:08,958 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-20 12:35:08,958 - __main__ - INFO - main:128 - Bot client stopped
+2025-09-20 12:35:08,963 - __main__ - INFO - cleanup_database:81 - Database connection closed successfully
