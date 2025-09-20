@@ -260,6 +260,48 @@ class DB:
         except Exception as e:
             print(f"Failed to increment request: {e}")
 
+    def get_system_stats(self) -> dict:
+        """Get system statistics for admin panel"""
+        try:
+            # Get total users count
+            self.cursor.execute("SELECT COUNT(*) FROM users")
+            total_users = self.cursor.fetchone()[0]
+            
+            # Get users joined today
+            today = date.today().strftime('%Y-%m-%d')
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE DATE(joined_at) = ?", (today,))
+            users_today = self.cursor.fetchone()[0]
+            
+            # Get active users today (users who made requests today)
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE daily_date = ?", (today,))
+            active_today = self.cursor.fetchone()[0]
+            
+            # Get total requests sum
+            self.cursor.execute("SELECT SUM(total_requests) FROM users")
+            total_requests_sum = self.cursor.fetchone()[0] or 0
+            
+            # Get blocked users count
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            self.cursor.execute("SELECT COUNT(*) FROM users WHERE blocked_until > ?", (now,))
+            blocked_count = self.cursor.fetchone()[0]
+            
+            return {
+                'total_users': total_users,
+                'users_today': users_today,
+                'active_today': active_today,
+                'total_requests_sum': total_requests_sum,
+                'blocked_count': blocked_count
+            }
+        except Exception as e:
+            print(f"Error getting system stats: {e}")
+            return {
+                'total_users': 0,
+                'users_today': 0,
+                'active_today': 0,
+                'total_requests_sum': 0,
+                'blocked_count': 0
+            }
+    
     def close(self):
         """Close database connection"""
         if self.mydb:

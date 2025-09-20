@@ -77,12 +77,14 @@ async def maintenance_gate_cb(client: Client, callback_query: CallbackQuery):
     except Exception:
         return
 
-# Helper to build main inline menu; for admins show only one "🛠 مدیریت" button, for others show nothing
+# Helper to build main menu; for admins show admin panel keyboard, for others show nothing
 
 def build_main_menu(user_id: int):
     if user_id in ADMIN:
-        return InlineKeyboardMarkup([[InlineKeyboardButton("🛠 مدیریت", callback_data="admin_root")]])
-    # Normal users: no inline menu after /start
+        # Return admin panel reply keyboard instead of inline
+        from plugins.admin import admin_reply_kb
+        return admin_reply_kb()
+    # Normal users: no menu after /start
     return None
 
 

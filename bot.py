@@ -1,7 +1,6 @@
 from pyrogram import Client
 from pyrogram.storage import MemoryStorage
 from plugins.sqlite_db_wrapper import DB
-import config as config
 from logging import basicConfig, ERROR, INFO
 import os
 import sys
@@ -9,8 +8,27 @@ import atexit
 import signal
 import asyncio
 from dotenv import load_dotenv
-import os
+
+# اجرای wizard تنظیمات اولیه در صورت عدم وجود .env
+if not os.path.exists('.env'):
+    print("فایل .env یافت نشد. راه‌اندازی wizard تنظیمات اولیه...")
+    try:
+        from setup_wizard import run_setup_wizard
+        run_setup_wizard()
+        print("تنظیمات با موفقیت انجام شد. در حال راه‌اندازی ربات...")
+    except ImportError:
+        print("خطا: فایل setup_wizard.py یافت نشد.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"خطا در راه‌اندازی wizard: {e}")
+        sys.exit(1)
+
+# بارگذاری متغیرهای محیطی از .env
 load_dotenv()
+
+# وارد کردن config پس از بارگذاری .env
+import config as config
+
 # Security: Validate configuration before starting
 try:
     BOT_TOKEN = config.BOT_TOKEN

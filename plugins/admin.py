@@ -70,7 +70,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📣 ارسال پیام", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🔌 خاموش/روشن"],
-            ["⬅️ بازگشت"],
+            ["🔐 خاموش/روشن اسپانسری", "⬅️ بازگشت"],
         ],
         resize_keyboard=True
     )
@@ -162,6 +162,40 @@ async def admin_menu_power(_: Client, message: Message):
     )
 
 
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔐 خاموش/روشن اسپانسری$'))
+async def admin_menu_sponsor_toggle(_: Client, message: Message):
+    print("[ADMIN] sponsor toggle via text by", message.from_user.id)
+    current = data.get('force_join', True)
+    new_state = not current
+    data['force_join'] = new_state
+    try:
+        # Create backup before writing
+        backup_path = PATH + '/database.json.bak'
+        if os.path.exists(PATH + '/database.json'):
+            shutil.copy2(PATH + '/database.json', backup_path)
+        
+        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+            json.dump(data, outfile, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Failed to write force_join: {e}")
+        # Try to restore backup if write failed
+        try:
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, PATH + '/database.json')
+        except Exception:
+            pass
+    await message.reply_text(
+        f"وضعیت اسپانسری: {'🔴 خاموش' if not new_state else '🟢 روشن'}",
+        reply_markup=admin_reply_kb()
+    )
+
+
+# Duplicate handlers removed - keeping only the first set
+
+
+# Duplicate waiting message and power toggle handlers removed
+
+
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^⬅️ بازگشت$'))
 async def admin_menu_back(_: Client, message: Message):
     print("[ADMIN] back pressed by", message.from_user.id)
@@ -181,34 +215,7 @@ async def admin_panel(_: Client, message: Message):
     )
 
 
-# NEW: Admin root from inline menu (only Admins see the button in start.py)
-@Client.on_callback_query(filters.regex(r'^admin_root$') & filters.user(ADMIN))
-async def show_admin_root(client: Client, cq: CallbackQuery):
-    print(f"[ADMIN] callback admin_root by {cq.from_user.id}")
-    try:
-        await cq.answer("پنل مدیریت باز شد", show_alert=False)
-    except Exception as e:
-        print("[ADMIN] cq.answer error:", e)
-    try:
-        # Prefer sending a fresh message with inline keyboard
-        await client.send_message(
-            chat_id=cq.message.chat.id,
-            text="پنل مدیریت",
-            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
-        )
-        print("[ADMIN] inline admin panel sent")
-    except Exception as e:
-        print("[ADMIN] failed to send inline admin panel:", e)
-        # Fallback to reply keyboard
-        try:
-            await client.send_message(
-                chat_id=cq.message.chat.id,
-                text="پنل مدیریت",
-                reply_markup=admin_reply_kb()
-            )
-            print("[ADMIN] fallback reply keyboard sent")
-        except Exception as e2:
-            print("[ADMIN] failed to send fallback reply keyboard:", e2)
+# Admin root handler removed - now using reply keyboard directly from start
 
 
 async def set_sp_custom(_, __, message: Message):
@@ -378,167 +385,13 @@ def _server_status_text() -> str:
     )
 
 
-@Client.on_callback_query(static_data_filter)
-async def answer(_, callback_query: CallbackQuery):
-    print(f"[ADMIN] callback data: {callback_query.data} by {callback_query.from_user.id}")
-    try:
-        await callback_query.answer()
-    except Exception:
-        pass
-    if callback_query.data == 'st':
-        # آمار سیستم برای ادمین‌ها
-        stats = DB().get_system_stats()
-        text = (
-            "\u200F<b>📊 آمار سیستم</b>\n\n"
-            f"👥 مجموع کاربران: <b>{stats.get('total_users', 0)}</b>\n"
-            f"🆕 کاربران امروز: <b>{stats.get('users_today', 0)}</b>\n"
-            f"✅ کاربران فعال امروز: <b>{stats.get('active_today', 0)}</b>\n"
-            f"📈 مجموع درخواست‌ها: <b>{stats.get('total_requests_sum', 0)}</b>\n"
-            f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n\n"
-            f"🗂 مجموع وظایف: <b>{stats.get('total_jobs', 0)}</b>\n"
-            f"⏳ در انتظار: <b>{stats.get('jobs_pending', 0)}</b>\n"
-            f"🟡 آماده: <b>{stats.get('jobs_ready', 0)}</b>\n"
-            f"✅ تکمیل‌شده: <b>{stats.get('jobs_completed', 0)}</b>\n"
-        )
-        await callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
-
-    elif callback_query.data == 'srv':
-        text = _server_status_text()
-        await callback_query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
-
-    elif callback_query.data == 'sp':
-        await callback_query.edit_message_text(
-            "ابتدا ربات را در چنل مورد نظر ادمین کن سپس شناسه چنل را ارسال کن.\n"
-            "فرمت‌های مجاز:\n"
-            "- @username (کانال عمومی)\n"
-            "- -100xxxxxxxxxx (آی‌دی عددی، مناسب کانال خصوصی)\n"
-            "- لینک t.me/username (به @username تبدیل می‌شود)\n\n"
-            "نکته: لینک دعوت خصوصی (+) پشتیبانی نمی‌شود؛ برای کانال خصوصی از آی‌دی عددی استفاده کنید.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('بازگشت', callback_data='admin_root')]])
-        )
-        admin_step['sp'] = 1
-
-    elif callback_query.data in ('sg', 'gm'):
-        admin_step['broadcast'] = 1
-        await callback_query.edit_message_text(
-            "لطفاً پیام مورد نظر برای ارسال همگانی را ارسال کنید.\n\n"
-            "- هر نوع پیام پشتیبانی می‌شود (متن، عکس، ویدیو، فایل، ...).\n"
-            "- برای لغو /cancel را بفرستید.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('بازگشت', callback_data='admin_root')]])
-        )
-
-    elif callback_query.data == 'pw':
-        # Toggle power state in memory and persist to file
-        current = data.get('bot_status', 'ON')
-        new_state = 'OFF' if current == 'ON' else 'ON'
-        data['bot_status'] = new_state
-        try:
-            # Create backup before writing
-            backup_path = PATH + '/database.json.bak'
-            if os.path.exists(PATH + '/database.json'):
-                shutil.copy2(PATH + '/database.json', backup_path)
-            
-            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
-                json.dump(data, outfile, indent=4, ensure_ascii=False)
-        except Exception as e:
-            print(f"Failed to write bot_status: {e}")
-            # Try to restore backup if write failed
-            try:
-                if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, PATH + '/database.json')
-            except Exception:
-                pass
-        await callback_query.edit_message_text(
-            f"وضعیت ربات: {'🔴 خاموش' if new_state == 'OFF' else '🟢 روشن'}",
-            reply_markup=InlineKeyboardMarkup(admin_inline_maker())
-        )
-
-    elif callback_query.data == 'sh':
-        sys.exit()
-
-    elif callback_query.data == 'si':
-        await callback_query.edit_message_text("آیدی اکانتی که میخواهید اضافه شود رو وارد کنید")
-        insta['level'] = 1
+# Old inline callback handlers removed - now using reply keyboard message handlers
 
 
-@Client.on_callback_query(filters.regex(r'^sp_check$') & filters.user(ADMIN))
-async def sp_check_cb(client: Client, cq: CallbackQuery):
-    sponsor_tag = (data.get('sponser') or '').strip()
-    if not sponsor_tag:
-        try:
-            await cq.answer("اسپانسر تنظیم نشده است.", show_alert=True)
-        except Exception:
-            pass
-        return
-    # Resolve chat id
-    tag = sponsor_tag[1:] if sponsor_tag.startswith('@') else sponsor_tag
-    chat = None
-    chat_id = None
-    try:
-        if tag.startswith('-100') or tag.isdigit():
-            chat_id = int(tag)
-        else:
-            chat = await client.get_chat(tag)
-            chat_id = chat.id
-    except Exception as e:
-        await cq.message.reply_text(f"❌ خطا در resolve کانال: {e}")
-        return
-    try:
-        if chat is None:
-            chat = await client.get_chat(chat_id)
-        me = await client.get_me()
-        member = await client.get_chat_member(chat_id, me.id)
-        status = getattr(member, 'status', 'unknown')
-        is_admin = status in ['administrator', 'creator']
-        chat_username = getattr(chat, 'username', None)
-        lines = [
-            "🔍 بررسی کانال اسپانسر",
-            f"- مقدار تنظیم‌شده: <code>{sponsor_tag}</code>",
-            f"- آی‌دی عددی: <code>{chat_id}</code>",
-            f"- عنوان: {chat.title}",
-            f"- یوزرنیم: @{chat_username if chat_username else '—'}",
-            f"- وضعیت ربات در کانال: {'ادمین' if is_admin else ('عضو' if status=='member' else status)}",
-        ]
-        if chat_username is None and sponsor_tag.startswith('@'):
-            lines.append("⚠️ این کانال یوزرنیم عمومی ندارد. برای کانال خصوصی از آی‌دی عددی (-100…) استفاده کنید.")
-        await cq.message.reply_text('\n'.join(lines), reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
-    except Exception as e:
-        await cq.message.reply_text(f"❌ خطا در بررسی کانال: {e}")
+# Sponsor check callback handler removed - now handled by message handlers
 
 
-@Client.on_callback_query(filters.regex(r'^fj_toggle$') & filters.user(ADMIN))
-async def force_join_toggle(_: Client, cq: CallbackQuery):
-    new_state = not data.get('force_join', True)
-    data['force_join'] = new_state
-    try:
-        # Create backup before writing
-        backup_path = PATH + '/database.json.bak'
-        if os.path.exists(PATH + '/database.json'):
-            shutil.copy2(PATH + '/database.json', backup_path)
-        
-        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
-            json.dump(data, outfile, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Failed to write force_join: {e}")
-        # Try to restore backup if write failed
-        try:
-            if os.path.exists(backup_path):
-                shutil.copy2(backup_path, PATH + '/database.json')
-        except Exception:
-            pass
-    try:
-        await cq.answer(f"قفل عضویت: {'روشن' if new_state else 'خاموش'}", show_alert=False)
-    except Exception:
-        pass
-    # Refresh panel buttons if message is editable
-    try:
-        await cq.message.edit_reply_markup(InlineKeyboardMarkup(admin_inline_maker()))
-    except Exception:
-        # Fallback: send a new panel
-        try:
-            await cq.message.reply_text("پنل مدیریت", reply_markup=InlineKeyboardMarkup(admin_inline_maker()))
-        except Exception:
-            pass
+# Force join toggle callback handler removed - now handled by message handlers
 
 
 @Client.on_message(filters.command('send_to_all') & filters.user(ADMIN))
@@ -633,91 +486,7 @@ async def set_sp(_: Client, message: Message):
      admin_step['sp'] = 0
 
 
-# Waiting Message Management Handlers
-@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_msg$'))
-async def waiting_msg_menu(client: Client, callback_query: CallbackQuery):
-    """Show waiting message management menu"""
-    db = DB()
-    messages = db.get_all_waiting_messages()
-    
-    text = "💬 <b>مدیریت پیام‌های انتظار</b>\n\n"
-    text += "پیام‌های فعلی:\n"
-    for msg_data in messages:
-        platform = msg_data.get('platform', 'نامشخص')
-        msg_type = msg_data.get('type', 'text')
-        content = msg_data.get('content', 'نامشخص')
-        if msg_type == 'text':
-            preview = content[:30] + '...' if len(content) > 30 else content
-        else:
-            preview = f"{msg_type.upper()}: {content[:20]}..."
-        text += f"• {platform}: {preview}\n"
-    
-    keyboard = [
-        [InlineKeyboardButton("📝 تغییر پیام یوتیوب", callback_data='edit_waiting_youtube')],
-        [InlineKeyboardButton("📝 تغییر پیام اینستاگرام", callback_data='edit_waiting_instagram')],
-        [InlineKeyboardButton("🔙 بازگشت", callback_data='back_admin')]
-    ]
-    
-    await callback_query.edit_message_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^edit_waiting_(youtube|instagram)$'))
-async def edit_waiting_message(client: Client, callback_query: CallbackQuery):
-    """Start editing waiting message for specific platform"""
-    platform = callback_query.data.split('_')[-1]
-    admin_step['waiting_msg'] = 1
-    admin_step['waiting_msg_platform'] = platform
-    
-    text = f"💬 <b>تغییر پیام انتظار {platform.title()}</b>\n\n"
-    text += "نوع پیام مورد نظر را انتخاب کنید:\n\n"
-    text += "• متن: پیام متنی ساده\n"
-    text += "• گیف: فایل GIF متحرک\n"
-    text += "• استیکر: استیکر تلگرام\n"
-    
-    keyboard = [
-        [InlineKeyboardButton("📝 متن", callback_data=f'waiting_type_text_{platform}')],
-        [InlineKeyboardButton("🎬 گیف", callback_data=f'waiting_type_gif_{platform}')],
-        [InlineKeyboardButton("😊 استیکر", callback_data=f'waiting_type_sticker_{platform}')],
-        [InlineKeyboardButton("🔙 بازگشت", callback_data='waiting_msg')]
-    ]
-    
-    await callback_query.edit_message_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_type_(text|gif|sticker)_(youtube|instagram)$'))
-async def set_waiting_message_type(client: Client, callback_query: CallbackQuery):
-    """Set the type of waiting message"""
-    parts = callback_query.data.split('_')
-    msg_type = parts[2]
-    platform = parts[3]
-    
-    admin_step['waiting_msg'] = 2
-    admin_step['waiting_msg_type'] = msg_type
-    admin_step['waiting_msg_platform'] = platform
-    
-    if msg_type == 'text':
-        text = f"📝 <b>پیام متنی برای {platform.title()}</b>\n\n"
-        text += "لطفاً متن پیام انتظار جدید را ارسال کنید:\n\n"
-        text += "مثال: ⏳ در حال پردازش لینک شما..."
-    elif msg_type == 'gif':
-        text = f"🎬 <b>گیف برای {platform.title()}</b>\n\n"
-        text += "لطفاً فایل GIF مورد نظر را ارسال کنید."
-    else:  # sticker
-        text = f"😊 <b>استیکر برای {platform.title()}</b>\n\n"
-        text += "لطفاً استیکر مورد نظر را ارسال کنید."
-    
-    keyboard = [[InlineKeyboardButton("❌ لغو", callback_data='waiting_msg')]]
-    
-    await callback_query.edit_message_text(
-        text,
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+# Remaining callback handler code removed - now handled by message handlers
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^💬 پیام انتظار$'))
