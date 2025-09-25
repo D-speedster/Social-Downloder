@@ -35,8 +35,10 @@ START_TIME = _dt.now()
 admin_step = {
     'sp': 2,
     'cookies': 0,
-    # NEW: broadcast state machine (0: idle, 1: waiting for content)
-    'broadcast': 0,
+    # NEW: broadcast state machine
+    'broadcast': 0,  # 0: idle, 1: choosing type, 2: waiting for content, 3: waiting for confirmation
+    'broadcast_type': '',  # 'normal' or 'forward'
+    'broadcast_content': None,  # stored message for confirmation
     # NEW: waiting message management
     'waiting_msg': 0,
     'waiting_msg_type': '',
@@ -84,7 +86,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
-            ["📣 ارسال پیام", "📢 تنظیم اسپانسر"],
+            ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "🔌 خاموش/روشن"],
             ["🔐 خاموش/روشن اسپانسری", "📺 خاموش/روشن تبلیغات"],
@@ -125,15 +127,17 @@ async def admin_menu_server(_: Client, message: Message):
     await message.reply_text(_server_status_text(), reply_markup=admin_reply_kb())
 
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📣 ارسال پیام$'))
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 ارسال همگانی$'))
 async def admin_menu_broadcast(_: Client, message: Message):
     print("[ADMIN] broadcast start via text by", message.from_user.id)
     admin_step['broadcast'] = 1
     await message.reply_text(
-        "لطفاً پیام مورد نظر برای ارسال همگانی را ارسال کنید.\n\n"
-        "- هر نوع پیام پشتیبانی می‌شود (متن، عکس، ویدیو، فایل، ...).\n"
-        "- برای لغو /cancel را بفرستید.",
-        reply_markup=admin_reply_kb()
+        "نوع ارسال همگانی را انتخاب کنید:",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("📤 ارسال همگانی (بدون نام گیرنده)", callback_data="broadcast_normal")],
+            [InlineKeyboardButton("↗️ فوروارد همگانی", callback_data="broadcast_forward")],
+            [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel")]
+        ])
     )
 
 
@@ -658,67 +662,228 @@ def _server_status_text() -> str:
 # Force join toggle callback handler removed - now handled by message handlers
 
 
-@Client.on_message(filters.command('send_to_all') & filters.user(ADMIN))
-async def send_to_all(client: Client, message: Message) -> None:
-    if message.reply_to_message:
-        all_users = DB().get_users_id()
-        count = 0
-        await message.reply_text(f'Sending to {len(all_users)} users... ')
-        for user in all_users:
-            uid = user[0] if isinstance(user, (list, tuple)) else user
-            try:
-                # Prefer copying original replied message (keeps media)
-                await client.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=message.reply_to_message.id)
-                count += 1
-            except FloodWait as e:
-                await asyncio.sleep(e.value)
-            except Exception as e:
-                print("Failed to send message to all users: {}".format(e))
-                pass
-        await message.reply_text(f'Sent to {count} of {len(all_users)}')
-    else:
-        await message.reply_text('You have to reply on a message')
+# Legacy send_to_all command removed - replaced with new broadcast system
 
 
 # NEW: Broadcast flow via admin panel
 @Client.on_message(filters.user(ADMIN), group=5)
 async def handle_broadcast(client: Client, message: Message):
-    if admin_step.get('broadcast') != 1:
+    if admin_step.get('broadcast') != 2:
         return
-    admin_step['broadcast'] = 0
+    
+    # Store the broadcast content for confirmation
+    admin_step['broadcast_content'] = {
+        'message_id': message.id,
+        'chat_id': message.chat.id,
+        'type': admin_step.get('broadcast_type', 'normal')
+    }
+    
+    # Show confirmation
+    admin_step['broadcast'] = 3  # waiting for confirmation
+    
+    all_users = DB().get_users_id()
+    total = len(all_users)
+    
+    broadcast_type_text = "ارسال همگانی" if admin_step['broadcast_type'] == 'normal' else "فوروارد همگانی"
+    
+    await message.reply_text(
+        f"📋 **تأیید {broadcast_type_text}**\n\n"
+        f"👥 تعداد کاربران: {total}\n\n"
+        f"آیا مطمئن هستید که می‌خواهید این پیام را به همه کاربران ارسال کنید؟",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ تأیید و ارسال", callback_data="broadcast_confirm")],
+            [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel"),
+             InlineKeyboardButton("🔄 تغییر محتوا", callback_data="broadcast_reject")]
+        ])
+    )
+
+async def start_broadcast_process(client: Client, callback_query: CallbackQuery):
+    """Start the actual broadcast process with real-time progress updates every 10 seconds"""
+    import time
+    
+    content = admin_step.get('broadcast_content')
+    if not content:
+        await callback_query.edit_message_text("❌ خطا: محتوای پیام یافت نشد.")
+        return
+    
     all_users = DB().get_users_id()
     total = len(all_users)
     sent = 0
     fail = 0
-    try:
-        await message.reply_text(f"در حال ارسال به {total} کاربر…")
-    except Exception:
-        pass
-    for user in all_users:
+    start_time = time.time()
+    last_update_time = start_time
+    
+    # Update message to show progress
+    await callback_query.edit_message_text(
+        f"📤 در حال ارسال به {total} کاربر...\n\n"
+        f"✅ ارسال شده: 0\n"
+        f"❌ ناموفق: 0\n"
+        f"📊 پیشرفت: 0/{total} (0.0%)\n"
+        f"⏱ زمان سپری شده: 0 ثانیه",
+        reply_markup=None
+    )
+    
+    broadcast_type = content.get('type', 'normal')
+    
+    for i, user in enumerate(all_users):
         uid = user[0] if isinstance(user, (list, tuple)) else user
         try:
-            await client.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=message.id)
+            if broadcast_type == 'forward':
+                await client.forward_messages(
+                    chat_id=uid,
+                    from_chat_id=content['chat_id'],
+                    message_ids=content['message_id']
+                )
+            else:  # normal copy
+                await client.copy_message(
+                    chat_id=uid,
+                    from_chat_id=content['chat_id'],
+                    message_id=content['message_id']
+                )
             sent += 1
         except FloodWait as e:
             await asyncio.sleep(e.value)
             try:
-                await client.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=message.id)
+                if broadcast_type == 'forward':
+                    await client.forward_messages(
+                        chat_id=uid,
+                        from_chat_id=content['chat_id'],
+                        message_ids=content['message_id']
+                    )
+                else:
+                    await client.copy_message(
+                        chat_id=uid,
+                        from_chat_id=content['chat_id'],
+                        message_id=content['message_id']
+                    )
                 sent += 1
             except Exception:
                 fail += 1
         except Exception:
             fail += 1
+        
+        # Update progress every 10 seconds
+        current_time = time.time()
+        if current_time - last_update_time >= 10.0:  # 10 seconds
+            elapsed_time = int(current_time - start_time)
+            progress_percent = ((i + 1) / total) * 100
+            
+            try:
+                await callback_query.edit_message_text(
+                    f"📤 در حال ارسال به {total} کاربر...\n\n"
+                    f"✅ ارسال شده: {sent}\n"
+                    f"❌ ناموفق: {fail}\n"
+                    f"📊 پیشرفت: {i + 1}/{total} ({progress_percent:.1f}%)\n"
+                    f"⏱ زمان سپری شده: {elapsed_time} ثانیه"
+                )
+                last_update_time = current_time
+            except Exception:
+                pass
+    
+    # Final result with complete statistics
+    final_time = time.time()
+    total_elapsed = int(final_time - start_time)
+    
+    # Calculate sending rate
+    rate = sent / total_elapsed if total_elapsed > 0 else 0
+    
     try:
-        await message.reply_text(f"✅ ارسال شد: {sent}\n❌ ناموفق: {fail}")
+        await callback_query.edit_message_text(
+            f"🎉 **ارسال همگانی تکمیل شد!**\n\n"
+            f"📊 **نتایج نهایی:**\n"
+            f"✅ ارسال موفق: {sent}\n"
+            f"❌ ارسال ناموفق: {fail}\n"
+            f"👥 مجموع کاربران: {total}\n\n"
+            f"📈 نرخ موفقیت: {(sent/total*100):.1f}%\n" if total > 0 else "📈 نرخ موفقیت: 0%\n"
+            f"⏱ زمان کل: {total_elapsed} ثانیه\n"
+            f"🚀 سرعت ارسال: {rate:.1f} پیام/ثانیه"
+        )
+        
+        # Send admin panel back
+        await callback_query.message.reply_text(
+            "🏠 پنل ادمین",
+            reply_markup=admin_reply_kb()
+        )
     except Exception:
         pass
+    
+    # Reset admin step
+    admin_step['broadcast'] = 0
+    admin_step['broadcast_type'] = ''
+    admin_step['broadcast_content'] = None
 
+
+# Broadcast callback handlers
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^broadcast_'))
+async def broadcast_callback_handler(client: Client, callback_query: CallbackQuery):
+    data = callback_query.data
+    
+    if data == "broadcast_normal":
+        admin_step['broadcast'] = 2
+        admin_step['broadcast_type'] = 'normal'
+        await callback_query.edit_message_text(
+            "📤 **ارسال همگانی (بدون نام گیرنده)**\n\n"
+            "محتوای مورد نظر خود را ارسال کنید:\n"
+            "• متن، عکس، ویدیو، فایل، استیکر، GIF و... پشتیبانی می‌شود\n"
+            "• برای لغو از دکمه زیر استفاده کنید",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel")]
+            ])
+        )
+    
+    elif data == "broadcast_forward":
+        admin_step['broadcast'] = 2
+        admin_step['broadcast_type'] = 'forward'
+        await callback_query.edit_message_text(
+            "↗️ **فوروارد همگانی**\n\n"
+            "محتوای مورد نظر خود را ارسال کنید:\n"
+            "• متن، عکس، ویدیو، فایل، استیکر، GIF و... پشتیبانی می‌شود\n"
+            "• برای لغو از دکمه زیر استفاده کنید",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel")]
+            ])
+        )
+    
+    elif data == "broadcast_cancel":
+        admin_step['broadcast'] = 0
+        admin_step['broadcast_type'] = ''
+        admin_step['broadcast_content'] = None
+        await callback_query.edit_message_text(
+            "❌ عملیات ارسال همگانی لغو شد.",
+            reply_markup=None
+        )
+        await callback_query.message.reply_text(
+            "🏠 پنل ادمین",
+            reply_markup=admin_reply_kb()
+        )
+    
+    elif data == "broadcast_confirm":
+        # Start broadcasting
+        await start_broadcast_process(client, callback_query)
+    
+    elif data == "broadcast_reject":
+        admin_step['broadcast'] = 2  # Go back to content input
+        admin_step['broadcast_content'] = None
+        await callback_query.edit_message_text(
+            f"{'📤 **ارسال همگانی (بدون نام گیرنده)**' if admin_step['broadcast_type'] == 'normal' else '↗️ **فوروارد همگانی**'}\n\n"
+            "محتوای مورد نظر خود را مجدداً ارسال کنید:\n"
+            "• متن، عکس، ویدیو، فایل، استیکر، GIF و... پشتیبانی می‌شود\n"
+            "• برای لغو از دکمه زیر استفاده کنید",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel")]
+            ])
+        )
 
 @Client.on_message(filters.command('cancel') & filters.user(ADMIN))
 async def cancel_broadcast(_, message: Message):
-    if admin_step.get('broadcast') == 1:
+    if admin_step.get('broadcast') > 0:
         admin_step['broadcast'] = 0
-        await message.reply_text("عملیات ارسال همگانی لغو شد.")
+        admin_step['broadcast_type'] = ''
+        admin_step['broadcast_content'] = None
+        await message.reply_text(
+            "❌ عملیات ارسال همگانی لغو شد.",
+            reply_markup=admin_reply_kb()
+        )
     else:
         await message.reply_text("عملیات فعالی برای لغو وجود ندارد.")
 
@@ -843,15 +1008,72 @@ async def handle_waiting_message_input(client: Client, message: Message):
 
 
 # Admin callback query handler
-# Inline admin panel callback handler disabled to prevent duplicate admin panels
-# All admin functionality is now handled through fixed keyboard buttons
+# Waiting message callback handlers
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^edit_waiting_'))
+async def waiting_message_callback_handler(client: Client, callback_query: CallbackQuery):
+    data = callback_query.data
+    
+    if data == 'edit_waiting_youtube':
+        platform = 'youtube'
+    elif data == 'edit_waiting_instagram':
+        platform = 'instagram'
+    else:
+        await callback_query.answer("❌ پلتفرم نامشخص")
+        return
+    
+    # Show message type selection
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📝 متن", callback_data=f"waiting_type_{platform}_text")],
+        [InlineKeyboardButton("🎭 استیکر", callback_data=f"waiting_type_{platform}_sticker")],
+        [InlineKeyboardButton("🎬 GIF", callback_data=f"waiting_type_{platform}_gif")],
+        [InlineKeyboardButton("❌ لغو", callback_data="waiting_cancel")]
+    ])
+    
+    await callback_query.edit_message_text(
+        f"💬 **تغییر پیام انتظار {platform.title()}**\n\n"
+        f"نوع محتوای مورد نظر را انتخاب کنید:",
+        reply_markup=keyboard
+    )
 
-# @Client.on_callback_query(static_data_filter & filters.user(ADMIN))
-# async def admin_callback_handler(client: Client, callback_query: CallbackQuery):
-#     pass  # Disabled to prevent inline admin panel
-# All inline callback functionality has been removed
-# Admin panel now uses only fixed keyboard buttons
-        pass
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_type_'))
+async def waiting_type_callback_handler(client: Client, callback_query: CallbackQuery):
+    # Parse callback data: waiting_type_platform_type
+    parts = callback_query.data.split('_')
+    if len(parts) != 3:
+        await callback_query.answer("❌ خطا در پردازش درخواست")
+        return
+    
+    platform = parts[1]  # youtube or instagram
+    msg_type = parts[2]   # text, sticker, gif
+    
+    admin_step['waiting_msg'] = 2
+    admin_step['waiting_msg_type'] = msg_type
+    admin_step['waiting_msg_platform'] = platform
+    
+    type_text = {
+        'text': 'متن',
+        'sticker': 'استیکر', 
+        'gif': 'فایل GIF'
+    }.get(msg_type, msg_type)
+    
+    await callback_query.edit_message_text(
+        f"💬 **تغییر پیام انتظار {platform.title()}**\n\n"
+        f"نوع انتخابی: {type_text}\n\n"
+        f"لطفاً {type_text} مورد نظر خود را ارسال کنید:\n\n"
+        f"❌ برای لغو /cancel را بفرستید.",
+        reply_markup=None
+    )
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_cancel$'))
+async def waiting_cancel_callback_handler(client: Client, callback_query: CallbackQuery):
+    admin_step['waiting_msg'] = 0
+    admin_step['waiting_msg_type'] = ''
+    admin_step['waiting_msg_platform'] = ''
+    
+    await callback_query.edit_message_text(
+        "❌ عملیات تغییر پیام انتظار لغو شد.",
+        reply_markup=None
+    )
 
 
 # Handle advertisement content input
@@ -923,7 +1145,7 @@ async def handle_advertisement_content(client: Client, message: Message):
 
 
 # Handle cookie input from admin
-@Client.on_message(filters.text & filters.user(ADMIN), group=8)
+@Client.on_message(filters.text & filters.user(ADMIN), group=9)
 async def handle_admin_cookie_input(client: Client, message: Message):
     """Handle cookie content input from admin"""
     # Handle advertisement position selection
@@ -1013,6 +1235,14 @@ async def handle_admin_cookie_input(client: Client, message: Message):
     del admin_step['add_cookie']
 
 
+# Handle advertisement content (text)
+@Client.on_message(filters.text & filters.user(ADMIN), group=7)
+async def handle_advertisement_text(client: Client, message: Message):
+    """Handle advertisement text content from admin"""
+    if admin_step.get('advertisement') == 1:
+        await handle_advertisement_content(client, message)
+        return
+
 # Handle advertisement content (media)
 @Client.on_message(filters.user(ADMIN) & (filters.photo | filters.video | filters.animation | filters.sticker | filters.audio), group=8)
 async def handle_advertisement_media(client: Client, message: Message):
@@ -1023,7 +1253,7 @@ async def handle_advertisement_media(client: Client, message: Message):
 
 
 # Handle cookie file input from admin
-@Client.on_message(filters.document & filters.user(ADMIN), group=9)
+@Client.on_message(filters.document & filters.user(ADMIN), group=10)
 async def handle_admin_cookie_file(client: Client, message: Message):
     """Handle cookie file input from admin"""
     # Check if admin is in cookie adding mode
