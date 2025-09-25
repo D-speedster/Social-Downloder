@@ -88,8 +88,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
-            ["📺 تنظیم تبلیغات", "🔌 خاموش/روشن"],
-            ["🔐 خاموش/روشن اسپانسری", "📺 خاموش/روشن تبلیغات"],
+            ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
             ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
@@ -156,92 +155,199 @@ async def admin_menu_sponsor(_: Client, message: Message):
     admin_step['sp'] = 1
 
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔌 خاموش/روشن$'))
-async def admin_menu_power(_: Client, message: Message):
-    print("[ADMIN] toggle power via text by", message.from_user.id)
-    current = data.get('bot_status', 'ON')
-    new_state = 'OFF' if current == 'ON' else 'ON'
-    data['bot_status'] = new_state
-    try:
-        # Create backup before writing
-        backup_path = PATH + '/database.json.bak'
-        if os.path.exists(PATH + '/database.json'):
-            shutil.copy2(PATH + '/database.json', backup_path)
-        
-        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
-            json.dump(data, outfile, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Failed to write bot_status: {e}")
-        # Try to restore backup if write failed
-        try:
-            if os.path.exists(backup_path):
-                shutil.copy2(backup_path, PATH + '/database.json')
-        except Exception:
-            pass
+# Handler for old power toggle button removed - replaced with new status system
+
+
+# Handler for old sponsor toggle button removed - replaced with new status system
+
+
+# Handler for old advertisement toggle button removed - replaced with new status system
+
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^✅ وضعیت ربات$'))
+async def admin_menu_bot_status(_: Client, message: Message):
+    print("[ADMIN] bot status menu accessed by", message.from_user.id)
+    
+    # Get current status of all systems
+    bot_status = data.get('bot_status', 'ON')
+    sponsor_status = data.get('force_join', True)
+    ad_status = data.get('advertisement', {}).get('enabled', False)
+    
+    # Create status emojis
+    bot_emoji = '🟢' if bot_status == 'ON' else '🔴'
+    sponsor_emoji = '🟢' if sponsor_status else '🔴'
+    ad_emoji = '🟢' if ad_status else '🔴'
+    
+    # Create inline keyboard with glass-like appearance
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 وضعیت", callback_data="status_header"),
+            InlineKeyboardButton("🔄 تغییر", callback_data="toggle_header")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت ربات {bot_emoji}", callback_data="status_info_bot"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_bot")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت اسپانسری {sponsor_emoji}", callback_data="status_info_sponsor"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_sponsor")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت تبلیغات {ad_emoji}", callback_data="status_info_ad"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_ad")
+        ],
+        [
+            InlineKeyboardButton("🔄 بروزرسانی", callback_data="refresh_status"),
+            InlineKeyboardButton("🏠 پنل ادمین", callback_data="back_to_admin")
+        ]
+    ])
+    
+    status_text = f"""🔧 **پنل وضعیت ربات**
+
+📊 **وضعیت فعلی سیستم‌ها:**
+
+🤖 **وضعیت ربات:** {bot_emoji} {'فعال' if bot_status == 'ON' else 'غیرفعال'}
+🔐 **وضعیت اسپانسری:** {sponsor_emoji} {'فعال' if sponsor_status else 'غیرفعال'}
+📺 **وضعیت تبلیغات:** {ad_emoji} {'فعال' if ad_status else 'غیرفعال'}
+
+💡 **راهنما:** برای تغییر هر وضعیت، روی دکمه "تغییر" مربوطه کلیک کنید."""
+    
     await message.reply_text(
-        f"وضعیت ربات: {'🔴 خاموش' if new_state == 'OFF' else '🟢 روشن'}",
-        reply_markup=admin_reply_kb()
+        status_text,
+        reply_markup=keyboard
     )
 
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔐 خاموش/روشن اسپانسری$'))
-async def admin_menu_sponsor_toggle(_: Client, message: Message):
-    print("[ADMIN] sponsor toggle via text by", message.from_user.id)
-    current = data.get('force_join', True)
-    new_state = not current
-    data['force_join'] = new_state
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^toggle_'))
+async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
+    """Handle status toggle callbacks"""
+    action = callback_query.data
+    user_id = callback_query.from_user.id
+    
+    print(f"[ADMIN] Status toggle: {action} by {user_id}")
+    
     try:
-        # Create backup before writing
-        backup_path = PATH + '/database.json.bak'
-        if os.path.exists(PATH + '/database.json'):
-            shutil.copy2(PATH + '/database.json', backup_path)
+        if action == "toggle_bot":
+            # Toggle bot status
+            current = data.get('bot_status', 'ON')
+            new_state = 'OFF' if current == 'ON' else 'ON'
+            data['bot_status'] = new_state
+            
+        elif action == "toggle_sponsor":
+            # Toggle sponsor status
+            current = data.get('force_join', True)
+            new_state = not current
+            data['force_join'] = new_state
+            
+        elif action == "toggle_ad":
+            # Toggle advertisement status
+            current = data.get('advertisement', {}).get('enabled', False)
+            new_state = not current
+            if 'advertisement' not in data:
+                data['advertisement'] = {}
+            data['advertisement']['enabled'] = new_state
         
-        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
-            json.dump(data, outfile, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Failed to write force_join: {e}")
-        # Try to restore backup if write failed
+        # Save changes to database
         try:
-            if os.path.exists(backup_path):
-                shutil.copy2(backup_path, PATH + '/database.json')
-        except Exception:
-            pass
-    await message.reply_text(
-        f"وضعیت اسپانسری: {'🔴 خاموش' if not new_state else '🟢 روشن'}",
-        reply_markup=admin_reply_kb()
+            # Create backup before writing
+            backup_path = PATH + '/database.json.bak'
+            if os.path.exists(PATH + '/database.json'):
+                shutil.copy2(PATH + '/database.json', backup_path)
+            
+            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+                json.dump(data, outfile, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"Failed to write status change: {e}")
+            # Try to restore backup if write failed
+            try:
+                if os.path.exists(backup_path):
+                    shutil.copy2(backup_path, PATH + '/database.json')
+            except Exception:
+                pass
+            await callback_query.answer("❌ خطا در ذخیره تغییرات!", show_alert=True)
+            return
+        
+        # Update the status display
+        await refresh_status_display(client, callback_query)
+        await callback_query.answer("✅ تغییرات با موفقیت اعمال شد!")
+        
+    except Exception as e:
+        print(f"Error in status toggle: {e}")
+        await callback_query.answer("❌ خطا در تغییر وضعیت!", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^refresh_status$'))
+async def refresh_status_callback(client: Client, callback_query: CallbackQuery):
+    """Handle refresh status callback"""
+    await refresh_status_display(client, callback_query)
+    await callback_query.answer("🔄 وضعیت بروزرسانی شد!")
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^back_to_admin$'))
+async def back_to_admin_callback(client: Client, callback_query: CallbackQuery):
+    """Handle back to admin panel callback"""
+    await callback_query.message.edit_text(
+        "🛠 **پنل مدیریت**\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
+        reply_markup=InlineKeyboardMarkup(admin_inline_maker())
     )
+    await callback_query.answer()
 
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 خاموش/روشن تبلیغات$'))
-async def admin_menu_advertisement_toggle(_: Client, message: Message):
-    print("[ADMIN] advertisement toggle via text by", message.from_user.id)
-    current = data.get('advertisement', {}).get('enabled', False)
-    new_state = not current
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^status_(header|info_)'))
+async def status_info_callback(client: Client, callback_query: CallbackQuery):
+    """Handle status info callbacks (non-functional buttons)"""
+    await callback_query.answer()
+
+
+async def refresh_status_display(client: Client, callback_query: CallbackQuery):
+    """Refresh the status display with current values"""
+    # Get current status of all systems
+    bot_status = data.get('bot_status', 'ON')
+    sponsor_status = data.get('force_join', True)
+    ad_status = data.get('advertisement', {}).get('enabled', False)
     
-    if 'advertisement' not in data:
-        data['advertisement'] = {}
-    data['advertisement']['enabled'] = new_state
+    # Create status emojis
+    bot_emoji = '🟢' if bot_status == 'ON' else '🔴'
+    sponsor_emoji = '🟢' if sponsor_status else '🔴'
+    ad_emoji = '🟢' if ad_status else '🔴'
     
-    try:
-        # Create backup before writing
-        backup_path = PATH + '/database.json.bak'
-        if os.path.exists(PATH + '/database.json'):
-            shutil.copy2(PATH + '/database.json', backup_path)
-        
-        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
-            json.dump(data, outfile, indent=4, ensure_ascii=False)
-    except Exception as e:
-        print(f"Failed to write advertisement: {e}")
-        # Try to restore backup if write failed
-        try:
-            if os.path.exists(backup_path):
-                shutil.copy2(backup_path, PATH + '/database.json')
-        except Exception:
-            pass
+    # Create updated inline keyboard
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 وضعیت", callback_data="status_header"),
+            InlineKeyboardButton("🔄 تغییر", callback_data="toggle_header")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت ربات {bot_emoji}", callback_data="status_info_bot"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_bot")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت اسپانسری {sponsor_emoji}", callback_data="status_info_sponsor"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_sponsor")
+        ],
+        [
+            InlineKeyboardButton(f"وضعیت تبلیغات {ad_emoji}", callback_data="status_info_ad"),
+            InlineKeyboardButton("تغییر", callback_data="toggle_ad")
+        ],
+        [
+            InlineKeyboardButton("🔄 بروزرسانی", callback_data="refresh_status"),
+            InlineKeyboardButton("🏠 پنل ادمین", callback_data="back_to_admin")
+        ]
+    ])
     
-    await message.reply_text(
-        f"وضعیت تبلیغات: {'🔴 خاموش' if not new_state else '🟢 روشن'}",
-        reply_markup=admin_reply_kb()
+    status_text = f"""🔧 **پنل وضعیت ربات**
+
+📊 **وضعیت فعلی سیستم‌ها:**
+
+🤖 **وضعیت ربات:** {bot_emoji} {'فعال' if bot_status == 'ON' else 'غیرفعال'}
+🔐 **وضعیت اسپانسری:** {sponsor_emoji} {'فعال' if sponsor_status else 'غیرفعال'}
+📺 **وضعیت تبلیغات:** {ad_emoji} {'فعال' if ad_status else 'غیرفعال'}
+
+💡 **راهنما:** برای تغییر هر وضعیت، روی دکمه "تغییر" مربوطه کلیک کنید."""
+    
+    await callback_query.message.edit_text(
+        status_text,
+        reply_markup=keyboard
     )
 
 
