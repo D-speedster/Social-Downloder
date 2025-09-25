@@ -572,6 +572,21 @@ async def answer(client: Client, callback_query: CallbackQuery):
 
         if os.path.exists(file_path):
             try:
+                # Send advertisement before content if position is 'before'
+                try:
+                    with open('plugins/database.json', 'r', encoding='utf-8') as f:
+                        db_data = json.load(f)
+                    
+                    ad_settings = db_data.get('advertisement', {})
+                    ad_enabled = ad_settings.get('enabled', False)
+                    ad_position = ad_settings.get('position', 'after')
+                    
+                    if ad_enabled and ad_position == 'before':
+                        await send_advertisement(client, callback_query.from_user.id)
+                        
+                except Exception as e:
+                    print(f"Error handling advertisement: {e}")
+                
                 sent_msg = None
                 if step['sort'] == "🎥 ویدیو":
                     sent_msg = await callback_query.message.reply_video(
@@ -592,28 +607,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 
                 DB().increment_request(callback_query.from_user.id, datetime.now().isoformat())
                 
-                # Wait a moment to ensure upload completion before sending ads
-                await asyncio.sleep(1)
-                
-                # Send advertisement based on position setting
-                try:
-                    with open('plugins/database.json', 'r', encoding='utf-8') as f:
-                        db_data = json.load(f)
-                    
-                    ad_settings = db_data.get('advertisement', {})
-                    ad_enabled = ad_settings.get('enabled', False)
-                    ad_position = ad_settings.get('position', 'after')
-                    
-                    if ad_enabled:
-                        # Send advertisement before content if position is 'before'
-                        if ad_position == 'before':
-                            await send_advertisement(client, callback_query.from_user.id)
-                        # Send advertisement after content if position is 'after'
-                        elif ad_position == 'after':
-                            await send_advertisement(client, callback_query.from_user.id)
-                        
-                except Exception as e:
-                    print(f"Error handling advertisement: {e}")
+                # Wait a moment to ensure upload completion
+                await asyncio.sleep(2)
                 
                 # Mark job as completed after successful upload
                 try:
@@ -634,15 +629,16 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 except Exception:
                     pass
                 
-                # Send advertisement after content if position is 'below'
+                # Send advertisement after content based on position setting
                 try:
                     with open('plugins/database.json', 'r', encoding='utf-8') as f:
                         db_data = json.load(f)
                     
                     ad_settings = db_data.get('advertisement', {})
-                    ad_position = ad_settings.get('position', 'below')
+                    ad_enabled = ad_settings.get('enabled', False)
+                    ad_position = ad_settings.get('position', 'after')
                     
-                    if ad_position == 'below':
+                    if ad_enabled and ad_position == 'after':
                         await send_advertisement(client, callback_query.from_user.id)
                         
                 except Exception as e:

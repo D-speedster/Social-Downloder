@@ -536,7 +536,7 @@ async def handle_text_messages(client: Client, message: Message):
             await show_video(client, message)
         elif INSTA_REGEX.search(text):
             from plugins.instagram import download_instagram
-            download_instagram(client, message)
+            await download_instagram(client, message)
         elif (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
               SOUNDCLOUD_REGEX.search(text)):
             from plugins.universal_downloader import handle_universal_link

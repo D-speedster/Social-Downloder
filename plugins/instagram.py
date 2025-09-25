@@ -150,7 +150,7 @@ async def download_file_with_progress(url, file_path, status_msg, title, type_la
                         except Exception:
                             pass
         
-        return file_path
+        return file_path, total_size
         
     except Exception as e:
         print(f"Download error: {e}")
@@ -261,9 +261,9 @@ async def download_instagram(_: Client, message: Message):
         )
         
         # Download file
-        total_bytes = await download_file_with_progress(download_url, file_path, status_msg, title, type_label)
+        downloaded_file_path, total_bytes = await download_file_with_progress(download_url, file_path, status_msg, title, type_label)
 
-        if not os.path.exists(file_path):
+        if not os.path.exists(downloaded_file_path):
             raise Exception("Downloaded file not found")
 
         total_mb_text = f"{(total_bytes/1024/1024):.2f}" if total_bytes else "نامشخص"
@@ -292,13 +292,13 @@ async def download_instagram(_: Client, message: Message):
         # Upload file
         if media_type == 'video':
             sent_msg = await message.reply_video(
-                video=file_path,
+                video=downloaded_file_path,
                 caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت",
                 progress=lambda current, total: None  # Simple progress without updates
             )
         else:
             sent_msg = await message.reply_photo(
-                photo=file_path,
+                photo=downloaded_file_path,
                 caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت"
             )
         
@@ -320,7 +320,7 @@ async def download_instagram(_: Client, message: Message):
         
         # Clean up file
         try:
-            os.remove(file_path)
+            os.remove(downloaded_file_path)
         except Exception:
             pass
     
@@ -346,7 +346,9 @@ async def download_instagram(_: Client, message: Message):
         
         # Clean up any partial files
         try:
-            if 'file_path' in locals() and os.path.exists(file_path):
+            if 'downloaded_file_path' in locals() and os.path.exists(downloaded_file_path):
+                os.remove(downloaded_file_path)
+            elif 'file_path' in locals() and os.path.exists(file_path):
                 os.remove(file_path)
         except Exception:
             pass
