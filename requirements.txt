@@ -3,6 +3,6 @@ Pyrogram==2.0.106
 instaloader
 pytube
 python-dateutil
-tgcrypto4
 jdatetime
 yt-dlp
+psutil
