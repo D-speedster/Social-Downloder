@@ -17029,3 +17029,754 @@ AttributeError: 'DB' object has no attribute 'is_user_exist'
 2025-09-25 12:19:59,438 - pyrogram.session.session - INFO - stop:180 - Session stopped
 2025-09-25 12:19:59,438 - __main__ - INFO - main:128 - Bot client stopped
 2025-09-25 12:19:59,440 - __main__ - INFO - cleanup_database:81 - Database connection closed successfully
+2025-09-25 14:17:16,878 - __main__ - INFO - <module>:62 - Bot starting up...
+2025-09-25 14:17:16,878 - __main__ - INFO - <module>:63 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-25 14:17:16,878 - __main__ - INFO - <module>:64 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-25 14:17:16,884 - __main__ - INFO - <module>:74 - Database initialized successfully
+2025-09-25 14:17:16,884 - __main__ - INFO - <module>:96 - Using 16 workers
+2025-09-25 14:17:16,885 - __main__ - INFO - main:110 - Starting bot client...
+2025-09-25 14:17:17,277 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:17:17,507 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:17:17,509 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:17:18,783 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:17:18,783 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:17:18,783 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:17:18,783 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:17:18,788 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_root_msg") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_stats") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_server") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_broadcast") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_power") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor_toggle") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_advertisement") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_back") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("add_youtube_cookie") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("list_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("clear_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("confirm_clear_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_operation") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,665 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_panel") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_cookies_cmd") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_cookie_file") in group 7 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("send_to_all") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_broadcast") in group 5 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_broadcast") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_sp") in group 6 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("waiting_msg_menu_text") in group 0 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_waiting_message_input") in group 7 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_admin_cookie_input") in group 8 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_advertisement_media") in group 8 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_admin_cookie_file") in group 9 from "plugins.admin"
+2025-09-25 14:17:19,666 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_insta_acc") in group 3 from "plugins.admin"
+2025-09-25 14:17:19,781 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("dashboard_cmd") in group 0 from "plugins.dashboard"
+2025-09-25 14:17:19,781 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("dashboard_cb") in group 0 from "plugins.dashboard"
+2025-09-25 14:17:19,889 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("download_instagram") in group 0 from "plugins.instagram"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("maintenance_gate_msg") in group -3 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("maintenance_gate_cb") in group -3 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("start") in group -2 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("settings_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("language_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("upgrade_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("account_info_message") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("account_info_callback") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_menu_message") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("help_menu_callback") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("menu_dashboard_cmd_alias") in group 0 from "plugins.start"
+2025-09-25 14:17:19,890 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("verify_join_callback") in group 0 from "plugins.start"
+2025-09-25 14:17:20,237 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("show_video") in group 0 from "plugins.youtube"
+2025-09-25 14:17:20,245 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.youtube_callback_query"
+2025-09-25 14:17:20,245 - pyrogram.client - INFO - load_plugins:775 - [ytdownloader3_dev2] Successfully loaded 47 plugins from "plugins"
+2025-09-25 14:17:20,245 - pyrogram.dispatcher - INFO - start:154 - Started 16 HandlerTasks
+2025-09-25 14:17:20,245 - __main__ - INFO - main:112 - Bot started successfully
+2025-09-25 14:20:03,962 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:20:04,173 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:20:04,173 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:20:06,624 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:20:06,624 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:20:06,624 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:20:06,625 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:20:06,628 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:20:16,633 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:20:16,633 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:20:16,633 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:20:16,633 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:20:16,634 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:20:17,289 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:20:17,289 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:20:19,823 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:20:19,824 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:20:19,824 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:20:19,824 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:20:19,824 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:20:29,825 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:20:29,826 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:20:29,826 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:20:29,826 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:20:29,826 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:20:31,159 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:20:31,160 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:20:32,252 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:20:32,252 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:20:32,252 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:20:32,252 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:20:32,252 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:20:35,726 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:20:47,444 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:20:47,444 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:20:52,367 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:20:57,450 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:20:57,450 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:20:57,451 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:20:57,451 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:20:57,907 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:20:57,909 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:20:59,169 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:20:59,169 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:20:59,169 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:20:59,169 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:20:59,169 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:21:09,175 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:21:09,180 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:21:15,039 - pyrogram.session.session - INFO - invoke:404 - [3] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:21:19,191 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:21:19,191 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:21:19,191 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:21:19,192 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:21:20,541 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:21:20,541 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:21:22,430 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:21:22,430 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:21:22,430 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:21:22,430 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:21:22,430 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:21:32,432 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:21:32,433 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:21:32,433 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:21:32,433 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:21:32,434 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:21:32,676 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:21:32,679 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:21:33,587 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:21:33,587 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:21:33,587 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:21:33,589 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:21:33,590 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:21:38,371 - pyrogram.session.session - INFO - invoke:404 - [4] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:21:54,816 - pyrogram.session.session - INFO - invoke:404 - [5] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:21:55,114 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:21:55,114 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:22:03,428 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:22:03,429 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:22:03,429 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:22:03,711 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:22:03,711 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:22:05,648 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:22:05,648 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:22:05,648 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:22:05,648 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:22:05,649 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:22:15,650 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:22:15,650 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:22:15,651 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:22:15,651 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:22:15,651 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:22:17,043 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:22:17,043 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:22:18,888 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:22:18,888 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:22:18,888 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:22:18,889 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:22:18,889 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:22:21,501 - pyrogram.session.session - INFO - invoke:404 - [6] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:22:28,893 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:22:28,893 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:22:28,893 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:22:28,893 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:22:28,893 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:22:29,199 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:22:29,200 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:22:31,267 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:22:31,267 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:22:31,267 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:22:31,267 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:22:31,267 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:22:45,072 - pyrogram.session.session - INFO - invoke:404 - [7] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:22:55,360 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:22:55,361 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:22:59,905 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:22:59,905 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:22:59,906 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:23:00,275 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:23:00,276 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:23:01,890 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:23:01,890 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:23:01,890 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:23:01,890 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:23:01,892 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:23:11,893 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:23:11,893 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:23:11,894 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:23:11,894 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:23:11,894 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:23:13,446 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:23:13,447 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:23:15,458 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:23:15,459 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:23:15,460 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:23:15,460 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:23:16,123 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:23:16,169 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:23:17,421 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:23:17,421 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:23:17,421 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:23:17,421 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:23:17,422 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:23:17,807 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:23:27,424 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:23:27,425 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:23:27,425 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:23:27,425 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:23:27,426 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:23:28,879 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:23:28,879 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:23:30,423 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:23:30,423 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:23:30,423 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:23:30,423 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:23:30,423 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:23:34,380 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:23:40,429 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:23:40,429 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:23:40,430 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:23:40,430 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:23:40,431 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:23:42,855 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:23:42,857 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:23:44,799 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:23:44,800 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:23:44,800 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:23:44,800 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:23:44,800 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:23:50,811 - pyrogram.session.session - INFO - invoke:404 - [3] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:24:01,502 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:24:01,502 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:24:07,214 - pyrogram.session.session - INFO - invoke:404 - [4] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:24:11,514 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:24:11,514 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:24:11,515 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:24:11,515 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:24:11,797 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:24:11,798 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:24:12,643 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:24:12,643 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:24:12,643 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:24:12,643 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:24:12,643 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:24:22,656 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:24:22,659 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:24:28,520 - pyrogram.session.session - INFO - invoke:404 - [5] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:24:32,667 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:24:32,667 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:24:32,668 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:24:32,668 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:24:33,048 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:24:33,049 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:24:34,013 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:24:34,013 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:24:34,013 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:24:34,013 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:24:34,013 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:24:44,008 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:24:44,009 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:24:44,012 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:24:44,012 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:24:44,012 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:25:17,810 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:25:17,810 - pyrogram.session.session - INFO - invoke:404 - [6] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:25:17,811 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:25:17,812 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:25:17,812 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:25:17,813 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:25:17,813 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:25:17,813 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:25:18,126 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:25:18,127 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:25:18,869 - pyrogram.session.session - INFO - handle_packet:232 - Discarding packet: The msg_id is lower than all the stored values
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:25:20,158 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:25:20,158 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:25:20,158 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:25:20,158 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:25:20,159 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:25:20,473 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:25:20,473 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:25:22,873 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:25:22,873 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:25:22,873 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:25:22,873 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:25:22,873 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:25:28,873 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:25:28,874 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:25:28,874 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:25:28,874 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:25:28,874 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:25:29,148 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:25:29,148 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:25:30,777 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:25:30,777 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:25:30,777 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:25:30,777 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:25:30,778 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:25:32,817 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "messages.EditMessage" due to: Request timed out
+2025-09-25 14:25:36,100 - pyrogram.session.session - INFO - invoke:404 - [7] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:26:04,716 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:26:04,716 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:26:04,716 - pyrogram.session.session - INFO - invoke:404 - [8] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:26:04,717 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:26:04,717 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:26:04,718 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:04,718 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:26:04,718 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:26:04,718 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:04,718 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:26:04,718 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:26:06,107 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:26:06,107 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:26:06,125 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:26:06,125 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:26:06,857 - pyrogram.session.session - INFO - handle_packet:232 - Discarding packet: The msg_id is lower than all the stored values
+2025-09-25 14:26:06,862 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:26:06,862 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:06,862 - pyrogram.connection.transport.tcp.tcp - INFO - send:103 - Send exception: ConnectionResetError Connection lost
+2025-09-25 14:26:06,862 - pyrogram.connection.transport.tcp.tcp - INFO - send:103 - Send exception: ConnectionResetError Connection lost
+2025-09-25 14:26:06,863 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:06,863 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:26:06,863 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:26:07,155 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:26:07,155 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:26:07,595 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:26:07,595 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:26:07,595 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:26:07,595 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:26:07,596 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:26:08,901 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:26:08,901 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:26:08,901 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:26:08,901 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:26:08,901 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:26:32,430 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:26:32,430 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:26:38,313 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:26:42,433 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:26:42,434 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:42,434 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:26:42,434 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:26:42,653 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:26:42,655 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:26:44,362 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:26:44,363 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:26:44,363 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:26:44,363 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:26:44,363 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:26:54,357 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:26:54,357 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:26:54,358 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:26:54,358 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:26:54,359 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:26:54,654 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:26:54,655 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:26:55,688 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:26:55,688 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:26:55,688 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:26:55,688 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:26:55,688 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:27:00,235 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:27:11,338 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:27:11,338 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:27:16,577 - pyrogram.session.session - INFO - invoke:404 - [3] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:27:21,340 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:27:21,341 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:27:21,341 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:27:21,341 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:27:21,777 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:27:21,779 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:27:22,740 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:27:22,740 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:27:22,741 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:27:22,741 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:27:22,741 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:27:59,461 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:27:59,461 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:28:05,331 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:28:09,475 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:28:09,475 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:28:09,475 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:28:09,475 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:28:10,871 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:28:10,874 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:28:11,919 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:28:11,920 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:28:11,920 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:28:11,920 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:28:11,920 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:28:21,921 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:28:21,921 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:28:21,922 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:28:21,922 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:28:21,922 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:28:22,274 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:28:22,274 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:28:24,468 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:28:24,468 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:28:24,469 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:28:24,469 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:28:24,469 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:28:27,787 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:28:34,467 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:28:34,468 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:28:34,468 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:28:34,468 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:28:34,468 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:28:34,836 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:28:34,838 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:28:36,251 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:28:36,251 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:28:36,251 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:28:36,251 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:28:36,251 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:28:44,144 - pyrogram.session.session - INFO - invoke:404 - [3] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:28:51,582 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:28:51,584 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:29:00,543 - pyrogram.session.session - INFO - invoke:404 - [4] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:29:01,595 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:29:01,595 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:29:01,595 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:29:01,595 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:29:02,064 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:29:02,064 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:29:04,071 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:29:04,071 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:29:04,071 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:29:04,072 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:29:04,549 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:29:04,549 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:29:05,688 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:29:05,688 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:29:05,688 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:29:05,688 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:29:05,688 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:29:15,695 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:29:15,695 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:29:15,695 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:29:15,695 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:29:15,696 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:29:15,946 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:29:15,947 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:29:18,523 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:29:18,523 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:29:18,523 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:29:18,523 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:29:18,524 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:29:28,529 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:29:28,530 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:29:31,072 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:29:31,072 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:29:31,073 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:29:31,356 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:29:31,356 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:29:34,155 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:29:34,155 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:29:34,155 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:29:34,156 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:29:34,896 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:29:34,897 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:29:36,632 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:29:36,633 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:29:36,633 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:29:36,633 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:29:36,633 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:29:57,464 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:29:57,464 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:30:03,531 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:30:07,467 - pyrogram.connection.transport.tcp.tcp - INFO - close:94 - Close exception: TimeoutError 
+2025-09-25 14:30:07,467 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:30:07,468 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:30:07,468 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:30:07,755 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:30:07,756 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:30:09,549 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:30:09,549 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:30:09,549 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:30:09,549 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:30:09,549 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:30:32,681 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:30:32,681 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:30:38,518 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:30:39,632 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:30:39,633 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:30:39,633 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:30:39,915 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:30:39,916 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:30:41,712 - pyrogram.session.session - INFO - handle_packet:232 - Discarding packet: The msg_id is lower than all the stored values
+2025-09-25 14:30:41,718 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:30:41,719 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:30:41,719 - pyrogram.connection.transport.tcp.tcp - INFO - send:103 - Send exception: ConnectionResetError Connection lost
+2025-09-25 14:30:41,719 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:30:41,719 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:30:41,720 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:30:42,067 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:30:42,068 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:30:42,913 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:30:42,913 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:30:42,913 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:30:42,913 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:30:42,913 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:30:52,917 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:30:52,918 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:30:52,918 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:30:52,919 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:30:52,919 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:30:53,161 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:30:53,162 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:30:54,961 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:30:54,962 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:30:54,962 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:30:54,962 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:30:54,962 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:30:58,707 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:31:13,611 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:31:13,612 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:31:19,517 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:31:19,547 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:31:19,547 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:31:19,547 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:31:19,927 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:31:19,927 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:31:20,778 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:31:20,778 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:31:20,778 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:31:20,778 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:31:20,778 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:31:31,777 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:31:31,778 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:31:31,778 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:31:31,778 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:31:31,848 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:31:32,078 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:31:32,079 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:31:34,389 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:31:34,389 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:31:34,389 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:31:34,389 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:31:34,390 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:31:40,957 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:31:40,957 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:31:40,958 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:31:40,958 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:31:40,979 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:31:41,354 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:31:41,354 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:31:42,604 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:31:42,604 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:31:42,605 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:31:42,605 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:31:42,609 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:32:03,388 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:32:03,388 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:32:05,202 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:32:05,202 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:32:05,202 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:32:06,486 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:32:06,487 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:32:07,359 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:32:07,359 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:32:07,359 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:32:07,359 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:32:07,359 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:32:17,361 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:32:17,361 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:32:17,361 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:32:17,361 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:32:17,361 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:32:17,608 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:32:17,609 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:32:20,267 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:32:20,267 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:32:20,267 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:32:20,267 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:32:20,268 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:32:23,209 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:32:30,262 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:32:30,263 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:32:30,263 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:32:30,263 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:32:30,264 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:32:30,592 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:32:30,592 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:32:31,535 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:32:31,535 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:32:31,535 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:32:31,535 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:32:31,535 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:32:44,862 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:32:44,862 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:32:50,083 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:32:50,083 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:32:50,083 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:32:50,793 - pyrogram.session.session - INFO - invoke:404 - [1] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:32:51,344 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:32:51,345 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:32:53,021 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:32:53,021 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:32:53,021 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:32:53,021 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:32:53,021 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:33:03,022 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:33:03,022 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:33:03,022 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:33:03,022 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:33:03,023 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:33:03,333 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:33:03,333 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:33:05,533 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:33:05,533 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:33:05,533 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:33:05,533 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:33:05,533 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:33:08,896 - pyrogram.session.session - INFO - invoke:404 - [2] Retrying "upload.SaveFilePart" due to: Request timed out
+2025-09-25 14:33:14,540 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:33:14,541 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:33:14,541 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:33:14,542 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:33:35,150 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:33:35,472 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:33:35,473 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:33:37,488 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:33:37,488 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:33:37,489 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:33:37,489 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:33:37,932 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:33:37,932 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:33:39,001 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:33:39,002 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:33:39,002 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:33:39,002 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:33:39,003 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:33:40,140 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:33:40,140 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:33:40,140 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:33:40,141 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:34:31,747 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:34:31,979 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:34:31,980 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:34:33,499 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:34:33,499 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:34:33,500 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:34:33,500 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:34:33,500 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:34:35,315 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:34:35,316 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:34:35,316 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:34:35,316 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:46:45,315 - root - INFO - signal_handler:75 - Stop signal received (SIGINT). Exiting...
+2025-09-25 14:46:45,398 - pyrogram.dispatcher - INFO - stop:167 - Stopped 16 HandlerTasks
+2025-09-25 14:46:45,398 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:46:45,399 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:46:45,399 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:46:45,400 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:46:45,400 - __main__ - INFO - main:128 - Bot client stopped
+2025-09-25 14:46:45,405 - __main__ - INFO - cleanup_database:81 - Database connection closed successfully
+2025-09-25 14:46:54,952 - __main__ - INFO - <module>:62 - Bot starting up...
+2025-09-25 14:46:54,953 - __main__ - INFO - <module>:63 - Python version: 3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]
+2025-09-25 14:46:54,953 - __main__ - INFO - <module>:64 - Working directory: C:\Users\speedster\Desktop\DownloaderYT-V1
+2025-09-25 14:46:55,011 - __main__ - INFO - <module>:74 - Database initialized successfully
+2025-09-25 14:46:55,012 - __main__ - INFO - <module>:96 - Using 16 workers
+2025-09-25 14:46:55,015 - __main__ - INFO - main:110 - Starting bot client...
+2025-09-25 14:46:55,347 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:46:55,573 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 - IPv4
+2025-09-25 14:46:55,575 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:46:57,582 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:46:57,582 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:46:57,582 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:46:57,582 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:46:57,584 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_root_msg") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_stats") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_server") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_broadcast") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_power") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_sponsor_toggle") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_advertisement_toggle") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_advertisement") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_menu_back") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("add_youtube_cookie") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("list_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("clear_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("confirm_clear_youtube_cookies") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_operation") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("admin_panel") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_cookies_cmd") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_cookie_file") in group 7 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("send_to_all") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_broadcast") in group 5 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("cancel_broadcast") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_sp") in group 6 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("waiting_msg_menu_text") in group 0 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_waiting_message_input") in group 7 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_admin_cookie_input") in group 8 from "plugins.admin"
+2025-09-25 14:46:58,390 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_advertisement_media") in group 8 from "plugins.admin"
+2025-09-25 14:46:58,391 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("handle_admin_cookie_file") in group 9 from "plugins.admin"
+2025-09-25 14:46:58,391 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("set_insta_acc") in group 3 from "plugins.admin"
+2025-09-25 14:46:58,413 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("dashboard_cmd") in group 0 from "plugins.dashboard"
+2025-09-25 14:46:58,413 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("dashboard_cb") in group 0 from "plugins.dashboard"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("download_instagram") in group 0 from "plugins.instagram"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("maintenance_gate_msg") in group -3 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("maintenance_gate_cb") in group -3 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("start") in group -2 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("settings_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("language_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("upgrade_command_handler") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("account_info_message") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("account_info_callback") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("help_menu_message") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("help_menu_callback") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("menu_dashboard_cmd_alias") in group 0 from "plugins.start"
+2025-09-25 14:46:58,440 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("verify_join_callback") in group 0 from "plugins.start"
+2025-09-25 14:46:58,547 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] MessageHandler("show_video") in group 0 from "plugins.youtube"
+2025-09-25 14:46:58,554 - pyrogram.client - INFO - load_plugins:698 - [ytdownloader3_dev2] [LOAD] CallbackQueryHandler("answer") in group 0 from "plugins.youtube_callback_query"
+2025-09-25 14:46:58,555 - pyrogram.client - INFO - load_plugins:775 - [ytdownloader3_dev2] Successfully loaded 48 plugins from "plugins"
+2025-09-25 14:46:58,555 - pyrogram.dispatcher - INFO - start:154 - Started 16 HandlerTasks
+2025-09-25 14:46:58,555 - __main__ - INFO - main:112 - Bot started successfully
+2025-09-25 14:47:27,627 - pyrogram.connection.connection - INFO - connect:47 - Connecting...
+2025-09-25 14:47:27,939 - pyrogram.connection.connection - INFO - connect:54 - Connected! Production DC1 (media) - IPv4
+2025-09-25 14:47:27,940 - pyrogram.session.session - INFO - recv_worker:294 - NetworkTask started
+2025-09-25 14:47:30,236 - pyrogram.session.session - INFO - start:139 - Session initialized: Layer 158
+2025-09-25 14:47:30,237 - pyrogram.session.session - INFO - start:140 - Device: CPython 3.13.3 - Pyrogram 2.0.106
+2025-09-25 14:47:30,237 - pyrogram.session.session - INFO - start:141 - System: Windows 11 (en)
+2025-09-25 14:47:30,237 - pyrogram.session.session - INFO - start:155 - Session started
+2025-09-25 14:47:30,238 - pyrogram.session.session - INFO - ping_worker:272 - PingTask started
+2025-09-25 14:47:31,466 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:47:31,467 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:47:31,467 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:47:31,467 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:47:44,860 - root - INFO - signal_handler:75 - Stop signal received (SIGINT). Exiting...
+2025-09-25 14:47:44,922 - pyrogram.dispatcher - INFO - stop:167 - Stopped 16 HandlerTasks
+2025-09-25 14:47:44,923 - pyrogram.session.session - INFO - ping_worker:291 - PingTask stopped
+2025-09-25 14:47:44,923 - pyrogram.session.session - INFO - recv_worker:315 - NetworkTask stopped
+2025-09-25 14:47:44,924 - pyrogram.connection.connection - INFO - close:66 - Disconnected
+2025-09-25 14:47:44,924 - pyrogram.session.session - INFO - stop:180 - Session stopped
+2025-09-25 14:47:44,924 - __main__ - INFO - main:128 - Bot client stopped
+2025-09-25 14:47:44,927 - __main__ - INFO - cleanup_database:81 - Database connection closed successfully

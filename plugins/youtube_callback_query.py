@@ -1,5 +1,4 @@
 import shutil
-
 import requests
 import asyncio
 from pyrogram import Client, filters
@@ -19,6 +18,41 @@ from plugins.db_wrapper import DB
 from datetime import datetime, timedelta
 from yt_dlp import YoutubeDL
 from pyrogram.errors import MessageNotModified
+
+# Advertisement function
+async def send_advertisement(client: Client, user_id: int):
+    """Send advertisement to user based on database settings"""
+    try:
+        # Load advertisement settings from database
+        with open('plugins/database.json', 'r', encoding='utf-8') as f:
+            db_data = json.load(f)
+        
+        ad_settings = db_data.get('advertisement', {})
+        
+        # Check if advertisement is enabled
+        if not ad_settings.get('enabled', False):
+            return
+        
+        content_type = ad_settings.get('content_type')
+        content = ad_settings.get('content')
+        file_id = ad_settings.get('file_id')
+        caption = ad_settings.get('caption', '')
+        
+        if content_type == 'text' and content:
+            await client.send_message(user_id, content)
+        elif content_type == 'photo' and file_id:
+            await client.send_photo(user_id, file_id, caption=caption)
+        elif content_type == 'video' and file_id:
+            await client.send_video(user_id, file_id, caption=caption)
+        elif content_type == 'gif' and file_id:
+            await client.send_animation(user_id, file_id, caption=caption)
+        elif content_type == 'sticker' and file_id:
+            await client.send_sticker(user_id, file_id)
+        elif content_type == 'audio' and file_id:
+            await client.send_audio(user_id, file_id, caption=caption)
+            
+    except Exception as e:
+        print(f"Error sending advertisement: {e}")
 
 previousprogress_download = 0
 previousprogress_upload = 0
@@ -557,6 +591,27 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     )
                 
                 DB().increment_request(callback_query.from_user.id, datetime.now().isoformat())
+                
+                # Send advertisement based on position setting
+                try:
+                    with open('plugins/database.json', 'r', encoding='utf-8') as f:
+                        db_data = json.load(f)
+                    
+                    ad_settings = db_data.get('advertisement', {})
+                    ad_enabled = ad_settings.get('enabled', False)
+                    ad_position = ad_settings.get('position', 'after')
+                    
+                    if ad_enabled:
+                        # Send advertisement before content if position is 'before'
+                        if ad_position == 'before':
+                            await send_advertisement(client, callback_query.from_user.id)
+                        # Send advertisement after content if position is 'after'
+                        elif ad_position == 'after':
+                            await send_advertisement(client, callback_query.from_user.id)
+                        
+                except Exception as e:
+                    print(f"Error handling advertisement: {e}")
+                
                 # Mark job as completed after successful upload
                 try:
                     if step.get('job_id'):
@@ -575,6 +630,20 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         await sent_msg.reply_text("📥 دریافت شده توسط ربات YouTube | Instagram Save Bot")
                 except Exception:
                     pass
+                
+                # Send advertisement after content if position is 'below'
+                try:
+                    with open('plugins/database.json', 'r', encoding='utf-8') as f:
+                        db_data = json.load(f)
+                    
+                    ad_settings = db_data.get('advertisement', {})
+                    ad_position = ad_settings.get('position', 'below')
+                    
+                    if ad_position == 'below':
+                        await send_advertisement(client, callback_query.from_user.id)
+                        
+                except Exception as e:
+                    print(f"Error handling advertisement: {e}")
 
             except Exception as e:
                 await callback_query.message.reply_text(f"❌ آپلود فایل با مشکل مواجه شد: {e}")

@@ -4,7 +4,7 @@ from plugins import constant
 from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from dateutil import parser
-import os, re, time
+import os, re, time, asyncio
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import MessageNotModified
 import os
@@ -13,6 +13,66 @@ from plugins.start import join
 import http.client
 import json
 import urllib.request
+import random
+
+# Advertisement function
+async def send_advertisement(client: Client, user_id: int):
+    """Send advertisement to user based on database settings"""
+    try:
+        # Load advertisement settings from database
+        with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        ad_settings = data.get('advertisement', {})
+        
+        # Check if advertisement is enabled
+        if not ad_settings.get('enabled', False):
+            return
+        
+        content_type = ad_settings.get('content_type', 'text')
+        content = ad_settings.get('content', '')
+        file_id = ad_settings.get('file_id', '')
+        caption = ad_settings.get('caption', '')
+        
+        # Send advertisement based on content type
+        if content_type == 'text' and content:
+            await client.send_message(
+                chat_id=user_id,
+                text=content
+            )
+        elif content_type == 'photo' and file_id:
+            await client.send_photo(
+                chat_id=user_id,
+                photo=file_id,
+                caption=caption
+            )
+        elif content_type == 'video' and file_id:
+            await client.send_video(
+                chat_id=user_id,
+                video=file_id,
+                caption=caption
+            )
+        elif content_type == 'gif' and file_id:
+            await client.send_animation(
+                chat_id=user_id,
+                animation=file_id,
+                caption=caption
+            )
+        elif content_type == 'sticker' and file_id:
+            await client.send_sticker(
+                chat_id=user_id,
+                sticker=file_id
+            )
+        elif content_type == 'audio' and file_id:
+            await client.send_audio(
+                chat_id=user_id,
+                audio=file_id,
+                caption=caption
+            )
+        
+    except Exception as e:
+        print(f"Advertisement send error: {e}")
+        pass
 
 PATH = constant.PATH
 txt = constant.TEXT
@@ -214,18 +274,40 @@ async def download_instagram(_: Client, message: Message):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 در حال ارسال...", callback_data="ignore")]])
         )
         
+        # Check advertisement settings for position
+        try:
+            with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            ad_settings = data.get('advertisement', {})
+            ad_enabled = ad_settings.get('enabled', False)
+            ad_position = ad_settings.get('position', 'after')
+        except:
+            ad_enabled = False
+            ad_position = 'after'
+        
+        # Send advertisement before content if position is 'before' and enabled
+        if ad_enabled and ad_position == 'before':
+            await send_advertisement(_, user_id)
+        
         # Upload file
         if media_type == 'video':
-            await message.reply_video(
+            sent_msg = await message.reply_video(
                 video=file_path,
                 caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت",
                 progress=lambda current, total: None  # Simple progress without updates
             )
         else:
-            await message.reply_photo(
+            sent_msg = await message.reply_photo(
                 photo=file_path,
                 caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت"
             )
+        
+        # Wait a moment to ensure upload is complete
+        await asyncio.sleep(1)
+        
+        # Send advertisement after content if position is 'after' and enabled
+        if ad_enabled and ad_position == 'after':
+            await send_advertisement(_, user_id)
         
         # Update user download count
         db.increment_request(user_id, datetime.now().isoformat())

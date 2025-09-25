@@ -41,6 +41,11 @@ admin_step = {
     'waiting_msg': 0,
     'waiting_msg_type': '',
     'waiting_msg_platform': '',
+    # NEW: advertisement management
+    'advertisement': 0,  # 0: idle, 1: waiting for content, 2: waiting for position
+    'ad_content_type': '',
+    'ad_file_id': '',
+    'ad_caption': '',
 }
 
 insta = {'level': 0, 'id': "default", 'pass': "defult"}
@@ -81,7 +86,8 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📣 ارسال پیام", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
-            ["🔌 خاموش/روشن", "🔐 خاموش/روشن اسپانسری"],
+            ["📺 تنظیم تبلیغات", "🔌 خاموش/روشن"],
+            ["🔐 خاموش/روشن اسپانسری", "📺 خاموش/روشن تبلیغات"],
             ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
@@ -202,6 +208,39 @@ async def admin_menu_sponsor_toggle(_: Client, message: Message):
     )
 
 
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 خاموش/روشن تبلیغات$'))
+async def admin_menu_advertisement_toggle(_: Client, message: Message):
+    print("[ADMIN] advertisement toggle via text by", message.from_user.id)
+    current = data.get('advertisement', {}).get('enabled', False)
+    new_state = not current
+    
+    if 'advertisement' not in data:
+        data['advertisement'] = {}
+    data['advertisement']['enabled'] = new_state
+    
+    try:
+        # Create backup before writing
+        backup_path = PATH + '/database.json.bak'
+        if os.path.exists(PATH + '/database.json'):
+            shutil.copy2(PATH + '/database.json', backup_path)
+        
+        with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+            json.dump(data, outfile, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"Failed to write advertisement: {e}")
+        # Try to restore backup if write failed
+        try:
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, PATH + '/database.json')
+        except Exception:
+            pass
+    
+    await message.reply_text(
+        f"وضعیت تبلیغات: {'🔴 خاموش' if not new_state else '🟢 روشن'}",
+        reply_markup=admin_reply_kb()
+    )
+
+
 # Duplicate handlers removed - keeping only the first set
 
 
@@ -223,6 +262,38 @@ async def admin_menu_cookies(_: Client, message: Message):
         "برای مدیریت کوکی‌های یوتیوب، روی دکمه مربوطه کلیک کنید:",
         reply_markup=keyboard
     )
+
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 تنظیم تبلیغات$'))
+async def admin_menu_advertisement(_: Client, message: Message):
+    print("[ADMIN] advertisement setup via text by", message.from_user.id)
+    
+    # Get current advertisement settings
+    ad_settings = data.get('advertisement', {})
+    enabled = ad_settings.get('enabled', False)
+    content_type = ad_settings.get('content_type', 'text')
+    position = ad_settings.get('position', 'after')
+    
+    status_text = "🟢 فعال" if enabled else "🔴 غیرفعال"
+    position_text = "بالای محتوا" if position == "before" else "پایین محتوا"
+    
+    text = (
+        "📺 <b>تنظیم تبلیغات</b>\n\n"
+        f"وضعیت: {status_text}\n"
+        f"نوع محتوا: {content_type.upper()}\n"
+        f"مکان نمایش: {position_text}\n\n"
+        "برای تنظیم تبلیغات جدید، محتوای مورد نظر خود را ارسال کنید:\n\n"
+        "• متن ساده\n"
+        "• عکس (با یا بدون متن)\n"
+        "• استیکر\n"
+        "• GIF\n"
+        "• ویدیو\n"
+        "• موزیک\n\n"
+        "برای لغو /cancel را بفرستید."
+    )
+    
+    admin_step['advertisement'] = 1
+    await message.reply_text(text, reply_markup=admin_reply_kb())
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 کوکی یوتیوب$'))
 async def admin_menu_youtube_cookies(_: Client, message: Message):
@@ -783,10 +854,122 @@ async def handle_waiting_message_input(client: Client, message: Message):
         pass
 
 
+# Handle advertisement content input
+async def handle_advertisement_content(client: Client, message: Message):
+    """Handle advertisement content input from admin"""
+    try:
+        ad_data = {
+            'enabled': True,
+            'position': 'after'  # default position
+        }
+        
+        if message.text:
+            ad_data['content_type'] = 'text'
+            ad_data['content'] = message.text
+            ad_data['file_id'] = ''
+            ad_data['caption'] = ''
+        elif message.photo:
+            ad_data['content_type'] = 'photo'
+            ad_data['file_id'] = message.photo.file_id
+            ad_data['caption'] = message.caption or ''
+            ad_data['content'] = 'photo_content'
+        elif message.video:
+            ad_data['content_type'] = 'video'
+            ad_data['file_id'] = message.video.file_id
+            ad_data['caption'] = message.caption or ''
+            ad_data['content'] = 'video_content'
+        elif message.animation:
+            ad_data['content_type'] = 'gif'
+            ad_data['file_id'] = message.animation.file_id
+            ad_data['caption'] = message.caption or ''
+            ad_data['content'] = 'gif_content'
+        elif message.sticker:
+            ad_data['content_type'] = 'sticker'
+            ad_data['file_id'] = message.sticker.file_id
+            ad_data['caption'] = ''
+            ad_data['content'] = 'sticker_content'
+        elif message.audio:
+            ad_data['content_type'] = 'audio'
+            ad_data['file_id'] = message.audio.file_id
+            ad_data['caption'] = message.caption or ''
+            ad_data['content'] = 'audio_content'
+        else:
+            await message.reply_text("❌ نوع محتوای ارسالی پشتیبانی نمی‌شود.")
+            admin_step['advertisement'] = 0
+            return
+        
+        # Store advertisement data
+        admin_step['ad_content_type'] = ad_data['content_type']
+        admin_step['ad_file_id'] = ad_data.get('file_id', '')
+        admin_step['ad_caption'] = ad_data.get('caption', '')
+        
+        # Ask for position
+        keyboard = ReplyKeyboardMarkup([
+            ["🔝 بالای محتوا", "🔻 پایین محتوا"],
+            ["⬅️ بازگشت"]
+        ], resize_keyboard=True)
+        
+        admin_step['advertisement'] = 2  # waiting for position
+        await message.reply_text(
+            "✅ محتوای تبلیغات دریافت شد!\n\n"
+            "حالا مکان نمایش تبلیغات را انتخاب کنید:",
+            reply_markup=keyboard
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Advertisement content processing error: {e}")
+        await message.reply_text(f"❌ خطا در پردازش محتوای تبلیغات: {str(e)}")
+        admin_step['advertisement'] = 0
+
+
 # Handle cookie input from admin
 @Client.on_message(filters.text & filters.user(ADMIN), group=8)
 async def handle_admin_cookie_input(client: Client, message: Message):
     """Handle cookie content input from admin"""
+    # Handle advertisement position selection
+    if admin_step.get('advertisement') == 2:
+        if message.text == "🔝 بالای محتوا":
+            position = 'before'
+        elif message.text == "🔻 پایین محتوا":
+            position = 'after'
+        else:
+            await message.reply_text("لطفاً یکی از گزینه‌های موجود را انتخاب کنید.")
+            return
+        
+        # Save advertisement settings
+        ad_data = {
+            'enabled': True,
+            'content_type': admin_step.get('ad_content_type', 'text'),
+            'file_id': admin_step.get('ad_file_id', ''),
+            'caption': admin_step.get('ad_caption', ''),
+            'position': position
+        }
+        
+        data['advertisement'] = ad_data
+        
+        try:
+            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+                json.dump(data, outfile, indent=4, ensure_ascii=False)
+            
+            position_text = "بالای محتوا" if position == 'before' else "پایین محتوا"
+            await message.reply_text(
+                f"✅ تبلیغات با موفقیت تنظیم شد!\n\n"
+                f"نوع محتوا: {ad_data['content_type'].upper()}\n"
+                f"مکان نمایش: {position_text}\n\n"
+                f"تبلیغات در تمام پاسخ‌های ربات نمایش داده خواهد شد.",
+                reply_markup=admin_reply_kb()
+            )
+        except Exception as e:
+            print(f"[ERROR] Failed to save advertisement: {e}")
+            await message.reply_text("❌ خطا در ذخیره تنظیمات تبلیغات.")
+        
+        # Reset admin step
+        admin_step['advertisement'] = 0
+        admin_step['ad_content_type'] = ''
+        admin_step['ad_file_id'] = ''
+        admin_step['ad_caption'] = ''
+        return
+    
     # Check if admin is in cookie adding mode
     if 'add_cookie' not in admin_step:
         return
@@ -828,6 +1011,15 @@ async def handle_admin_cookie_input(client: Client, message: Message):
         
     # Reset admin step
     del admin_step['add_cookie']
+
+
+# Handle advertisement content (media)
+@Client.on_message(filters.user(ADMIN) & (filters.photo | filters.video | filters.animation | filters.sticker | filters.audio), group=8)
+async def handle_advertisement_media(client: Client, message: Message):
+    """Handle advertisement media content from admin"""
+    if admin_step.get('advertisement') == 1:
+        await handle_advertisement_content(client, message)
+        return
 
 
 # Handle cookie file input from admin
