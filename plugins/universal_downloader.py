@@ -134,7 +134,13 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Download file
         await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
-        file_path = await download_file_with_progress(download_url, filename, status_msg, f"⬇️ دانلود {platform}", platform)
+        download_result = await download_file_with_progress(download_url, filename, status_msg, f"⬇️ دانلود {platform}", platform)
+        
+        # Extract file_path from tuple (file_path, total_size)
+        if isinstance(download_result, tuple):
+            file_path, total_size = download_result
+        else:
+            file_path = download_result
         
         if not file_path or not os.path.exists(file_path):
             await status_msg.edit_text(f"❌ خطا در دانلود فایل از {platform}.")
