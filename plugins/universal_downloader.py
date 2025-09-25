@@ -156,16 +156,22 @@ async def handle_universal_link(client: Client, message: Message):
         caption += f"📊 **کیفیت:** {quality}\n"
         caption += f"📁 **نوع:** {media_type.title()}"
         
-        # Send advertisement before content if enabled
+        # Check advertisement settings once
+        ad_enabled = False
+        ad_position = 'after'  # default
         try:
             with open('plugins/database.json', 'r', encoding='utf-8') as f:
                 db_data = json.load(f)
             ad_settings = db_data.get('advertisement', {})
-            if ad_settings.get('enabled', False) and ad_settings.get('position') == 'before':
-                await send_advertisement(client, message.chat.id)
-                await asyncio.sleep(1)  # Wait 1 second after advertisement
+            ad_enabled = ad_settings.get('enabled', False)
+            ad_position = ad_settings.get('position', 'after')
         except Exception:
             pass
+        
+        # Send advertisement before content if enabled and position is 'before'
+        if ad_enabled and ad_position == 'before':
+            await send_advertisement(client, message.chat.id)
+            await asyncio.sleep(1)  # Wait 1 second after advertisement
         
         # Upload file based on type
         await status_msg.edit_text(f"📤 در حال ارسال فایل {platform}...")
@@ -202,18 +208,10 @@ async def handle_universal_link(client: Client, message: Message):
         # Delete status message
         await status_msg.delete()
         
-        # Wait 1 second after upload (similar to Instagram timing)
-        await asyncio.sleep(1)
-        
-        # Send advertisement after content if enabled
-        try:
-            with open('plugins/database.json', 'r', encoding='utf-8') as f:
-                db_data = json.load(f)
-            ad_settings = db_data.get('advertisement', {})
-            if ad_settings.get('enabled', False) and ad_settings.get('position') == 'after':
-                await send_advertisement(client, message.chat.id)
-        except Exception:
-            pass
+        # Send advertisement after content if enabled and position is 'after'
+        if ad_enabled and ad_position == 'after':
+            await asyncio.sleep(1)  # Wait 1 second after upload
+            await send_advertisement(client, message.chat.id)
         
         # Increment download count
         now_str = _dt.now().isoformat(timespec='seconds')
