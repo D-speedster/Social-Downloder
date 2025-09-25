@@ -1,5 +1,5 @@
 {
     "sponser": "@okalef",
     "bot_status": "ON",
-    "force_join": true
+    "force_join": false
 }

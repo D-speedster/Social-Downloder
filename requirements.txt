@@ -6,3 +6,4 @@ python-dateutil
 jdatetime
 yt-dlp
 psutil
+dotenv

@@ -210,15 +210,17 @@ async def admin_menu_sponsor_toggle(_: Client, message: Message):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^🍪 مدیریت کوکی$'))
 async def admin_menu_cookies(_: Client, message: Message):
-    # Create fixed keyboard for cookie management
+    # Create fixed keyboard for cookie management - Instagram removed (using API)
     keyboard = ReplyKeyboardMarkup([
-        ["📺 کوکی یوتیوب", "📷 کوکی اینستاگرام"],
+        ["📺 کوکی یوتیوب"],
         ["⬅️ بازگشت"]
     ], resize_keyboard=True)
     
     await message.reply(
         "🍪 <b>مدیریت استخر کوکی</b>\n\n"
-        "برای مدیریت کوکی‌های هر پلتفرم، روی دکمه مربوطه کلیک کنید:",
+        "📺 یوتیوب: مدیریت کوکی‌های یوتیوب\n"
+        "📷 اینستاگرام: از API استفاده می‌کند (نیازی به کوکی نیست)\n\n"
+        "برای مدیریت کوکی‌های یوتیوب، روی دکمه مربوطه کلیک کنید:",
         reply_markup=keyboard
     )
 
@@ -237,20 +239,7 @@ async def admin_menu_youtube_cookies(_: Client, message: Message):
         reply_markup=keyboard
     )
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📷 کوکی اینستاگرام$'))
-async def admin_menu_instagram_cookies(_: Client, message: Message):
-    """Instagram cookie management menu"""
-    keyboard = ReplyKeyboardMarkup([
-        ["➕ افزودن کوکی اینستاگرام", "📋 مشاهده کوکی‌های اینستاگرام"],
-        ["🗑 حذف همه کوکی‌های اینستاگرام"],
-        ["⬅️ بازگشت"]
-    ], resize_keyboard=True)
-    
-    await message.reply(
-        "📷 <b>مدیریت کوکی اینستاگرام</b>\n\n"
-        "عملیات مورد نظر را انتخاب کنید:",
-        reply_markup=keyboard
-    )
+# Instagram cookie management removed - using API now
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^⬅️ بازگشت$'))
 async def admin_menu_back(_: Client, message: Message):
@@ -328,70 +317,11 @@ async def clear_youtube_cookies(_: Client, message: Message):
         reply_markup=keyboard
     )
 
-# Instagram Cookie Operations
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^➕ افزودن کوکی اینستاگرام$'))
-async def add_instagram_cookie(_: Client, message: Message):
-    """Start Instagram cookie addition process"""
-    admin_step['add_cookie'] = 'instagram'
-    await message.reply(
-        "📷 <b>افزودن کوکی اینستاگرام</b>\n\n"
-        "لطفاً محتوای کوکی اینستاگرام را ارسال کنید:\n\n"
-        "📋 فرمت‌های پشتیبانی شده:\n"
-        "• فرمت Netscape (.txt)\n"
-        "• فرمت JSON\n\n"
-        "💡 نکته: می‌توانید فایل کوکی را مستقیماً ارسال کنید یا محتوای آن را کپی کنید.\n\n"
-        "❌ برای لغو /cancel را بفرستید.",
-        reply_markup=ReplyKeyboardMarkup([["⬅️ بازگشت"]], resize_keyboard=True)
-    )
+# Instagram Cookie Operations removed - using API now
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📋 مشاهده کوکی\u200cهای اینستاگرام$'))
-async def list_instagram_cookies(_: Client, message: Message):
-    """List Instagram cookies"""
-    try:
-        from cookie_manager import cookie_manager
-        cookies = cookie_manager.get_cookies('instagram', active_only=False)
-        stats = cookie_manager.get_cookie_stats('instagram')
-        
-        if not cookies:
-            text = "📷 <b>کوکی‌های اینستاگرام</b>\n\n❌ هیچ کوکی‌ای یافت نشد."
-        else:
-            text = (
-                f"📷 <b>کوکی‌های اینستاگرام</b>\n\n"
-                f"📊 آمار کلی:\n"
-                f"• مجموع: {stats['total']}\n"
-                f"• فعال: {stats['active']}\n"
-                f"• غیرفعال: {stats['inactive']}\n"
-                f"• مجموع استفاده: {stats['total_usage']}\n\n"
-                f"📋 لیست کوکی‌ها:\n"
-            )
-            
-            for i, cookie in enumerate(cookies[:10], 1):  # نمایش حداکثر 10 کوکی
-                status = "🟢" if cookie.get('active', True) else "🔴"
-                usage = cookie.get('usage_count', 0)
-                desc = cookie.get('description', f"کوکی {cookie.get('id', i)}")
-                text += f"{i}. {status} {desc} (استفاده: {usage})\n"
-            
-            if len(cookies) > 10:
-                text += f"\n... و {len(cookies) - 10} کوکی دیگر"
-        
-        await message.reply(text, reply_markup=ReplyKeyboardMarkup([["⬅️ بازگشت"]], resize_keyboard=True))
-    except Exception as e:
-        await message.reply(f"❌ خطا در نمایش کوکی‌ها: {str(e)}", reply_markup=ReplyKeyboardMarkup([["⬅️ بازگشت"]], resize_keyboard=True))
+# Instagram cookie listing removed - using API now
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🗑 حذف همه کوکی\u200cهای اینستاگرام$'))
-async def clear_instagram_cookies(_: Client, message: Message):
-    """Clear all Instagram cookies with confirmation"""
-    keyboard = ReplyKeyboardMarkup([
-        ["✅ بله، حذف کن اینستاگرام", "❌ لغو"],
-        ["⬅️ بازگشت"]
-    ], resize_keyboard=True)
-    
-    await message.reply(
-        "⚠️ <b>هشدار</b>\n\n"
-        "آیا مطمئن هستید که می‌خواهید تمام کوکی‌های اینستاگرام را حذف کنید؟\n\n"
-        "❗️ این عمل قابل بازگشت نیست!",
-        reply_markup=keyboard
-    )
+# Instagram cookie clearing removed - using API now
 
 # Confirmation handlers
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^✅ بله، حذف کن یوتیوب$'))
@@ -410,21 +340,7 @@ async def confirm_clear_youtube_cookies(_: Client, message: Message):
     except Exception as e:
         await message.reply(f"❌ خطا در حذف کوکی‌ها: {str(e)}", reply_markup=admin_reply_kb())
 
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^✅ بله، حذف کن اینستاگرام$'))
-async def confirm_clear_instagram_cookies(_: Client, message: Message):
-    """Confirm Instagram cookie deletion"""
-    try:
-        from cookie_manager import cookie_manager
-        success = cookie_manager.clear_cookies('instagram')
-        
-        if success:
-            text = "✅ تمام کوکی‌های اینستاگرام با موفقیت حذف شدند."
-        else:
-            text = "❌ خطا در حذف کوکی‌ها یا هیچ کوکی‌ای برای حذف وجود نداشت."
-        
-        await message.reply(text, reply_markup=admin_reply_kb())
-    except Exception as e:
-        await message.reply(f"❌ خطا در حذف کوکی‌ها: {str(e)}", reply_markup=admin_reply_kb())
+# Instagram cookie confirmation removed - using API now
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^❌ لغو$'))
 async def cancel_operation(_: Client, message: Message):
