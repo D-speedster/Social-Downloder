@@ -137,7 +137,7 @@ async def download_file_with_progress(url, file_path, status_msg, title, type_la
                         last_update = downloaded
                         if total_size > 0:
                             percent = int(downloaded * 100 / total_size)
-                            size_mb = f"{(total_size/1024/1024):.2f}"
+                            size_mb = f"{(int(total_size)/1024/1024):.2f}"
                         else:
                             percent = 0
                             size_mb = "نامشخص"

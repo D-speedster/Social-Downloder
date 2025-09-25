@@ -80,15 +80,7 @@ async def handle_universal_link(client: Client, message: Message):
         # Send initial status message
         status_msg = await message.reply_text(f"🔄 در حال پردازش لینک {platform}...")
         
-        # Send advertisement before content if enabled
-        try:
-            with open('plugins/database.json', 'r', encoding='utf-8') as f:
-                db_data = json.load(f)
-            ad_settings = db_data.get('advertisement', {})
-            if ad_settings.get('enabled', False) and ad_settings.get('position') == 'before':
-                await send_advertisement(client, message.chat.id)
-        except Exception:
-            pass
+        # Advertisement will be handled later in the process
         
         # Get data from API
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
