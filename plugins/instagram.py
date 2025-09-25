@@ -150,7 +150,7 @@ async def download_file_with_progress(url, file_path, status_msg, title, type_la
                         except Exception:
                             pass
         
-        return total_size
+        return file_path
         
     except Exception as e:
         print(f"Download error: {e}")
@@ -303,9 +303,9 @@ async def download_instagram(_: Client, message: Message):
             )
         
         # Wait a moment to ensure upload is complete
-        await asyncio.sleep(1)
+        await asyncio.sleep(2)
         
-        # Send advertisement after content if position is 'after' and enabled
+        # Send advertisement after content if position is 'after' and enabled (only if not sent before)
         if ad_enabled and ad_position == 'after':
             await send_advertisement(_, user_id)
         

@@ -592,6 +592,9 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 
                 DB().increment_request(callback_query.from_user.id, datetime.now().isoformat())
                 
+                # Wait a moment to ensure upload completion before sending ads
+                await asyncio.sleep(1)
+                
                 # Send advertisement based on position setting
                 try:
                     with open('plugins/database.json', 'r', encoding='utf-8') as f:

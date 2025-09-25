@@ -23,7 +23,10 @@ data = constant.DATA
 
 # New: patterns for supported links and pending link storage
 YOUTUBE_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)/", re.IGNORECASE)
-INSTA_REGEX = re.compile(r"^((?:https?:)?//)?((?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|reel\/|tv\/|stories\/))([\w\-]+)(\S+)?$", re.IGNORECASE)
+INSTA_REGEX = re.compile(r"^((?:https?:)?//)?(?:(?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|reel\/|tv\/|stories\/))([\w\-]+)(\S+)?$", re.IGNORECASE)
+SPOTIFY_REGEX = re.compile(r"^(?:https?://)?(?:open\.)?spotify\.com/", re.IGNORECASE)
+TIKTOK_REGEX = re.compile(r"^(?:https?://)?(?:www\.|vm\.|m\.)?tiktok\.com/", re.IGNORECASE)
+SOUNDCLOUD_REGEX = re.compile(r"^(?:https?://)?(?:www\.|m\.|on\.)?soundcloud\.com/", re.IGNORECASE)
 PENDING_LINKS = {}
 
 
@@ -33,7 +36,9 @@ def _store_pending_link_if_any(message: Message):
         text = getattr(message, 'text', None) or ''
         if not uid or not text:
             return
-        if YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text):
+        if (YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text) or 
+            SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
+            SOUNDCLOUD_REGEX.search(text)):
             PENDING_LINKS[uid] = {
                 'chat_id': message.chat.id,
                 'message_id': message.id,
@@ -264,9 +269,17 @@ async def start(client: Client, message: Message):
 async def help_command_handler(client: Client, message: Message):
     text = (
         "📘 راهنما\n\n"
-        "- لینک یوتیوب را ارسال کنید تا لیست کیفیت‌ها نمایش داده شود.\n"
-        "- برای اینستاگرام، لینک پست/ریل/استوری را ارسال کنید.\n"
-        "- از بخش حساب کاربری می‌توانید آمار خود را ببینید."
+        "🔗 **پلتفرم‌های پشتیبانی شده:**\n"
+        "📺 **یوتیوب** - youtube.com, youtu.be\n"
+        "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
+        "🎵 **اسپاتیفای** - spotify.com\n"
+        "🎬 **تیک‌تاک** - tiktok.com\n"
+        "🎧 **ساندکلود** - soundcloud.com\n\n"
+        "💡 **نحوه استفاده:**\n"
+        "- فقط لینک را ارسال کنید تا به‌طور خودکار پردازش شود\n"
+        "- برای یوتیوب لیست کیفیت‌ها نمایش داده می‌شود\n"
+        "- سایر پلتفرم‌ها به‌طور مستقیم دانلود می‌شوند\n\n"
+        "📊 از بخش حساب کاربری می‌توانید آمار خود را ببینید."
     )
     await message.reply_text(text, reply_markup=build_main_menu(message.from_user.id))
 
@@ -325,9 +338,17 @@ async def account_info_callback(client: Client, callback_query):
 async def help_menu_message(client: Client, message: Message):
     text = (
         "📘 راهنما\n\n"
-        "- لینک یوتیوب را ارسال کنید تا لیست کیفیت‌ها نمایش داده شود.\n"
-        "- برای اینستاگرام، لینک پست/ریل/استوری را ارسال کنید.\n"
-        "- از بخش حساب کاربری می‌توانید آمار خود را ببینید."
+        "🔗 **پلتفرم‌های پشتیبانی شده:**\n"
+        "📺 **یوتیوب** - youtube.com, youtu.be\n"
+        "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
+        "🎵 **اسپاتیفای** - spotify.com\n"
+        "🎬 **تیک‌تاک** - tiktok.com\n"
+        "🎧 **ساندکلود** - soundcloud.com\n\n"
+        "💡 **نحوه استفاده:**\n"
+        "- فقط لینک را ارسال کنید تا به‌طور خودکار پردازش شود\n"
+        "- برای یوتیوب لیست کیفیت‌ها نمایش داده می‌شود\n"
+        "- سایر پلتفرم‌ها به‌طور مستقیم دانلود می‌شوند\n\n"
+        "📊 از بخش حساب کاربری می‌توانید آمار خود را ببینید."
     )
     await message.reply_text(text, reply_markup=build_main_menu(message.from_user.id))
 
@@ -469,6 +490,10 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                         elif INSTA_REGEX.search(text):
                             from plugins.instagram import download_instagram
                             download_instagram(client, orig_msg)
+                        elif (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
+                              SOUNDCLOUD_REGEX.search(text)):
+                            from plugins.universal_downloader import handle_universal_link
+                            await handle_universal_link(client, orig_msg)
                         else:
                             # Not a supported link anymore; prompt user
                             await client.send_message(chat_id=pending['chat_id'], text="حالا می‌توانید لینک را بفرستید ✍️")
@@ -491,8 +516,46 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
             print(f"[VERIFY] UserNotParticipant for user={uid}")
             await callback_query.answer("❌ هنوز عضو کانال نیستید. لطفاً ابتدا عضو شوید.", show_alert=True)
     except Exception as e:
-        print(f"[VERIFY] Error during verify: {e}")
+            print(f"[VERIFY] Error during verify: {e}")
+            try:
+                await callback_query.answer("خطای غیرمنتظره رخ داد.", show_alert=True)
+            except Exception:
+                pass
+
+
+# === General Message Handler for URLs ===
+@Client.on_message(filters.private & filters.text & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]), group=1)
+async def handle_text_messages(client: Client, message: Message):
+    """Handle all text messages and route URLs to appropriate handlers"""
+    try:
+        text = message.text.strip()
+        
+        # Check if it's a supported URL
+        if YOUTUBE_REGEX.search(text):
+            from plugins.youtube import show_video
+            await show_video(client, message)
+        elif INSTA_REGEX.search(text):
+            from plugins.instagram import download_instagram
+            download_instagram(client, message)
+        elif (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
+              SOUNDCLOUD_REGEX.search(text)):
+            from plugins.universal_downloader import handle_universal_link
+            await handle_universal_link(client, message)
+        else:
+            # Not a supported URL, send help message
+            await message.reply_text(
+                "🔗 **لینک پشتیبانی شده ارسال کنید:**\n\n"
+                "📺 **یوتیوب** - youtube.com, youtu.be\n"
+                "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
+                "🎵 **اسپاتیفای** - spotify.com\n"
+                "🎬 **تیک‌تاک** - tiktok.com\n"
+                "🎧 **ساندکلود** - soundcloud.com\n\n"
+                "💡 فقط لینک را ارسال کنید تا پردازش شود.",
+                reply_markup=build_main_menu(message.from_user.id)
+            )
+    except Exception as e:
+        print(f"Error handling text message: {e}")
         try:
-            await callback_query.answer("خطای غیرمنتظره رخ داد.", show_alert=True)
-        except Exception:
+            await message.reply_text("❌ خطا در پردازش پیام. لطفاً دوباره تلاش کنید.")
+        except:
             pass
