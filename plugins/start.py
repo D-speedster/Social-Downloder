@@ -523,24 +523,22 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                 pass
 
 
-# === General Message Handler for URLs ===
+# === General Message Handler for Universal URLs (Spotify, TikTok, SoundCloud) ===
 @Client.on_message(filters.private & filters.text & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]) & ~filters.regex(r'^(🛠 مدیریت|📊 آمار کاربران|🖥 وضعیت سرور|📣 ارسال پیام|📢 تنظیم اسپانسر|🔌 خاموش/روشن|🔐 خاموش/روشن اسپانسری|📺 خاموش/روشن تبلیغات|🍪 مدیریت کوکی|📺 تنظیم تبلیغات|📺 کوکی یوتیوب|⬅️ بازگشت|➕ افزودن کوکی یوتیوب|📋 مشاهده کوکی‌های یوتیوب|🗑 حذف همه کوکی‌های یوتیوب|✅ بله، حذف کن یوتیوب|❌ لغو|💬 پیام انتظار|🔝 بالای محتوا|🔻 پایین محتوا)$'), group=1)
 async def handle_text_messages(client: Client, message: Message):
-    """Handle all text messages and route URLs to appropriate handlers"""
+    """Handle universal URLs (Spotify, TikTok, SoundCloud) - YouTube and Instagram have dedicated handlers"""
     try:
         text = message.text.strip()
         
-        # Check if it's a supported URL
-        if YOUTUBE_REGEX.search(text):
-            from plugins.youtube import show_video
-            await show_video(client, message)
-        elif INSTA_REGEX.search(text):
-            from plugins.instagram import download_instagram
-            await download_instagram(client, message)
-        elif (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
+        # Only handle universal platforms (Spotify, TikTok, SoundCloud)
+        # YouTube and Instagram are handled by their dedicated handlers with join filters
+        if (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
               SOUNDCLOUD_REGEX.search(text)):
             from plugins.universal_downloader import handle_universal_link
             await handle_universal_link(client, message)
+        elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text):
+            # These are handled by dedicated handlers, do nothing here
+            pass
         else:
             # Not a supported URL, send help message
             await message.reply_text(
