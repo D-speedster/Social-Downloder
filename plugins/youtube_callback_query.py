@@ -18,6 +18,7 @@ from plugins.db_wrapper import DB
 from datetime import datetime, timedelta
 from yt_dlp import YoutubeDL
 from pyrogram.errors import MessageNotModified
+import subprocess
 
 # Advertisement function
 async def send_advertisement(client: Client, user_id: int):
@@ -517,6 +518,11 @@ async def answer(client: Client, callback_query: CallbackQuery):
             'no_warnings': True,
             'ignoreerrors': False,   # Don't ignore errors during actual download
             'concurrent_fragment_downloads': 4,  # Enable concurrent downloads for faster speed
+            # Ensure thumbnail is written by yt-dlp as a fallback
+            'writethumbnail': True,
+            'postprocessors': [
+                {'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg'}
+            ],
         }
         
         if ffmpeg_path:
@@ -552,6 +558,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     'socket_timeout': 15,    # Shorter timeout for fallback
                     'no_warnings': True,
                     'concurrent_fragment_downloads': 2,  # Lower concurrency for fallback
+                    'writethumbnail': True,
+                    'postprocessors': [
+                        {'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg'}
+                    ],
                 }
                 
                 if ffmpeg_path:
@@ -610,25 +620,102 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 except Exception as e:
                     print(f"Error handling advertisement: {e}")
                 
+                # ==== Hard enforce final video resolution and prepare Telegram-compliant thumbnail ====
+                if step['sort'] == "🎥 ویدیو":
+                    # Decide target resolution based on selected format height (>=720 -> 1280x720, else 720x480)
+                    target_w, target_h = 720, 480
+                    try:
+                        selected_format = next((f for f in info.get('formats', []) if f.get('format_id') == step.get('format_id')), None)
+                        if selected_format:
+                            sel_h = int(selected_format.get('height') or 0)
+                            if sel_h >= 720:
+                                target_w, target_h = 1280, 720
+                            else:
+                                target_w, target_h = 720, 480
+                        else:
+                            # If we cannot detect, prefer 1280x720 for safety
+                            target_w, target_h = 1280, 720
+                    except Exception:
+                        target_w, target_h = 1280, 720
+
+                    # Re-encode the video into exactly the target resolution, maintaining aspect via pad
+                    base_name_noext, _orig_ext = os.path.splitext(file_path)
+                    enforced_path = f"{base_name_noext}_{target_w}x{target_h}.mp4"
+                    try:
+                        vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                        cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', file_path, '-vf', vf,
+                               '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                               '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                               enforced_path]
+                        # Run in a thread to avoid blocking the loop
+                        await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                        # Replace file_path with the enforced one and remove original
+                        try:
+                            if os.path.exists(enforced_path):
+                                if os.path.exists(file_path) and enforced_path != file_path:
+                                    os.remove(file_path)
+                                file_path = enforced_path
+                        except Exception:
+                            pass
+                    except Exception as ee:
+                        print(f"FFmpeg re-encode failed (continuing with original file): {ee}")
+                        # If failed, continue with original file
+
+                    # Prepare Telegram-compliant JPEG thumbnail (<=320px, <=200KB)
+                    thumb_source = None
+                    # Prefer yt-dlp written thumbnails
+                    for ext in ['.jpg', '.jpeg', '.png', '.webp']:
+                        candidate = f"{base_name_noext}{ext}"
+                        if os.path.exists(candidate):
+                            thumb_source = candidate
+                            break
+                    # Fallback: grab a frame from the video at 3s
+                    if not thumb_source:
+                        thumb_source = file_path
+
+                    thumbnail_path = f"{base_name_noext}_thumb.jpg"
+                    try:
+                        def make_thumb(q):
+                            # Convert and scale to width=320, keep AR; q in [2..10]
+                            vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
+                            cmd_t = [ffmpeg_path or 'ffmpeg', '-y']
+                            if thumb_source.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                                cmd_t += ['-i', thumb_source]
+                            else:
+                                # If source is video, take a frame at 3s
+                                cmd_t += ['-ss', '3', '-i', thumb_source, '-frames:v', '1']
+                            cmd_t += ['-vf', vf_thumb, '-q:v', str(q), thumbnail_path]
+                            subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        # Try with increasing q until size <= 200KB
+                        for q in [5, 6, 7, 8, 9, 10]:
+                            try:
+                                await asyncio.to_thread(make_thumb, q)
+                                if os.path.exists(thumbnail_path) and os.path.getsize(thumbnail_path) <= 200 * 1024:
+                                    break
+                            except Exception:
+                                continue
+                    except Exception as te:
+                        print(f"Thumbnail creation failed: {te}")
+                        thumbnail_path = None
+                # ==== End of resolution enforcement and thumbnail preparation ====
+                
                 sent_msg = None
                 if step['sort'] == "🎥 ویدیو":
-                    # Look for thumbnail file
-                    thumbnail_path = None
-                    base_name = os.path.splitext(file_path)[0]
-                    
-                    # Common thumbnail extensions from yt-dlp
-                    thumb_extensions = ['.jpg', '.jpeg', '.png', '.webp']
-                    for ext in thumb_extensions:
-                        potential_thumb = base_name + ext
-                        if os.path.exists(potential_thumb):
-                            thumbnail_path = potential_thumb
-                            break
-                    
+                    # Use prepared thumbnail if available; otherwise keep None
+                    try:
+                        width_arg = target_w if 'target_w' in locals() else None
+                        height_arg = target_h if 'target_h' in locals() else None
+                    except Exception:
+                        width_arg = None
+                        height_arg = None
+
                     sent_msg = await callback_query.message.reply_video(
                         file_path,
                         caption=info.get('title'),
                         duration=int(info.get('duration', 0)),
-                        thumb=thumbnail_path,  # Use YouTube thumbnail as video cover
+                        thumb=thumbnail_path if 'thumbnail_path' in locals() else None,
+                        width=width_arg,
+                        height=height_arg,
                         progress=on_progress2,
                         progress_args=(callback_query, client)
                     )
@@ -640,7 +727,6 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         progress=on_progress2,
                         progress_args=(callback_query, client)
                     )
-                
                 DB().increment_request(callback_query.from_user.id, datetime.now().isoformat())
                 
                 # Wait a moment to ensure upload completion
@@ -698,6 +784,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         thumb_file = base_name + ext
                         if os.path.exists(thumb_file):
                             os.remove(thumb_file)
+                    # Also remove our generated thumb if exists
+                    gen_thumb = base_name + "_thumb.jpg"
+                    if os.path.exists(gen_thumb):
+                        os.remove(gen_thumb)
                             
                 except Exception as ce:
                     print(f"Cleanup failed: {ce}")

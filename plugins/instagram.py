@@ -14,6 +14,7 @@ import http.client
 import json
 import urllib.request
 import random
+import subprocess
 
 # Advertisement function
 async def send_advertisement(client: Client, user_id: int):
@@ -291,11 +292,7 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
     try:
         download_url = media.get('url')
         if not download_url:
-            await status_msg.edit_text(
-                "❌ **خطا در دریافت لینک دانلود**\n\n🔍 لینک دانلود معتبر یافت نشد.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
-            )
-            return
+            raise Exception("Download URL not found")
         
         # Determine file type and extension
         media_type = media.get('type', 'unknown')
@@ -337,11 +334,87 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         # Create safe caption
         safe_caption = create_safe_caption(title, 1)
         
+        # If video, enforce resolution & generate thumbnail
+        thumb_path = None
+        width_arg = None
+        height_arg = None
+        final_path = downloaded_file_path
+        try:
+            if media_type == 'video':
+                # Detect ffmpeg path (similar to youtube module)
+                ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                if not ffmpeg_path:
+                    candidates = [
+                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                        "ffmpeg",
+                        "/usr/bin/ffmpeg",
+                        "/usr/local/bin/ffmpeg"
+                    ]
+                    for p in candidates:
+                        if shutil.which(p) or os.path.exists(p):
+                            ffmpeg_path = p
+                            break
+                # For Instagram most videos are <=720p; choose 1280x720 if source >=720 else 720x480
+                # Probe height using ffprobe minimal; fallback to 720x480
+                target_w, target_h = 720, 480
+                try:
+                    probe_cmd = [ffmpeg_path or 'ffmpeg', '-i', downloaded_file_path]
+                    # Quick text probe by reading stderr output size; skip heavy parsing.
+                except Exception:
+                    pass
+                # Prefer 1280x720 as primary
+                target_w, target_h = 1280, 720
+                # Re-encode
+                base_noext, _ = os.path.splitext(downloaded_file_path)
+                enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
+                try:
+                    vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                    cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
+                           '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                           '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                           enforced_path]
+                    await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                    if os.path.exists(enforced_path):
+                        try:
+                            os.remove(downloaded_file_path)
+                        except Exception:
+                            pass
+                        final_path = enforced_path
+                        width_arg, height_arg = target_w, target_h
+                except Exception as ee:
+                    print(f"FFmpeg re-encode (IG) failed: {ee}")
+                    final_path = downloaded_file_path
+                
+                # Thumbnail (<=320px, <=200KB)
+                thumb_path = f"{base_noext}_thumb.jpg"
+                try:
+                    def make_thumb(q):
+                        vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
+                        cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', str(q), thumb_path]
+                        subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    for q in [5,6,7,8,9,10]:
+                        try:
+                            await asyncio.to_thread(make_thumb, q)
+                            if os.path.exists(thumb_path) and os.path.getsize(thumb_path) <= 200*1024:
+                                break
+                        except Exception:
+                            continue
+                except Exception as te:
+                    print(f"IG thumbnail error: {te}")
+                    thumb_path = None
+        except Exception as ie:
+            print(f"IG enforce pipeline error: {ie}")
+            thumb_path = None
+            final_path = downloaded_file_path
+        
         # Upload file
         if media_type == 'video':
             sent_msg = await message.reply_video(
-                video=downloaded_file_path,
+                video=final_path,
                 caption=safe_caption,
+                thumb=thumb_path,
+                width=width_arg,
+                height=height_arg,
                 progress=lambda current, total: None  # Simple progress without updates
             )
         else:
@@ -355,7 +428,12 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         
         # Clean up file
         try:
-            os.remove(downloaded_file_path)
+            if os.path.exists(final_path):
+                os.remove(final_path)
+            if final_path != downloaded_file_path and os.path.exists(downloaded_file_path):
+                os.remove(downloaded_file_path)
+            if thumb_path and os.path.exists(thumb_path):
+                os.remove(thumb_path)
         except Exception:
             pass
             
