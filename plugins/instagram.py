@@ -437,14 +437,22 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
             if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
                 raise Exception("Video file is empty or doesn't exist")
             
-            sent_msg = await message.reply_video(
-                video=final_path,
-                caption=safe_caption,
-                thumb=thumb_path,
-                width=width_arg,
-                height=height_arg,
-                progress=lambda current, total: None  # Simple progress without updates
-            )
+            # Send video without width/height to avoid IMAGE_PROCESS_FAILED
+            try:
+                sent_msg = await message.reply_video(
+                    video=final_path,
+                    caption=safe_caption,
+                    thumb=thumb_path,
+                    progress=lambda current, total: None  # Simple progress without updates
+                )
+            except Exception as video_error:
+                print(f"Video upload failed: {video_error}")
+                # Fallback: send as document if video upload fails
+                sent_msg = await message.reply_document(
+                    document=final_path,
+                    caption=safe_caption,
+                    thumb=thumb_path
+                )
         else:
             # Verify image file exists and has content
             if not os.path.exists(downloaded_file_path) or os.path.getsize(downloaded_file_path) == 0:
@@ -510,15 +518,35 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"⏳ دانلود {i+1}/{len(medias)}...", callback_data="ignore")]])
                 )
                 
-                # Simple download without progress for multiple files
-                response = urllib.request.urlopen(download_url)
-                with open(file_path, 'wb') as f:
-                    f.write(response.read())
-                
-                if os.path.exists(file_path):
-                    downloaded_files.append(file_path)
+                # Download file with proper error handling
+                try:
+                    download_result = await download_file_with_progress(download_url, filename, status_msg, f"⬇️ دانلود فایل {i+1}/{len(medias)}", "Instagram")
                     
-                    # Add to media group
+                    # Extract file_path from tuple (file_path, total_size)
+                    if isinstance(download_result, tuple):
+                        file_path, total_size = download_result
+                    else:
+                        file_path = download_result
+                        
+                    if not file_path or not os.path.exists(file_path):
+                        print(f"Download failed for media {i+1}: file not found")
+                        continue
+                        
+                    # Verify file size
+                    if os.path.getsize(file_path) == 0:
+                        print(f"Downloaded file {i+1} is empty")
+                        os.remove(file_path)
+                        continue
+                        
+                except Exception as download_error:
+                    print(f"Download error for media {i+1}: {download_error}")
+                    continue
+                
+                # File exists and is valid, add to media group
+                downloaded_files.append(file_path)
+                
+                # Add to media group with error handling
+                try:
                     if media_type == 'video':
                         if i == 0:  # First item gets caption
                             media_group.append(InputMediaVideo(media=file_path, caption=create_safe_caption(title, len(medias))))
@@ -529,6 +557,9 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                             media_group.append(InputMediaPhoto(media=file_path, caption=create_safe_caption(title, len(medias))))
                         else:
                             media_group.append(InputMediaPhoto(media=file_path))
+                except Exception as media_error:
+                    print(f"Error creating media object for file {i+1}: {media_error}")
+                    continue
                 
             except Exception as e:
                 print(f"Error downloading media {i+1}: {e}")
