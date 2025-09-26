@@ -231,7 +231,6 @@ async def show_video(client: Client, message: Message):
             'connect_timeout': 5,    # Connection timeout
             'no_warnings': True,
             'extract_flat': False,
-            'skip_download': True,
             'format': 'best[height>=720]/best[height>=480]/best',  # Prioritize higher quality (720p+, then 480p+)
             'ignoreerrors': True,
             'no_check_certificate': True,
@@ -352,7 +351,6 @@ async def show_video(client: Client, message: Message):
                 'socket_timeout': 5,     # Very aggressive timeout for fallback
                 'connect_timeout': 3,    # Fast connection timeout
                 'extract_flat': False,
-                'skip_download': True,
                 'ignoreerrors': True,
                 'no_check_certificate': True,
                 'prefer_insecure': True,
