@@ -15,6 +15,8 @@ import json
 import urllib.request
 import random
 import subprocess
+import shutil
+import sys
 
 # Advertisement function
 async def send_advertisement(client: Client, user_id: int):
@@ -343,11 +345,15 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
             if media_type == 'video':
                 # Detect ffmpeg path (similar to youtube module)
                 ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                try:
+                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                        ffmpeg_path = '/usr/bin/ffmpeg'
+                except Exception:
+                    pass
                 if not ffmpeg_path:
                     candidates = [
                         "C:\\ffmpeg\\bin\\ffmpeg.exe",
                         "ffmpeg",
-                        "/usr/bin/ffmpeg",
                         "/usr/local/bin/ffmpeg"
                     ]
                     for p in candidates:

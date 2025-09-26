@@ -14,6 +14,7 @@ import asyncio
 import shutil
 import time
 import logging
+import sys
 
 # Configure logging for performance monitoring
 import os
@@ -209,12 +210,16 @@ async def show_video(client: Client, message: Message):
 
         # Security: Use environment variable for ffmpeg path or auto-detect
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        try:
+            if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                ffmpeg_path = '/usr/bin/ffmpeg'
+        except Exception:
+            pass
         if not ffmpeg_path:
             # Try common locations
             common_paths = [
                 "C:\\ffmpeg\\bin\\ffmpeg.exe",
                 "ffmpeg",  # If in PATH
-                "/usr/bin/ffmpeg",  # Linux
                 "/usr/local/bin/ffmpeg"  # macOS
             ]
             for path in common_paths:
