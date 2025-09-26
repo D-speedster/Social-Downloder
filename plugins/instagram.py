@@ -1,5 +1,5 @@
 from pyrogram import Client, filters
-from pyrogram.types import Message
+from pyrogram.types import Message, InputMediaPhoto, InputMediaVideo
 from plugins import constant
 from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
@@ -210,6 +210,7 @@ async def download_instagram(_: Client, message: Message):
         # Extract media information
         title = api_data.get('title', 'Instagram Media')
         medias = api_data.get('medias', [])
+        post_type = api_data.get('type', 'single')
         
         if not medias:
             await status_msg.edit_text(
@@ -218,18 +219,77 @@ async def download_instagram(_: Client, message: Message):
             )
             return
         
-        # Select best quality media (prefer video over image)
-        selected_media = None
-        for media in medias:
-            if media.get('type') == 'video':
-                selected_media = media
-                break
+        # Note: create_safe_caption function is now defined at the bottom of the file
         
-        if not selected_media:
-            # If no video, take first image
-            selected_media = medias[0]
+        # Check advertisement settings for position
+        try:
+            with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            ad_settings = data.get('advertisement', {})
+            ad_enabled = ad_settings.get('enabled', False)
+            ad_position = ad_settings.get('position', 'after')
+        except:
+            ad_enabled = False
+            ad_position = 'after'
         
-        download_url = selected_media.get('url')
+        # Send advertisement before content if position is 'before' and enabled
+        if ad_enabled and ad_position == 'before':
+            await send_advertisement(_, user_id)
+        
+        # Handle multiple media (carousel/gallery)
+        if post_type == 'multiple' and len(medias) > 1:
+            await handle_multiple_media(_, message, status_msg, medias, title, user_id)
+        else:
+            # Handle single media
+            await handle_single_media(_, message, status_msg, medias[0], title, user_id)
+        
+        # Send advertisement after content if position is 'after' and enabled
+        if ad_enabled and ad_position == 'after':
+            await send_advertisement(_, user_id)
+        
+        # Update user download count
+        db.increment_request(user_id, datetime.now().isoformat())
+        
+        # Delete status message
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
+    
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Instagram download error: {error_msg}")
+        
+        # Handle specific errors
+        if "API Error" in error_msg:
+            error_text = "❌ **خطا در ارتباط با سرور**\n\n🔍 لطفاً بعداً تلاش کنید."
+        elif "Download error" in error_msg:
+            error_text = "❌ **خطا در دانلود فایل**\n\n🔍 ممکن است فایل در دسترس نباشد."
+        else:
+            error_text = "❌ **خطای غیرمنتظره**\n\n🔍 لطفاً لینک را بررسی کرده و مجدداً تلاش کنید."
+        
+        try:
+            await status_msg.edit_text(
+                error_text,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
+            )
+        except Exception:
+            pass
+        
+        # Clean up any partial files
+        try:
+            if 'downloaded_file_path' in locals() and os.path.exists(downloaded_file_path):
+                os.remove(downloaded_file_path)
+            elif 'file_path' in locals() and os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception:
+            pass
+
+
+async def handle_single_media(client, message, status_msg, media, title, user_id):
+    """Handle single media download and upload"""
+    try:
+        download_url = media.get('url')
         if not download_url:
             await status_msg.edit_text(
                 "❌ **خطا در دریافت لینک دانلود**\n\n🔍 لینک دانلود معتبر یافت نشد.",
@@ -238,7 +298,7 @@ async def download_instagram(_: Client, message: Message):
             return
         
         # Determine file type and extension
-        media_type = selected_media.get('type', 'unknown')
+        media_type = media.get('type', 'unknown')
         if media_type == 'video':
             type_label = "🎥 ویدیو"
             ext = 'mp4'
@@ -274,81 +334,151 @@ async def download_instagram(_: Client, message: Message):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 در حال ارسال...", callback_data="ignore")]])
         )
         
-        # Check advertisement settings for position
-        try:
-            with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            ad_settings = data.get('advertisement', {})
-            ad_enabled = ad_settings.get('enabled', False)
-            ad_position = ad_settings.get('position', 'after')
-        except:
-            ad_enabled = False
-            ad_position = 'after'
-        
-        # Send advertisement before content if position is 'before' and enabled
-        if ad_enabled and ad_position == 'before':
-            await send_advertisement(_, user_id)
+        # Create safe caption
+        safe_caption = create_safe_caption(title, 1)
         
         # Upload file
         if media_type == 'video':
             sent_msg = await message.reply_video(
                 video=downloaded_file_path,
-                caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت",
+                caption=safe_caption,
                 progress=lambda current, total: None  # Simple progress without updates
             )
         else:
             sent_msg = await message.reply_photo(
                 photo=downloaded_file_path,
-                caption=f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {title}\n📏 **حجم:** {total_mb_text} مگابایت"
+                caption=safe_caption
             )
         
         # Wait a moment to ensure upload is complete
         await asyncio.sleep(2)
-        
-        # Send advertisement after content if position is 'after' and enabled (only if not sent before)
-        if ad_enabled and ad_position == 'after':
-            await send_advertisement(_, user_id)
-        
-        # Update user download count
-        db.increment_request(user_id, datetime.now().isoformat())
-        
-        # Delete status message
-        try:
-            await status_msg.delete()
-        except Exception:
-            pass
         
         # Clean up file
         try:
             os.remove(downloaded_file_path)
         except Exception:
             pass
-    
+            
     except Exception as e:
-        error_msg = str(e)
-        print(f"Instagram download error: {error_msg}")
+        print(f"Single media handling error: {e}")
+        raise e
+
+
+async def handle_multiple_media(client, message, status_msg, medias, title, user_id):
+    """Handle multiple media download and upload as media group"""
+    try:
+        # Limit to maximum 10 media items (Telegram limit)
+        medias = medias[:10]
+        media_group = []
+        downloaded_files = []
         
-        # Handle specific errors
-        if "API Error" in error_msg:
-            error_text = "❌ **خطا در ارتباط با سرور**\n\n🔍 لطفاً بعداً تلاش کنید."
-        elif "Download error" in error_msg:
-            error_text = "❌ **خطا در دانلود فایل**\n\n🔍 ممکن است فایل در دسترس نباشد."
-        else:
-            error_text = "❌ **خطای غیرمنتظره**\n\n🔍 لطفاً لینک را بررسی کرده و مجدداً تلاش کنید."
+        # Update status
+        await status_msg.edit_text(
+            f"📥 **دانلود چندرسانه‌ای اینستاگرام**\n\n📝 **عنوان:** {title[:100]}...\n📊 **تعداد فایل:** {len(medias)}\n⏳ **وضعیت:** آماده‌سازی دانلود...",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⏳ در حال پردازش...", callback_data="ignore")]])
+        )
         
-        try:
+        # Download all media files
+        for i, media in enumerate(medias):
+            try:
+                download_url = media.get('url')
+                if not download_url:
+                    continue
+                
+                # Determine file type and extension
+                media_type = media.get('type', 'image')
+                ext = 'mp4' if media_type == 'video' else 'jpg'
+                
+                # Create filename
+                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()[:30]
+                filename = f"{safe_title}_{i+1}_{int(time.time())}.{ext}"
+                file_path = os.path.join(PATH, filename)
+                
+                # Update progress
+                await status_msg.edit_text(
+                    f"📥 **دانلود چندرسانه‌ای اینستاگرام**\n\n📝 **عنوان:** {title[:100]}...\n📊 **پیشرفت:** {i+1}/{len(medias)}\n⏳ **وضعیت:** دانلود فایل {i+1}...",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(f"⏳ دانلود {i+1}/{len(medias)}...", callback_data="ignore")]])
+                )
+                
+                # Simple download without progress for multiple files
+                response = urllib.request.urlopen(download_url)
+                with open(file_path, 'wb') as f:
+                    f.write(response.read())
+                
+                if os.path.exists(file_path):
+                    downloaded_files.append(file_path)
+                    
+                    # Add to media group
+                    if media_type == 'video':
+                        if i == 0:  # First item gets caption
+                            media_group.append(InputMediaVideo(media=file_path, caption=create_safe_caption(title, len(medias))))
+                        else:
+                            media_group.append(InputMediaVideo(media=file_path))
+                    else:
+                        if i == 0:  # First item gets caption
+                            media_group.append(InputMediaPhoto(media=file_path, caption=create_safe_caption(title, len(medias))))
+                        else:
+                            media_group.append(InputMediaPhoto(media=file_path))
+                
+            except Exception as e:
+                print(f"Error downloading media {i+1}: {e}")
+                continue
+        
+        if not media_group:
             await status_msg.edit_text(
-                error_text,
+                "❌ **خطا در دانلود فایل‌ها**\n\n🔍 هیچ فایل قابل دانلودی یافت نشد.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
             )
-        except Exception:
-            pass
+            return
         
-        # Clean up any partial files
-        try:
-            if 'downloaded_file_path' in locals() and os.path.exists(downloaded_file_path):
-                os.remove(downloaded_file_path)
-            elif 'file_path' in locals() and os.path.exists(file_path):
+        # Update status for upload
+        await status_msg.edit_text(
+            f"📥 **دانلود چندرسانه‌ای اینستاگرام**\n\n📝 **عنوان:** {title[:100]}...\n📊 **فایل‌های آماده:** {len(media_group)}\n📤 **وضعیت:** آماده‌سازی برای ارسال...",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 در حال ارسال...", callback_data="ignore")]])
+        )
+        
+        # Send media group
+        await message.reply_media_group(media=media_group)
+        
+        # Wait a moment to ensure upload is complete
+        await asyncio.sleep(3)
+        
+        # Clean up files
+        for file_path in downloaded_files:
+            try:
                 os.remove(file_path)
-        except Exception:
-            pass
+            except Exception:
+                pass
+                
+    except Exception as e:
+        print(f"Multiple media handling error: {e}")
+        # Clean up any downloaded files on error
+        for file_path in downloaded_files:
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+        raise e
+
+
+def create_safe_caption(title, media_count=1):
+    """Create a safe caption that doesn't exceed Telegram's limits"""
+    # Truncate title if too long
+    safe_title = title[:400] + "..." if len(title) > 400 else title
+    
+    if media_count > 1:
+        caption = f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {safe_title}\n📊 **تعداد فایل:** {media_count}"
+    else:
+        caption = f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {safe_title}"
+    
+    # Ensure caption doesn't exceed 800 characters
+    if len(caption) > 800:
+        # Further truncate title
+        max_title_len = 400 - (len(caption) - len(safe_title))
+        safe_title = title[:max_title_len] + "..."
+        if media_count > 1:
+            caption = f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {safe_title}\n📊 **تعداد فایل:** {media_count}"
+        else:
+            caption = f"📥 **دانلود شده از اینستاگرام**\n\n📝 **عنوان:** {safe_title}"
+    
+    return caption

@@ -232,14 +232,14 @@ async def show_video(client: Client, message: Message):
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
-            'format': 'best[height<=480]/best',  # Prioritize lower quality for faster extraction
+            'format': 'best[height>=720]/best[height>=480]/best',  # Prioritize higher quality (720p+, then 480p+)
             'ignoreerrors': True,
             'no_check_certificate': True,
             'prefer_insecure': True, # Skip HTTPS when possible for speed
             'youtube_include_dash_manifest': False,  # Skip DASH manifest for speed
             'writesubtitles': False, # Skip subtitle extraction
             'writeautomaticsub': False, # Skip auto subtitles
-            'writethumbnail': False, # Skip thumbnail download
+            'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
         }
         
@@ -359,9 +359,9 @@ async def show_video(client: Client, message: Message):
                 'youtube_include_dash_manifest': False,
                 'writesubtitles': False,
                 'writeautomaticsub': False,
-                'writethumbnail': False,
+                'writethumbnail': True,
                 'writeinfojson': False,
-                'format': 'worst/best'  # Use worst quality for fastest fallback
+                'format': 'best[height>=720]/best[height>=480]/best'  # Maintain quality preference even in fallback
             }
             
             if ffmpeg_path:

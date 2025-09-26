@@ -90,14 +90,27 @@ async def answer(client: Client, callback_query: CallbackQuery):
     if callback_query.data == 'download_video':
         # Direct video download with best quality
         if isinstance(info, dict) and 'formats' in info and info.get('title'):
-            # Get best video format with audio
+            # Get best video format with audio, prioritizing 720p+ resolutions
             video_formats = [f for f in info['formats'] 
                             if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
             
             if video_formats:
-                # Sort by height and get best quality
-                video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
-                best_format = video_formats[0]
+                # Prioritize formats with height >= 720, then >= 480, then any available
+                hd_formats = [f for f in video_formats if (f.get('height', 0) or 0) >= 720]
+                sd_formats = [f for f in video_formats if 480 <= (f.get('height', 0) or 0) < 720]
+                
+                if hd_formats:
+                    # Sort HD formats by height (prefer 720p over higher if available)
+                    hd_formats.sort(key=lambda x: abs((x.get('height', 0) or 0) - 720))
+                    best_format = hd_formats[0]
+                elif sd_formats:
+                    # Sort SD formats by height (prefer higher resolution)
+                    sd_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                    best_format = sd_formats[0]
+                else:
+                    # Fallback to any available format
+                    video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                    best_format = video_formats[0]
                 
                 # Set format info
                 step['format_id'] = best_format['format_id']
@@ -180,13 +193,23 @@ async def answer(client: Client, callback_query: CallbackQuery):
             video_formats = [f for f in info['formats'] 
                             if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
             
-            # Sort by height (resolution)
-            video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+            # Prioritize HD formats (720p+), then SD formats (480p+), then others
+            hd_formats = [f for f in video_formats if (f.get('height', 0) or 0) >= 720]
+            sd_formats = [f for f in video_formats if 480 <= (f.get('height', 0) or 0) < 720]
+            low_formats = [f for f in video_formats if (f.get('height', 0) or 0) < 480]
             
-            # Get unique resolutions
+            # Sort each category and combine
+            hd_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+            sd_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+            low_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+            
+            # Combine in priority order: HD first, then SD, then low quality
+            prioritized_formats = hd_formats + sd_formats + low_formats
+            
+            # Get unique resolutions while maintaining priority order
             seen_resolutions = set()
             unique_formats = []
-            for fmt in video_formats:
+            for fmt in prioritized_formats:
                 resolution = fmt.get('height', 0)
                 if resolution and resolution not in seen_resolutions:
                     seen_resolutions.add(resolution)
@@ -589,10 +612,23 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 
                 sent_msg = None
                 if step['sort'] == "🎥 ویدیو":
+                    # Look for thumbnail file
+                    thumbnail_path = None
+                    base_name = os.path.splitext(file_path)[0]
+                    
+                    # Common thumbnail extensions from yt-dlp
+                    thumb_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+                    for ext in thumb_extensions:
+                        potential_thumb = base_name + ext
+                        if os.path.exists(potential_thumb):
+                            thumbnail_path = potential_thumb
+                            break
+                    
                     sent_msg = await callback_query.message.reply_video(
                         file_path,
                         caption=info.get('title'),
                         duration=int(info.get('duration', 0)),
+                        thumb=thumbnail_path,  # Use YouTube thumbnail as video cover
                         progress=on_progress2,
                         progress_args=(callback_query, client)
                     )
@@ -654,6 +690,15 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     part_file = file_path + ".part"
                     if os.path.exists(part_file):
                         os.remove(part_file)
+                    
+                    # Clean up thumbnail files
+                    base_name = os.path.splitext(file_path)[0]
+                    thumb_extensions = ['.jpg', '.jpeg', '.png', '.webp']
+                    for ext in thumb_extensions:
+                        thumb_file = base_name + ext
+                        if os.path.exists(thumb_file):
+                            os.remove(thumb_file)
+                            
                 except Exception as ce:
                     print(f"Cleanup failed: {ce}")
         else:
