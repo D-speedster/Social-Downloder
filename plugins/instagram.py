@@ -44,11 +44,20 @@ async def send_advertisement(client: Client, user_id: int):
                 text=content
             )
         elif content_type == 'photo' and file_id:
-            await client.send_photo(
-                chat_id=user_id,
-                photo=file_id,
-                caption=caption
-            )
+            try:
+                await client.send_photo(
+                    chat_id=user_id,
+                    photo=file_id,
+                    caption=caption
+                )
+            except Exception as photo_error:
+                print(f"Error sending photo: {photo_error}")
+                # Fallback to text message if photo fails
+                if caption:
+                    await client.send_message(
+                        chat_id=user_id,
+                        text=f"📢 تبلیغ\n\n{caption}"
+                    )
         elif content_type == 'video' and file_id:
             await client.send_video(
                 chat_id=user_id,
@@ -100,11 +109,20 @@ async def get_instagram_data_from_api(url):
         res = conn.getresponse()
         data = res.read()
         
+        print(f"Instagram API Response Status: {res.status}")
+        print(f"Instagram API Response Data: {data.decode('utf-8')[:500]}...")  # Log first 500 chars
+        
         if res.status != 200:
-            print(f"API Error: Status {res.status}")
+            print(f"API Error: Status {res.status}, Response: {data.decode('utf-8')}")
             return None
             
         response_data = json.loads(data.decode("utf-8"))
+        
+        # Validate response structure
+        if not response_data or 'medias' not in response_data:
+            print(f"Invalid API response structure: {response_data}")
+            return None
+            
         return response_data
         
     except Exception as e:
@@ -415,6 +433,10 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         
         # Upload file
         if media_type == 'video':
+            # Verify video file exists and has content
+            if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
+                raise Exception("Video file is empty or doesn't exist")
+            
             sent_msg = await message.reply_video(
                 video=final_path,
                 caption=safe_caption,
@@ -424,6 +446,10 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                 progress=lambda current, total: None  # Simple progress without updates
             )
         else:
+            # Verify image file exists and has content
+            if not os.path.exists(downloaded_file_path) or os.path.getsize(downloaded_file_path) == 0:
+                raise Exception("Image file is empty or doesn't exist")
+            
             sent_msg = await message.reply_photo(
                 photo=downloaded_file_path,
                 caption=safe_caption

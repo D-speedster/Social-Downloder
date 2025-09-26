@@ -107,18 +107,26 @@ async def display_video_info_with_cover(client: Client, message, info):
                     pass  # Ignore if message is already deleted
             except Exception as e:
                 print(f"Error sending photo: {e}")
-                # Fallback to text message
+                # Fallback to text message if photo fails
                 try:
-                    await message.edit_text(caption, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
-                except Exception as edit_error:
-                    print(f"Error editing message: {edit_error}")
-                    # Send new message if edit fails
+                    await message.edit_text(
+                        text=caption,
+                        reply_markup=reply_markup,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    # If edit fails, send new message
                     await client.send_message(
                         chat_id=message.chat.id,
                         text=caption,
                         reply_markup=reply_markup,
                         parse_mode=ParseMode.MARKDOWN
                     )
+                    try:
+                        await message.delete()
+                    except:
+                        pass
+
         else:
             # No thumbnail, send text message
             try:

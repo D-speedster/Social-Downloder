@@ -43,7 +43,13 @@ async def send_advertisement(client: Client, user_id: int):
         if content_type == 'text' and content:
             await client.send_message(user_id, content)
         elif content_type == 'photo' and file_id:
-            await client.send_photo(user_id, file_id, caption=caption)
+            try:
+                await client.send_photo(user_id, file_id, caption=caption)
+            except Exception as photo_error:
+                print(f"Error sending photo: {photo_error}")
+                # Fallback to text message if photo fails
+                if caption:
+                    await client.send_message(user_id, f"📢 تبلیغ\n\n{caption}")
         elif content_type == 'video' and file_id:
             await client.send_video(user_id, file_id, caption=caption)
         elif content_type == 'gif' and file_id:
@@ -508,4 +514,80 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 if shutil.which(path) or os.path.exists(path):
                     ffmpeg_path = path
                     break
-            # ... existing code ...
+        
+        # Configure yt-dlp options
+        ydl_opts = {
+            'format': step['format_id'],
+            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'cookiefile': cookie_path if cookie_path else None,
+            'ffmpeg_location': ffmpeg_path,
+            'progress_hooks': [progress_hook],
+            'noplaylist': True,
+            'extract_flat': False,
+        }
+        
+        try:
+            # Download the video
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([step['link']['webpage_url']])
+            
+            # Find the downloaded file
+            downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
+            if not downloaded_files:
+                await bot.edit_message_text(
+                    chat_id=call.message.chat.id,
+                    message_id=call.message.message_id,
+                    text="❌ خطا در دانلود فایل",
+                    reply_markup=None
+                )
+                return
+            
+            downloaded_file = os.path.join(temp_dir, downloaded_files[0])
+            file_size = os.path.getsize(downloaded_file)
+            
+            # Update message for upload
+            await bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text="📤 در حال آپلود...",
+                reply_markup=None
+            )
+            
+            # Upload the file
+            with open(downloaded_file, 'rb') as video_file:
+                if step['format_id'].startswith('audio'):
+                    await bot.send_audio(
+                        chat_id=call.message.chat.id,
+                        audio=video_file,
+                        title=step['link'].get('title', 'Audio'),
+                        duration=step['link'].get('duration'),
+                        reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
+                    )
+                else:
+                    await bot.send_video(
+                        chat_id=call.message.chat.id,
+                        video=video_file,
+                        duration=step['link'].get('duration'),
+                        width=step['link'].get('width'),
+                        height=step['link'].get('height'),
+                        caption=f"🎬 {step['link'].get('title', 'Video')}",
+                        reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
+                    )
+            
+            # Clean up
+            os.remove(downloaded_file)
+            
+            # Delete the progress message
+            await bot.delete_message(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+            
+        except Exception as e:
+            print(f"Download error: {e}")
+            await bot.edit_message_text(
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                text=f"❌ خطا در دانلود: {str(e)}",
+                reply_markup=None
+            )
