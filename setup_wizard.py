@@ -79,7 +79,7 @@ BOT_TOKEN={config['BOT_TOKEN']}
 SESSION_PATH={config.get('SESSION_PATH', '.')}
 
 # Bot Configuration
-DOWNLOAD_LOCATION=./Downloads
+DOWNLOAD_LOCATION=./downloads
 MAX_WORKERS=8
 
 # Database Configuration

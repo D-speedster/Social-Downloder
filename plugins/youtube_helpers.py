@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 import yt_dlp
 from plugins.logger_config import get_logger
+from cookie_manager import cookie_manager
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
@@ -31,11 +32,17 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             ydl_opts['progress_hooks'] = [progress_hook]
         
         # Add cookies if available
-        cookie_path = os.path.join(os.getcwd(), 'cookies', 'youtube.txt')
-        if os.path.exists(cookie_path):
-            ydl_opts['cookiefile'] = cookie_path
-            youtube_helpers_logger.debug(f"استفاده از کوکی: {cookie_path}")
-        
+        cookie_content = cookie_manager.get_cookie('youtube')
+        if cookie_content:
+            # Create temporary cookie file in Netscape format (txt)
+            cookie_file = os.path.join(temp_dir, 'cookies.txt')
+            with open(cookie_file, 'w', encoding='utf-8') as f:
+                f.write(cookie_content)
+            ydl_opts['cookiefile'] = cookie_file
+            youtube_helpers_logger.debug("کوکی یوتیوب به فرمت Netscape به yt-dlp اضافه شد")
+        else:
+            youtube_helpers_logger.warning("هیچ کوکی فعالی برای یوتیوب یافت نشد")
+
         # Download in thread to avoid blocking
         def download_sync():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -75,10 +82,16 @@ async def get_direct_download_url(url, format_id):
         }
         
         # Add cookies if available
-        cookie_path = os.path.join(os.getcwd(), 'cookies', 'youtube.txt')
-        if os.path.exists(cookie_path):
-            ydl_opts['cookiefile'] = cookie_path
-            youtube_helpers_logger.debug(f"استفاده از کوکی: {cookie_path}")
+        cookie_content = cookie_manager.get_cookie('youtube')
+        if cookie_content:
+            # Create temporary cookie file in Netscape format (txt)
+            cookie_file = os.path.join(os.getcwd(), 'temp_cookies.txt')
+            with open(cookie_file, 'w', encoding='utf-8') as f:
+                f.write(cookie_content)
+            ydl_opts['cookiefile'] = cookie_file
+            youtube_helpers_logger.debug("کوکی یوتیوب برای استخراج لینک به yt-dlp اضافه شد")
+        else:
+            youtube_helpers_logger.warning("هیچ کوکی فعالی برای یوتیوب یافت نشد")
         
         # Extract info in thread to avoid blocking
         def extract_sync():
@@ -87,19 +100,7 @@ async def get_direct_download_url(url, format_id):
                 return info
         
         info = await asyncio.to_thread(extract_sync)
-        
-        # Find the format with matching format_id
-        if 'formats' in info:
-            for fmt in info['formats']:
-                if fmt.get('format_id') == format_id:
-                    direct_url = fmt.get('url')
-                    if direct_url:
-                        youtube_helpers_logger.info("لینک مستقیم با موفقیت دریافت شد")
-                        return direct_url
-        
-        youtube_helpers_logger.warning("لینک مستقیم یافت نشد")
-        return None
-        
+        return info
     except Exception as e:
         youtube_helpers_logger.error(f"خطا در دریافت لینک مستقیم: {e}")
         return None

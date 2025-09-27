@@ -40,9 +40,9 @@ except AttributeError as e:
     sys.exit(1)
 
 # Create downloads directory with proper permissions
-DOWNLOAD_LOCATION = "./Downloads"
+DOWNLOAD_LOCATION = "./downloads"
 try:
-    os.makedirs(DOWNLOAD_LOCATION, mode=0o750, exist_ok=True)
+    os.makedirs(DOWNLOAD_LOCATION, exist_ok=True)
 except Exception as e:
     print(f"Warning: Could not create downloads directory: {e}")
 

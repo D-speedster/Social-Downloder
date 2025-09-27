@@ -1,9 +1,18 @@
+"""Cookie management utilities for YouTube and Instagram.
+
+This module provides the CookieManager class used across plugins to store,
+load, select, and convert cookies between JSON and Netscape formats. The
+implementation maintains simple usage statistics and supports toggling
+active status.
+"""
+
 import json
 import os
 import random
 import time
 from typing import List, Dict, Optional
 from pathlib import Path
+
 
 class CookieManager:
     """مدیریت استخر کوکی‌های یوتیوب و اینستاگرام"""
@@ -61,7 +70,17 @@ class CookieManager:
         if platform not in ['youtube', 'instagram']:
             return False
         
+        # Validate cookie data
+        cookie_data = cookie_data.strip()
+        if not cookie_data or len(cookie_data) < 10:
+            return False
+            
+        # Check for duplicate cookies
         cookies = self._load_cookies(platform)
+        for existing_cookie in cookies:
+            if existing_cookie.get('data') == cookie_data:
+                # Cookie already exists, don't add duplicate
+                return False
         
         # ایجاد شناسه یکتا برای کوکی
         cookie_id = len(cookies) + 1
@@ -70,8 +89,8 @@ class CookieManager:
         
         new_cookie = {
             'id': cookie_id,
-            'data': cookie_data.strip(),
-            'description': description,
+            'data': cookie_data,
+            'description': description or f"کوکی {platform} #{cookie_id}",
             'added_at': str(int(time.time())),
             'usage_count': 0,
             'last_used': None,
@@ -154,8 +173,85 @@ class CookieManager:
         """
         cookie = self.get_least_used_cookie(platform)
         if cookie:
-            return cookie.get('data')
+            cookie_data = cookie.get('data')
+            # اگر کوکی در فرمت JSON است، آن را به فرمت Netscape تبدیل کن
+            if isinstance(cookie_data, dict) or (isinstance(cookie_data, str) and cookie_data.strip().startswith('{')):
+                return self._convert_to_netscape_format(cookie_data, platform)
+            return cookie_data
         return None
+    
+    def _convert_to_netscape_format(self, cookie_data, platform: str) -> str:
+        """تبدیل کوکی JSON به فرمت Netscape
+        
+        Args:
+            cookie_data: داده کوکی در فرمت JSON
+            platform: پلتفرم (youtube یا instagram)
+        
+        Returns:
+            str: کوکی در فرمت Netscape
+        """
+        try:
+            import json
+            
+            # اگر رشته است، آن را به dict تبدیل کن
+            if isinstance(cookie_data, str):
+                cookie_dict = json.loads(cookie_data)
+            else:
+                cookie_dict = cookie_data
+            
+            # اگر کوکی تست است، کوکی واقعی ایجاد کن
+            if cookie_dict.get('test') == 'cookie':
+                domain = f".{platform}.com"
+                return f"# Netscape HTTP Cookie File\n{domain}\tTRUE\t/\tFALSE\t0\ttest_cookie\ttest_value\n"
+            
+            # تبدیل کوکی واقعی به فرمت Netscape
+            netscape_lines = ["# Netscape HTTP Cookie File"]
+            
+            # اگر کوکی آرایه‌ای از کوکی‌ها است
+            if isinstance(cookie_dict, list):
+                for cookie in cookie_dict:
+                    line = self._cookie_to_netscape_line(cookie)
+                    if line:
+                        netscape_lines.append(line)
+            else:
+                # کوکی تکی
+                line = self._cookie_to_netscape_line(cookie_dict)
+                if line:
+                    netscape_lines.append(line)
+            
+            return '\n'.join(netscape_lines)
+            
+        except Exception as e:
+            print(f"[ERROR] Cookie conversion error: {e}")
+            # در صورت خطا، کوکی اصلی را برگردان
+            return str(cookie_data)
+    
+    def _cookie_to_netscape_line(self, cookie: dict) -> str:
+        """تبدیل یک کوکی به خط Netscape
+        
+        Args:
+            cookie: دیکشنری کوکی
+        
+        Returns:
+            str: خط کوکی در فرمت Netscape
+        """
+        try:
+            domain = cookie.get('domain', '.youtube.com')
+            if not domain.startswith('.'):
+                domain = '.' + domain
+                
+            include_subdomains = 'TRUE' if domain.startswith('.') else 'FALSE'
+            path = cookie.get('path', '/')
+            secure = 'TRUE' if cookie.get('secure', False) else 'FALSE'
+            expires = cookie.get('expires', 0)
+            name = cookie.get('name', 'unknown')
+            value = cookie.get('value', '')
+            
+            return f"{domain}\t{include_subdomains}\t{path}\t{secure}\t{expires}\t{name}\t{value}"
+            
+        except Exception as e:
+            print(f"[ERROR] Cookie line conversion error: {e}")
+            return None
     
     def _update_cookie_usage(self, platform: str, cookie_id: int):
         """به‌روزرسانی آمار استفاده کوکی"""

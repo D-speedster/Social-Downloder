@@ -609,66 +609,7 @@ def _detect_cookie_dest(filename: str) -> str:
     return ''
 
 
-@Client.on_message(filters.document & filters.user(ADMIN), group=7)
-async def handle_cookie_file(_: Client, message: Message):
-    try:
-        doc = message.document
-        name = (doc.file_name or '').strip()
-        
-        # Security: Check file size (max 10MB for cookies)
-        if doc.file_size > 10 * 1024 * 1024:
-            await message.reply_text("❌ فایل خیلی بزرگ است. حداکثر اندازه: 10MB")
-            return
-            
-        dest_name = _detect_cookie_dest(name)
-        if not dest_name:
-            await message.reply_text(
-                "نام فایل مشخص نیست. لطفاً یکی از این نام‌ها را استفاده کنید:\n"
-                "- instagram.txt برای اینستاگرام\n"
-                "- youtube.txt برای یوتیوب")
-            return
-            
-        cookies_dir = os.path.join(os.getcwd(), 'cookies')
-        os.makedirs(cookies_dir, exist_ok=True, mode=0o700)  # Secure permissions
-        
-        # Use secure temporary filename
-        import secrets
-        secure_suffix = secrets.token_hex(8)
-        tmp_path = os.path.join(cookies_dir, f"tmp_{secure_suffix}_{dest_name}")
-        
-        saved_path = await message.download(file_name=tmp_path)
-        final_path = os.path.join(cookies_dir, dest_name)
-        
-        # Create backup of existing cookies
-        if os.path.exists(final_path):
-            backup_path = final_path + '.bak'
-            try:
-                shutil.copy2(final_path, backup_path)
-            except Exception:
-                pass
-                
-        try:
-            shutil.move(saved_path, final_path)
-            # Set secure file permissions
-            os.chmod(final_path, 0o600)
-        except Exception as e:
-            print(f"Cookie file move error: {e}")
-            # fallback copy
-            try:
-                shutil.copyfile(saved_path, final_path)
-                os.chmod(final_path, 0o600)
-                os.remove(saved_path)
-            except Exception as e2:
-                print(f"Cookie file copy error: {e2}")
-                await message.reply_text("❌ خطا در ذخیره فایل کوکی")
-                return
-                
-        await message.reply_text(f"✅ کوکی‌ها ذخیره شد: {dest_name}")
-    except FloodWait as fw:
-        await asyncio.sleep(fw.value)
-    except Exception as e:
-        print('[ADMIN] handle_cookie_file error:', e)
-        await message.reply_text("❌ خطا در ذخیره کوکی. لطفاً مجدداً تلاش کنید.")
+# Old cookie file handler removed - using new cookie_manager system
 
 
 def user_counter():
@@ -1309,8 +1250,8 @@ async def handle_admin_cookie_input(client: Client, message: Message):
         admin_step['ad_caption'] = ''
         return
     
-    # Check if admin is in cookie adding mode
-    if 'add_cookie' not in admin_step:
+    # Check if admin is in cookie adding mode - MUST be exact match
+    if admin_step.get('add_cookie') != 'youtube':
         return
         
     platform = admin_step['add_cookie']
@@ -1319,34 +1260,66 @@ async def handle_admin_cookie_input(client: Client, message: Message):
     # Cancel operation
     if text.lower() == '/cancel':
         del admin_step['add_cookie']
-        await message.reply_text("❌ عملیات لغو شد.")
+        await message.reply_text("❌ عملیات لغو شد.", reply_markup=admin_reply_kb())
+        return
+        
+    # Validate cookie content - must be actual cookie data, not just any text
+    if not text or len(text) < 10:
+        await message.reply_text(
+            "❌ محتوای کوکی نامعتبر است.\n\n"
+            "لطفاً محتوای کامل کوکی را ارسال کنید یا از فایل کوکی استفاده کنید."
+        )
+        return
+        
+    # Additional validation - check if it looks like cookie data
+    if not any(keyword in text.lower() for keyword in ['youtube.com', 'session', 'sid', 'auth', 'login', 'cookie']):
+        await message.reply_text(
+            "❌ متن ارسالی شبیه کوکی یوتیوب نیست.\n\n"
+            "لطفاً کوکی معتبر یوتیوب ارسال کنید یا از فایل کوکی استفاده کنید.\n\n"
+            "برای لغو عملیات /cancel را ارسال کنید."
+        )
         return
         
     # Process cookie
     try:
         from cookie_manager import cookie_manager
         
+        # Get stats before adding
+        stats_before = cookie_manager.get_cookie_stats(platform)
+        
         # Add cookie to pool
         success = cookie_manager.add_cookie(platform, text)
         
         if success:
-            stats = cookie_manager.get_cookie_stats(platform)
-            await message.reply_text(
-                f"✅ کوکی {platform} با موفقیت اضافه شد!\n\n"
-                f"📊 آمار فعلی:\n"
-                f"• مجموع کوکی‌ها: {stats['total']}\n"
-                f"• فعال: {stats['active']}\n"
-                f"• غیرفعال: {stats['inactive']}"
-            )
+            # Get stats after adding to verify
+            stats_after = cookie_manager.get_cookie_stats(platform)
+            
+            # Check if cookie was actually added
+            if stats_after['total'] > stats_before['total']:
+                await message.reply_text(
+                    f"✅ کوکی {platform} با موفقیت اضافه شد!\n\n"
+                    f"📊 آمار فعلی:\n"
+                    f"• مجموع کوکی‌ها: {stats_after['total']}\n"
+                    f"• فعال: {stats_after['active']}\n"
+                    f"• غیرفعال: {stats_after['inactive']}",
+                    reply_markup=admin_reply_kb()
+                )
+            else:
+                await message.reply_text(
+                    f"⚠️ کوکی {platform} قبلاً موجود است یا نامعتبر است.\n\n"
+                    "لطفاً کوکی جدید و معتبر ارسال کنید.",
+                    reply_markup=admin_reply_kb()
+                )
         else:
             await message.reply_text(
                 f"❌ خطا در افزودن کوکی {platform}.\n\n"
-                "لطفاً فرمت کوکی را بررسی کنید."
+                "لطفاً فرمت کوکی را بررسی کنید.",
+                reply_markup=admin_reply_kb()
             )
             
     except Exception as e:
         print(f"[ERROR] Cookie processing error: {e}")
-        await message.reply_text(f"❌ خطا در پردازش کوکی: {str(e)}")
+        await message.reply_text(f"❌ خطا در پردازش کوکی: {str(e)}", reply_markup=admin_reply_kb())
         
     # Reset admin step
     del admin_step['add_cookie']
@@ -1373,8 +1346,8 @@ async def handle_advertisement_media(client: Client, message: Message):
 @Client.on_message(filters.document & filters.user(ADMIN), group=10)
 async def handle_admin_cookie_file(client: Client, message: Message):
     """Handle cookie file input from admin"""
-    # Check if admin is in cookie adding mode
-    if 'add_cookie' not in admin_step:
+    # Check if admin is in cookie adding mode - MUST be exact match
+    if admin_step.get('add_cookie') != 'youtube':
         return
         
     platform = admin_step['add_cookie']
@@ -1384,13 +1357,17 @@ async def handle_admin_cookie_file(client: Client, message: Message):
     if not document.file_name or not (document.file_name.endswith('.txt') or document.file_name.endswith('.json')):
         await message.reply_text(
             "❌ فرمت فایل پشتیبانی نمی‌شود.\n\n"
-            "فرمت‌های مجاز: .txt, .json"
+            "فرمت‌های مجاز: .txt, .json",
+            reply_markup=admin_reply_kb()
         )
         return
         
     # Check file size (max 1MB)
     if document.file_size > 1024 * 1024:
-        await message.reply_text("❌ حجم فایل بیش از حد مجاز است. (حداکثر 1MB)")
+        await message.reply_text(
+            "❌ حجم فایل بیش از حد مجاز است. (حداکثر 1MB)",
+            reply_markup=admin_reply_kb()
+        )
         return
         
     try:
@@ -1404,29 +1381,56 @@ async def handle_admin_cookie_file(client: Client, message: Message):
         import os
         os.remove(file_path)
         
+        # Validate content
+        if not content or len(content) < 10:
+            await message.reply_text(
+                "❌ محتوای فایل کوکی نامعتبر است.\n\n"
+                "لطفاً فایل کوکی معتبر ارسال کنید.",
+                reply_markup=admin_reply_kb()
+            )
+            return
+        
         # Process cookie
         from cookie_manager import cookie_manager
+        
+        # Get stats before adding
+        stats_before = cookie_manager.get_cookie_stats(platform)
         
         success = cookie_manager.add_cookie(platform, content)
         
         if success:
-            stats = cookie_manager.get_cookie_stats(platform)
-            await message.reply_text(
-                f"✅ فایل کوکی {platform} با موفقیت پردازش شد!\n\n"
-                f"📊 آمار فعلی:\n"
-                f"• مجموع کوکی‌ها: {stats['total']}\n"
-                f"• فعال: {stats['active']}\n"
-                f"• غیرفعال: {stats['inactive']}"
-            )
+            # Get stats after adding to verify
+            stats_after = cookie_manager.get_cookie_stats(platform)
+            
+            # Check if cookie was actually added
+            if stats_after['total'] > stats_before['total']:
+                await message.reply_text(
+                    f"✅ فایل کوکی {platform} با موفقیت پردازش شد!\n\n"
+                    f"📊 آمار فعلی:\n"
+                    f"• مجموع کوکی‌ها: {stats_after['total']}\n"
+                    f"• فعال: {stats_after['active']}\n"
+                    f"• غیرفعال: {stats_after['inactive']}",
+                    reply_markup=admin_reply_kb()
+                )
+            else:
+                await message.reply_text(
+                    f"⚠️ کوکی {platform} قبلاً موجود است یا نامعتبر است.\n\n"
+                    "لطفاً فایل کوکی جدید و معتبر ارسال کنید.",
+                    reply_markup=admin_reply_kb()
+                )
         else:
             await message.reply_text(
                 f"❌ خطا در پردازش فایل کوکی {platform}.\n\n"
-                "لطفاً فرمت فایل را بررسی کنید."
+                "لطفاً فرمت فایل را بررسی کنید.",
+                reply_markup=admin_reply_kb()
             )
             
     except Exception as e:
         print(f"[ERROR] Cookie file processing error: {e}")
-        await message.reply_text(f"❌ خطا در پردازش فایل: {str(e)}")
+        await message.reply_text(
+            f"❌ خطا در پردازش فایل: {str(e)}",
+            reply_markup=admin_reply_kb()
+        )
         
     # Reset admin step
     del admin_step['add_cookie']

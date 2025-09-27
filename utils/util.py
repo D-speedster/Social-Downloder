@@ -1,6 +1,6 @@
 import math
 import datetime
-import pytube
+# import pytube  # Removed: not used anywhere
 import shutil
 import requests
 import random
@@ -31,23 +31,7 @@ def download_image(url,itag):
             shutil.copyfileobj(r.raw, f)
 
 
-def thubnail_maker(res,step_link,step_itag):
-
-    if res == "720p":
-        high_res = step_link.thumbnail_url.replace('sddefault.jpg', 'maxresdefault.jpg')
-        download_image(high_res, step_itag)
-
-    elif res == "480p":
-        mid_res = step_link.thumbnail_url.replace('sddefault.jpg', 'mqdefault.jpg')
-        download_image(mid_res, step_itag)
-
-    elif res == "360p":
-        mid_res = step_link.thumbnail_url.replace('sddefault.jpg', 'maxresdefault.jpg')
-        download_image(mid_res, step_itag)
-
-    else:
-        low_res = step_link.thumbnail_url.replace('sddefault.jpg', 'sddefault.jpg')
-        download_image(low_res, step_itag)
+# Removed thubnail_maker function as it depended on pytube and is unused
 
 
 

@@ -1,10 +1,8 @@
 mysql-connector-python
 Pyrogram==2.0.106
 instaloader
-pytube
 python-dateutil
-jdatetime
 yt-dlp
 psutil
-dotenv
+python-dotenv
 requests>=2.28.2

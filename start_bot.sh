@@ -17,7 +17,7 @@ pip install --upgrade pip
 
 # 3️⃣ Install dependencies with Pyrogram 2.x
 echo "🔹 Installing requirements..."
-pip install --upgrade pyrogram==2.0.106 tgcrypto yt-dlp pytube instaloader jdatetime mysql-connector-python python-dateutil requests
+pip install --upgrade pyrogram==2.0.106 tgcrypto yt-dlp instaloader mysql-connector-python python-dateutil python-dotenv requests
 
 # 4️⃣ Remove old sessions & Pyrogram cache
 echo "🔹 Cleaning old Pyrogram sessions..."
