@@ -443,10 +443,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
             os.remove(downloaded_file)
             
             # Delete the progress message
-            await client.delete_message(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id
-            )
+            try:
+                await call.message.delete()
+            except Exception:
+                pass  # Ignore if message is already deleted
             youtube_callback_logger.info("دانلود و آپلود با موفقیت کامل شد")
             
         except Exception as e:
