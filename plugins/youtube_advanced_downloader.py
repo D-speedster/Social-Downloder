@@ -24,6 +24,7 @@ class YouTubeAdvancedDownloader:
     def __init__(self):
         self.temp_dir = None
         self.ffmpeg_path = self._find_ffmpeg()
+        self.cookies_file = os.path.join(os.getcwd(), 'cookies', 'youtube.txt')
         advanced_logger.info("YouTubeAdvancedDownloader initialized")
     
     def _find_ffmpeg(self) -> Optional[str]:
@@ -210,39 +211,152 @@ class YouTubeAdvancedDownloader:
         advanced_logger.info(f"Found {len(unique_qualities)} mergeable qualities")
         return unique_qualities
     
-    async def download_and_merge(self, url: str, quality_info: Dict, 
-                                output_path: str, cookie_content: Optional[str] = None,
-                                progress_callback=None) -> Optional[str]:
-        """دانلود و merge ویدئو با صدا"""
-        advanced_logger.info(f"Starting download and merge for quality: {quality_info['resolution']}")
-        
-        # Create temporary directory
-        self.temp_dir = tempfile.mkdtemp(prefix='youtube_download_')
-        advanced_logger.debug(f"Created temp directory: {self.temp_dir}")
-        
+    async def download_and_merge(self, url: str, quality_info: Dict, callback=None) -> Dict:
+        """دانلود و merge ویدئو با کیفیت انتخابی"""
         try:
-            if quality_info['type'] == 'combined':
-                # Direct download of combined format
-                return await self._download_combined(url, quality_info, output_path, 
-                                                   cookie_content, progress_callback)
+            format_id = quality_info['format_id']
+            file_type = quality_info.get('type', 'video')
+            
+            # تعیین نام فایل خروجی
+            if file_type == 'audio_only':
+                output_filename = f"audio_{int(time.time())}.mp3"
             else:
-                # Download and merge separate video and audio
-                return await self._download_and_merge_separate(url, quality_info, output_path,
-                                                             cookie_content, progress_callback)
-        
-        except Exception as e:
-            advanced_logger.error(f"Download and merge failed: {e}")
-            return None
-        finally:
-            # Cleanup temp directory
-            if self.temp_dir and os.path.exists(self.temp_dir):
+                output_filename = f"video_{int(time.time())}.mp4"
+            
+            output_path = os.path.join(self.download_dir, output_filename)
+            
+            # تنظیمات yt-dlp برای merge واقعی
+            ydl_opts = {
+                'format': format_id,
+                'outtmpl': output_path,
+                'merge_output_format': 'mp4' if file_type != 'audio_only' else 'mp3',
+                'writeinfojson': False,
+                'writesubtitles': False,
+                'writeautomaticsub': False,
+                'ignoreerrors': False,
+                'no_warnings': False,
+                'extractflat': False,
+                'writethumbnail': True,  # دانلود thumbnail
+                'embedthumbnail': True,  # اضافه کردن thumbnail به فایل
+            }
+            
+            # اضافه کردن ffmpeg برای merge واقعی
+            if self.ffmpeg_path:
+                ydl_opts['ffmpeg_location'] = os.path.dirname(self.ffmpeg_path)
+            
+            # تنظیمات خاص برای ویدئو
+            if file_type != 'audio_only':
+                ydl_opts.update({
+                    'format': f"{format_id}+bestaudio/best",  # اطمینان از merge video+audio
+                    'postprocessors': [{
+                        'key': 'FFmpegVideoConvertor',
+                        'preferedformat': 'mp4',
+                    }, {
+                        'key': 'EmbedThumbnail',
+                        'already_have_thumbnail': False,
+                    }],
+                    'prefer_ffmpeg': True,
+                    'keepvideo': False,
+                })
+            else:
+                ydl_opts.update({
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }, {
+                        'key': 'EmbedThumbnail',
+                        'already_have_thumbnail': False,
+                    }],
+                })
+            
+            # Progress hook
+            def progress_hook(d):
+                if callback and d['status'] == 'downloading':
+                    try:
+                        percent = d.get('_percent_str', '0%').replace('%', '')
+                        speed = d.get('_speed_str', 'N/A')
+                        asyncio.create_task(callback(f"دانلود: {percent}% - سرعت: {speed}"))
+                    except:
+                        pass
+                elif callback and d['status'] == 'finished':
+                    asyncio.create_task(callback("در حال merge کردن فایل‌ها..."))
+            
+            ydl_opts['progress_hooks'] = [progress_hook]
+            
+            # دانلود با yt-dlp
+            loop = asyncio.get_event_loop()
+            success = await loop.run_in_executor(None, self._download_with_ytdlp, url, ydl_opts)
+            
+            if not success:
+                return {'success': False, 'error': 'دانلود ناموفق'}
+            
+            # پیدا کردن فایل نهایی
+            final_file = None
+            expected_extensions = ['.mp4', '.mp3', '.mkv', '.webm']
+            
+            for ext in expected_extensions:
+                test_path = output_path.replace('.mp4', ext).replace('.mp3', ext)
+                if os.path.exists(test_path):
+                    final_file = test_path
+                    break
+            
+            if not final_file:
+                # جستجو در پوشه دانلود
+                base_name = os.path.splitext(output_filename)[0]
+                for file in os.listdir(self.download_dir):
+                    if file.startswith(base_name) and any(file.endswith(ext) for ext in expected_extensions):
+                        final_file = os.path.join(self.download_dir, file)
+                        break
+            
+            if not final_file or not os.path.exists(final_file):
+                return {'success': False, 'error': 'فایل نهایی پیدا نشد'}
+            
+            # تأیید یکپارچگی فایل
+            is_valid = await self._verify_file_integrity(final_file, file_type)
+            if not is_valid:
+                advanced_logger.error(f"File integrity check failed: {final_file}")
+                if os.path.exists(final_file):
+                    os.remove(final_file)
+                return {'success': False, 'error': 'فایل دانلود شده معتبر نیست'}
+            
+            # تغییر نام به mp4 برای ویدئو
+            if file_type != 'audio_only' and not final_file.endswith('.mp4'):
+                new_path = final_file.rsplit('.', 1)[0] + '.mp4'
                 try:
-                    shutil.rmtree(self.temp_dir)
-                    advanced_logger.debug("Temp directory cleaned up")
+                    os.rename(final_file, new_path)
+                    final_file = new_path
                 except:
                     pass
+            
+            advanced_logger.info(f"Download completed successfully: {final_file}")
+            
+            return {
+                'success': True,
+                'file_path': final_file,
+                'file_size': os.path.getsize(final_file)
+            }
+            
+        except Exception as e:
+            advanced_logger.error(f"Download error: {e}")
+            return {'success': False, 'error': str(e)}
     
-    async def _download_combined(self, url: str, quality_info: Dict, output_path: str,
+    def _download_with_ytdlp(self, url: str, ydl_opts: Dict) -> bool:
+        """دانلود با yt-dlp"""
+        try:
+            import yt_dlp
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+            
+            advanced_logger.info("yt-dlp download completed successfully")
+            return True
+            
+        except Exception as e:
+            advanced_logger.error(f"yt-dlp download error: {e}")
+            return False
+    
+    async def _download_combined(self, url: str, quality_info: Dict, output_path: str, 
                                cookie_content: Optional[str], progress_callback) -> Optional[str]:
         """دانلود فرمت combined"""
         format_id = quality_info['format_id']
@@ -423,7 +537,147 @@ class YouTubeAdvancedDownloader:
             advanced_logger.error(f"FFmpeg execution error: {e}")
             return False
     
-    async def get_file_metadata(self, file_path: str) -> Dict:
+    def _verify_file_integrity(self, file_path: str, tool_type: str = 'ffprobe') -> bool:
+        """بررسی یکپارچگی فایل"""
+        if not os.path.exists(file_path):
+            advanced_logger.error(f"File does not exist: {file_path}")
+            return False
+        
+        try:
+            # Check file size
+            file_size = os.path.getsize(file_path)
+            if file_size < 1024:  # Less than 1KB
+                advanced_logger.error(f"File too small: {file_size} bytes")
+                return False
+            
+            # Use ffprobe to verify file integrity
+            streams = self._probe_file_streams(file_path, tool_type)
+            if not streams:
+                advanced_logger.error("No streams found in file")
+                return False
+            
+            # Check if file has expected streams
+            has_video = streams.get('has_video', False)
+            has_audio = streams.get('has_audio', False)
+            
+            if not has_video and not has_audio:
+                advanced_logger.error("File has no valid video or audio streams")
+                return False
+            
+            advanced_logger.info(f"File integrity verified: video={has_video}, audio={has_audio}")
+            return True
+            
+        except Exception as e:
+            advanced_logger.error(f"File integrity check failed: {e}")
+            return False
+            
+        except Exception as e:
+            advanced_logger.error(f"File integrity check error: {e}")
+            return False
+    
+    async def _download_audio_only(self, url: str, quality_info: Dict, output_path: str,
+                                 cookie_content: Optional[str], progress_callback) -> Optional[str]:
+        """دانلود فقط صدا"""
+        format_id = quality_info['format_id']
+        
+        ydl_opts = {
+            'format': format_id,
+            'outtmpl': output_path,
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': False,
+        }
+        
+        if progress_callback:
+            ydl_opts['progress_hooks'] = [progress_callback]
+        
+        temp_cookie_file = None
+        try:
+            if cookie_content:
+                temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_cookie_file.write(cookie_content)
+                temp_cookie_file.close()
+                ydl_opts['cookiefile'] = temp_cookie_file.name
+            
+            loop = asyncio.get_event_loop()
+            success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
+            
+            if success and os.path.exists(output_path):
+                advanced_logger.info("Audio download completed successfully")
+                return output_path
+            else:
+                advanced_logger.error("Audio download failed")
+                return None
+                
+        finally:
+            if temp_cookie_file and os.path.exists(temp_cookie_file.name):
+                try:
+                    os.unlink(temp_cookie_file.name)
+                except:
+                    pass
+    
+    async def extract_final_metadata(self, file_path: str) -> Dict:
+        """استخراج metadata نهایی از فایل"""
+        return await self.get_file_metadata(file_path)
+
+    def _probe_file_streams(self, file_path: str, ffprobe_path: str) -> Dict:
+        """بررسی streams فایل با ffprobe"""
+        try:
+            # Try to find ffprobe
+            probe_cmd = ffprobe_path
+            if not os.path.exists(ffprobe_path):
+                probe_cmd = shutil.which('ffprobe')
+                if not probe_cmd:
+                    # Try common locations
+                    common_probes = [
+                        "C:\\ffmpeg\\bin\\ffprobe.exe",
+                        "C:\\Program Files\\ffmpeg\\bin\\ffprobe.exe",
+                        "/usr/bin/ffprobe",
+                        "/usr/local/bin/ffprobe"
+                    ]
+                    for probe_path in common_probes:
+                        if os.path.exists(probe_path):
+                            probe_cmd = probe_path
+                            break
+                    else:
+                        return {}
+            
+            cmd = [
+                probe_cmd,
+                '-v', 'quiet',
+                '-print_format', 'json',
+                '-show_streams',
+                file_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                
+                stream_info = {
+                    'has_video': False,
+                    'has_audio': False,
+                    'width': 0,
+                    'height': 0
+                }
+                
+                if 'streams' in data:
+                    for stream in data['streams']:
+                        if stream.get('codec_type') == 'video':
+                            stream_info['has_video'] = True
+                            stream_info['width'] = stream.get('width', 0)
+                            stream_info['height'] = stream.get('height', 0)
+                        elif stream.get('codec_type') == 'audio':
+                            stream_info['has_audio'] = True
+                
+                return stream_info
+                
+        except Exception as e:
+            advanced_logger.error(f"Stream probe error: {e}")
+        
+        return {}
+    
+    async def extract_final_metadata(self, file_path: str) -> Dict:
         """استخراج metadata دقیق از فایل نهایی"""
         if not os.path.exists(file_path):
             return {}
@@ -525,6 +779,22 @@ class YouTubeAdvancedDownloader:
             advanced_logger.error(f"FFprobe execution error: {e}")
         
         return {}
+    
+    async def get_file_metadata(self, file_path: str) -> Dict:
+        """استخراج metadata از فایل"""
+        if not os.path.exists(file_path):
+            return {}
+        
+        # Get file size
+        file_size = os.path.getsize(file_path)
+        
+        # Use _probe_file to get detailed metadata
+        metadata = self._probe_file(file_path, 'ffprobe')
+        
+        # Add file size to metadata
+        metadata['size'] = file_size
+        
+        return metadata
 
 # Global instance
 youtube_downloader = YouTubeAdvancedDownloader()

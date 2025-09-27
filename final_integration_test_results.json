@@ -1,0 +1,95 @@
+{
+  "timestamp": "2025-09-27T10:50:30.058884",
+  "test_name": "Final Integration Test",
+  "version": "1.0",
+  "tests": {
+    "Environment Setup": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:30.064828",
+      "details": {
+        "temp_dir": "C:\\Users\\SPEEDS~1\\AppData\\Local\\Temp\\youtube_test_rn3gjgln",
+        "tools_available": true
+      }
+    },
+    "Downloader Initialization": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:30.065357",
+      "details": {
+        "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.exe",
+        "cookies_file": "C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\cookies\\youtube.txt"
+      }
+    },
+    "Selector Initialization": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:30.065423",
+      "details": {}
+    },
+    "File Operations": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:30.486433",
+      "details": {
+        "file_size": 59798,
+        "metadata_keys": [
+          "duration",
+          "bitrate",
+          "format_name",
+          "width",
+          "height",
+          "fps",
+          "video_codec",
+          "audio_codec",
+          "sample_rate",
+          "channels",
+          "size"
+        ],
+        "has_video": true,
+        "has_audio": true
+      }
+    },
+    "Quality Selection - Real URL": {
+      "status": "SKIP",
+      "timestamp": "2025-09-27T10:50:37.698179",
+      "details": {
+        "reason": "Network/API error: 0"
+      }
+    },
+    "Quality Formatting": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:37.698646",
+      "details": {
+        "formatted_text": "Unknown@30fps • 47.68 MB • avc1/none"
+      }
+    },
+    "Error Handling - Non-existent File": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:37.737618",
+      "details": {}
+    },
+    "Error Handling - Invalid URL": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:37.834976",
+      "details": {}
+    },
+    "Performance Metrics": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:38.109277",
+      "details": {
+        "metadata_extraction_time": 0.052,
+        "integrity_check_time": 0.036,
+        "stream_probing_time": 0.032,
+        "file_size": 34918
+      }
+    },
+    "Cleanup": {
+      "status": "PASS",
+      "timestamp": "2025-09-27T10:50:38.110673",
+      "details": {}
+    }
+  },
+  "summary": {
+    "total_tests": 10,
+    "passed": 9,
+    "failed": 1,
+    "success_rate": 90.0
+  }
+}

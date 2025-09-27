@@ -1,0 +1,19 @@
+{
+  "tests": {
+    "در دسترس بودن ابزارها": {
+      "ffmpeg": true,
+      "ffprobe": true,
+      "yt-dlp": true
+    },
+    "مقداردهی downloader": true,
+    "مقداردهی selector": true,
+    "توابع metadata": true,
+    "بررسی یکپارچگی فایل": true,
+    "بررسی stream ها": true
+  },
+  "summary": {
+    "total": 6,
+    "passed": 6,
+    "success_rate": 100.0
+  }
+}

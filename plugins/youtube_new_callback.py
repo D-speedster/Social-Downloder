@@ -56,7 +56,7 @@ def progress_hook(d, user_id: int, call: CallbackQuery):
                 speed = d.get('speed', 0)
                 eta = d.get('eta', 0)
                 
-                speed_text = f"{convert_size(speed)}/s" if speed else "نامشخص"
+                speed_text = f"{convert_size(2, speed)}/s" if speed else "نامشخص"
                 eta_text = f"{eta}s" if eta else "نامشخص"
                 
                 progress_text = (
@@ -180,7 +180,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     if selected_quality.get('fps', 0) > 0:
         quality_text += f"@{selected_quality['fps']}fps"
     
-    size_text = convert_size(selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
+    size_text = convert_size(2, selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
     
     download_info = (
         f"📥 **شروع دانلود**\n\n"
@@ -209,22 +209,29 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         def progress_callback(d):
             progress_hook(d, user_id, call)
         
-        # Download and merge
-        final_path = await youtube_downloader.download_and_merge(
-            url, selected_quality, output_path, cookie_content, progress_callback
+        # دانلود و merge
+        download_result = await youtube_downloader.download_and_merge(
+            url=url,
+            quality_info=selected_quality,
+            callback=progress_callback
         )
         
-        if not final_path or not os.path.exists(final_path):
-            raise Exception("دانلود ناموفق بود")
+        if not download_result.get('success'):
+            error_msg = download_result.get('error', 'خطای نامشخص در دانلود')
+            await callback_query.edit_message_text(f"❌ خطا در دانلود: {error_msg}")
+            return
+        
+        file_path = download_result['file_path']
+        file_size = download_result['file_size']
         
         # Get accurate metadata from final file
-        metadata = await youtube_downloader.get_file_metadata(final_path)
+        metadata = await youtube_downloader.get_file_metadata(file_path)
         
         download_time = time.time() - download_start
         performance_logger.info(f"[USER:{user_id}] DOWNLOAD completed in: {download_time:.2f} seconds")
         
         # Update message with completion info
-        actual_size = convert_size(metadata.get('file_size', 0))
+        actual_size = convert_size(2, metadata.get('file_size', 0))
         actual_duration = metadata.get('duration', 0)
         actual_resolution = f"{metadata.get('width', 0)}x{metadata.get('height', 0)}" if metadata.get('width') and metadata.get('height') else "نامشخص"
         
@@ -257,7 +264,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         if selected_quality['type'] == 'audio_only':
             await client.send_audio(
                 chat_id=call.message.chat.id,
-                audio=final_path,
+                audio=file_path,
                 caption=f"🎵 {quality_options['title']}\n📦 {actual_size}",
                 duration=int(actual_duration) if actual_duration else None,
                 reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
@@ -265,7 +272,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         else:
             await client.send_video(
                 chat_id=call.message.chat.id,
-                video=final_path,
+                video=file_path,
                 caption=f"🎬 {quality_options['title']}\n📊 {actual_resolution} • 📦 {actual_size}",
                 duration=int(actual_duration) if actual_duration else None,
                 width=metadata.get('width'),
@@ -284,7 +291,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         
         # Clean up file
         try:
-            os.unlink(final_path)
+            os.unlink(file_path)
         except:
             pass
         

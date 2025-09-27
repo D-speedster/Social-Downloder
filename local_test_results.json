@@ -1,0 +1,94 @@
+{
+  "metadata": {
+    "test_video_hd.mp4": {
+      "success": true,
+      "metadata": {
+        "duration": 10.0,
+        "bitrate": 6457352,
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "sample_rate": 44100,
+        "channels": 1,
+        "size": 8071690
+      }
+    },
+    "test_video_sd.mp4": {
+      "success": true,
+      "metadata": {
+        "duration": 8.0,
+        "bitrate": 1281949,
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "width": 854,
+        "height": 480,
+        "fps": 25.0,
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "sample_rate": 44100,
+        "channels": 1,
+        "size": 1281949
+      }
+    },
+    "test_audio.m4a": {
+      "success": true,
+      "metadata": {
+        "duration": 6.0,
+        "bitrate": 72044,
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "audio_codec": "aac",
+        "sample_rate": 44100,
+        "channels": 1,
+        "size": 54033
+      }
+    }
+  },
+  "integrity": {
+    "test_video_hd.mp4": {
+      "valid": true
+    },
+    "test_video_sd.mp4": {
+      "valid": true
+    },
+    "test_audio.m4a": {
+      "valid": true
+    }
+  },
+  "streams": {
+    "test_video_hd.mp4": {
+      "success": true,
+      "streams": {
+        "has_video": true,
+        "has_audio": true,
+        "width": 1920,
+        "height": 1080
+      }
+    },
+    "test_video_sd.mp4": {
+      "success": true,
+      "streams": {
+        "has_video": true,
+        "has_audio": true,
+        "width": 854,
+        "height": 480
+      }
+    },
+    "test_audio.m4a": {
+      "success": true,
+      "streams": {
+        "has_video": false,
+        "has_audio": true,
+        "width": 0,
+        "height": 0
+      }
+    }
+  },
+  "summary": {
+    "total_files": 3,
+    "metadata_success": 3,
+    "integrity_success": 3,
+    "stream_success": 3
+  }
+}

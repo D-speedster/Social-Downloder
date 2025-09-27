@@ -1,0 +1,46 @@
+{
+  "timestamp": "2025-09-27 10:25:17",
+  "summary": {
+    "total": 5,
+    "passed": 0,
+    "failed": 5,
+    "success_rate": "0.0%"
+  },
+  "results": [
+    {
+      "test": "Quality Extraction - Short Video (1080p)",
+      "status": "❌ FAIL",
+      "success": false,
+      "details": "No qualities found",
+      "timestamp": "10:24:54"
+    },
+    {
+      "test": "Quality Extraction - Music Video",
+      "status": "❌ FAIL",
+      "success": false,
+      "details": "No qualities found",
+      "timestamp": "10:24:58"
+    },
+    {
+      "test": "Quality Extraction - Educational Video",
+      "status": "❌ FAIL",
+      "success": false,
+      "details": "No qualities found",
+      "timestamp": "10:25:03"
+    },
+    {
+      "test": "Download Test",
+      "status": "❌ FAIL",
+      "success": false,
+      "details": "Could not get qualities",
+      "timestamp": "10:25:10"
+    },
+    {
+      "test": "Thumbnail Test",
+      "status": "❌ FAIL",
+      "success": false,
+      "details": "Could not get qualities",
+      "timestamp": "10:25:17"
+    }
+  ]
+}

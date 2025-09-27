@@ -1,0 +1,63 @@
+{
+  "test_timestamp": "2025-09-27T10:55:31.190027",
+  "test_type": "performance",
+  "results": {
+    "download_performance": {
+      "status": "success",
+      "results": [
+        {
+          "quality": "480p",
+          "file_size_mb": 25.0,
+          "processing_time": 0.0,
+          "download_speed": 5.2,
+          "efficiency_score": 5820.57
+        },
+        {
+          "quality": "720p",
+          "file_size_mb": 50.0,
+          "processing_time": 0.0,
+          "download_speed": 5.2,
+          "efficiency_score": 50339.7
+        },
+        {
+          "quality": "1080p",
+          "file_size_mb": 100.0,
+          "processing_time": 0.0,
+          "download_speed": 5.2,
+          "efficiency_score": 101606.2
+        },
+        {
+          "quality": "audio",
+          "file_size_mb": 5.0,
+          "processing_time": 0.0,
+          "download_speed": 5.2,
+          "efficiency_score": 4599.02
+        }
+      ],
+      "average_speed": 5.2,
+      "average_efficiency": 40591.37
+    },
+    "memory_usage": {
+      "status": "success",
+      "baseline_mb": 73.66,
+      "peak_mb": 73.7,
+      "increase_mb": 0.04,
+      "efficient": true
+    },
+    "concurrent_operations": {
+      "status": "success",
+      "total_operations": 5,
+      "successful_operations": 5,
+      "total_time": 0.0,
+      "operations_per_second": 15887.52,
+      "efficient": true
+    },
+    "utility_performance": {
+      "status": "success",
+      "conversion_time": 0.0001,
+      "keyboard_time": 0.0,
+      "total_time": 0.0001,
+      "efficient": true
+    }
+  }
+}

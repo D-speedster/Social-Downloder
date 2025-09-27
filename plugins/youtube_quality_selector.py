@@ -19,6 +19,50 @@ class YouTubeQualitySelector:
         self.downloader = youtube_downloader
         quality_selector_logger.info("YouTubeQualitySelector initialized")
     
+    async def get_available_qualities(self, url: str, cookie_content: Optional[str] = None) -> Optional[List[Dict]]:
+        """دریافت لیست کیفیت‌های موجود"""
+        quality_selector_logger.info(f"Getting available qualities for: {url}")
+        
+        try:
+            # Get video info
+            info = await self.downloader.get_video_info(url, cookie_content)
+            if not info:
+                quality_selector_logger.error("Failed to get video info")
+                return None
+            
+            # Get mergeable qualities
+            qualities = self.downloader.get_mergeable_qualities(info)
+            if not qualities:
+                quality_selector_logger.error("No mergeable qualities found")
+                return None
+            
+            quality_selector_logger.info(f"Found {len(qualities)} available qualities")
+            return qualities
+            
+        except Exception as e:
+            quality_selector_logger.error(f"Error getting available qualities: {e}")
+            return None
+
+    def format_quality_info(self, quality: Dict) -> str:
+        """فرمت کردن اطلاعات کیفیت برای نمایش"""
+        resolution = quality.get('resolution', 'Unknown')
+        fps = quality.get('fps', 0)
+        vcodec = quality.get('vcodec', 'unknown')
+        acodec = quality.get('acodec', 'unknown')
+        filesize = quality.get('filesize', 0)
+        
+        fps_text = f"@{fps}fps" if fps > 0 else ""
+        size_text = convert_size(2, filesize) if filesize else "Unknown size"
+        codec_text = f"{vcodec}/{acodec}" if vcodec != 'unknown' and acodec != 'unknown' else ""
+        
+        info_text = f"{resolution}{fps_text}"
+        if size_text:
+            info_text += f" • {size_text}"
+        if codec_text:
+            info_text += f" • {codec_text}"
+        
+        return info_text
+
     async def get_quality_options(self, url: str, cookie_content: Optional[str] = None) -> Optional[Dict]:
         """دریافت گزینه‌های کیفیت برای نمایش به کاربر"""
         quality_selector_logger.info(f"Getting quality options for: {url}")
@@ -75,7 +119,7 @@ class YouTubeQualitySelector:
             
             # File size info
             if quality['filesize']:
-                size_text = convert_size(quality['filesize'])
+                size_text = convert_size(2, quality['filesize'])
             else:
                 size_text = "~حجم"
             

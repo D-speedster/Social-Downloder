@@ -1,0 +1,264 @@
+{
+  "report_timestamp": "2025-09-27T10:59:09.651609",
+  "summary": {
+    "overall_health": "Poor",
+    "total_tests_run": 15,
+    "overall_success_rate": 63.333333333333336,
+    "key_strengths": [
+      "Error Handling & Recovery"
+    ],
+    "areas_for_improvement": [
+      "Core Integration Stability"
+    ],
+    "critical_recommendations": [
+      "مدیریت خطای عالی - سیستم بسیار مقاوم",
+      "بهینه‌سازی سرعت دانلود"
+    ]
+  },
+  "detailed_analysis": {
+    "integration_tests": {
+      "total_tests": 10,
+      "passed_tests": 9,
+      "failed_tests": 0,
+      "skipped_tests": 1,
+      "success_rate": 90.0,
+      "critical_issues": [],
+      "recommendations": []
+    },
+    "bot_integration": {
+      "total_tests": 0,
+      "passed_tests": 0,
+      "success_rate": 0,
+      "async_issues": [],
+      "recommendations": []
+    },
+    "performance_tests": {
+      "download_speed": 0,
+      "memory_usage": 0,
+      "concurrent_ops": 15887.52,
+      "performance_grade": "Poor",
+      "bottlenecks": [],
+      "recommendations": [
+        "بهینه‌سازی سرعت دانلود"
+      ]
+    },
+    "error_handling": {
+      "total_categories": 5,
+      "robust_categories": 5,
+      "overall_robustness": 100.0,
+      "weak_areas": [],
+      "recommendations": [
+        "مدیریت خطای عالی - سیستم بسیار مقاوم"
+      ]
+    }
+  },
+  "raw_data": {
+    "final_integration": {
+      "timestamp": "2025-09-27T10:50:30.058884",
+      "test_name": "Final Integration Test",
+      "version": "1.0",
+      "tests": {
+        "Environment Setup": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:30.064828",
+          "details": {
+            "temp_dir": "C:\\Users\\SPEEDS~1\\AppData\\Local\\Temp\\youtube_test_rn3gjgln",
+            "tools_available": true
+          }
+        },
+        "Downloader Initialization": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:30.065357",
+          "details": {
+            "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.exe",
+            "cookies_file": "C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\cookies\\youtube.txt"
+          }
+        },
+        "Selector Initialization": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:30.065423",
+          "details": {}
+        },
+        "File Operations": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:30.486433",
+          "details": {
+            "file_size": 59798,
+            "metadata_keys": [
+              "duration",
+              "bitrate",
+              "format_name",
+              "width",
+              "height",
+              "fps",
+              "video_codec",
+              "audio_codec",
+              "sample_rate",
+              "channels",
+              "size"
+            ],
+            "has_video": true,
+            "has_audio": true
+          }
+        },
+        "Quality Selection - Real URL": {
+          "status": "SKIP",
+          "timestamp": "2025-09-27T10:50:37.698179",
+          "details": {
+            "reason": "Network/API error: 0"
+          }
+        },
+        "Quality Formatting": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:37.698646",
+          "details": {
+            "formatted_text": "Unknown@30fps • 47.68 MB • avc1/none"
+          }
+        },
+        "Error Handling - Non-existent File": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:37.737618",
+          "details": {}
+        },
+        "Error Handling - Invalid URL": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:37.834976",
+          "details": {}
+        },
+        "Performance Metrics": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:38.109277",
+          "details": {
+            "metadata_extraction_time": 0.052,
+            "integrity_check_time": 0.036,
+            "stream_probing_time": 0.032,
+            "file_size": 34918
+          }
+        },
+        "Cleanup": {
+          "status": "PASS",
+          "timestamp": "2025-09-27T10:50:38.110673",
+          "details": {}
+        }
+      },
+      "summary": {
+        "total_tests": 10,
+        "passed": 9,
+        "failed": 1,
+        "success_rate": 90.0
+      }
+    },
+    "bot_integration": {
+      "tests": {
+        "جریان موفقیت‌آمیز دانلود": true,
+        "جریان ناموفق دانلود": true,
+        "تجزیه callback data": true,
+        "اعتبارسنجی user_data": true
+      },
+      "summary": {
+        "total": 4,
+        "passed": 4,
+        "success_rate": 100.0
+      }
+    },
+    "performance": {
+      "test_timestamp": "2025-09-27T10:55:31.190027",
+      "test_type": "performance",
+      "results": {
+        "download_performance": {
+          "status": "success",
+          "results": [
+            {
+              "quality": "480p",
+              "file_size_mb": 25.0,
+              "processing_time": 0.0,
+              "download_speed": 5.2,
+              "efficiency_score": 5820.57
+            },
+            {
+              "quality": "720p",
+              "file_size_mb": 50.0,
+              "processing_time": 0.0,
+              "download_speed": 5.2,
+              "efficiency_score": 50339.7
+            },
+            {
+              "quality": "1080p",
+              "file_size_mb": 100.0,
+              "processing_time": 0.0,
+              "download_speed": 5.2,
+              "efficiency_score": 101606.2
+            },
+            {
+              "quality": "audio",
+              "file_size_mb": 5.0,
+              "processing_time": 0.0,
+              "download_speed": 5.2,
+              "efficiency_score": 4599.02
+            }
+          ],
+          "average_speed": 5.2,
+          "average_efficiency": 40591.37
+        },
+        "memory_usage": {
+          "status": "success",
+          "baseline_mb": 73.66,
+          "peak_mb": 73.7,
+          "increase_mb": 0.04,
+          "efficient": true
+        },
+        "concurrent_operations": {
+          "status": "success",
+          "total_operations": 5,
+          "successful_operations": 5,
+          "total_time": 0.0,
+          "operations_per_second": 15887.52,
+          "efficient": true
+        },
+        "utility_performance": {
+          "status": "success",
+          "conversion_time": 0.0001,
+          "keyboard_time": 0.0,
+          "total_time": 0.0001,
+          "efficient": true
+        }
+      }
+    },
+    "error_handling": {
+      "test_timestamp": "2025-09-27T10:56:38.463191",
+      "test_type": "error_handling",
+      "results": {
+        "network_errors": {
+          "status": "success",
+          "handled_errors": 3,
+          "total_errors": 3,
+          "success_rate": 100.0
+        },
+        "file_system_errors": {
+          "status": "success",
+          "handled_errors": 4,
+          "total_errors": 4,
+          "success_rate": 100.0
+        },
+        "invalid_input_handling": {
+          "status": "success",
+          "handled_inputs": 6,
+          "total_inputs": 6,
+          "success_rate": 100.0
+        },
+        "utility_error_handling": {
+          "status": "success",
+          "handled_errors": 3,
+          "total_tests": 4,
+          "success_rate": 75.0
+        },
+        "recovery_mechanisms": {
+          "status": "success",
+          "successful_recoveries": 3,
+          "total_scenarios": 3,
+          "success_rate": 100.0
+        }
+      }
+    }
+  }
+}
