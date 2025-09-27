@@ -7,3 +7,4 @@ jdatetime
 yt-dlp
 psutil
 dotenv
+requests>=2.28.2

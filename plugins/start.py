@@ -11,6 +11,19 @@ import re
 from plugins.dashboard import _render_dashboard, _build_markup as _build_dash_markup
 # NEW: import ADMIN to show admin-only controls
 from plugins.admin import ADMIN
+import logging
+
+# Configure Start module logger
+start_logger = logging.getLogger('start_main')
+start_logger.setLevel(logging.DEBUG)
+
+# Create logs directory if it doesn't exist
+os.makedirs('./logs', exist_ok=True)
+
+start_handler = logging.FileHandler('./logs/start_main.log', encoding='utf-8')
+start_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+start_handler.setFormatter(start_formatter)
+start_logger.addHandler(start_handler)
 
 step = {
     'sp': 2,
@@ -45,9 +58,9 @@ def _store_pending_link_if_any(message: Message):
                 'text': text,
                 'ts': datetime.now().isoformat()
             }
-            print(f"[PENDING] stored link for user={uid} msg_id={message.id}")
+            start_logger.info(f"Stored pending link for user={uid} msg_id={message.id}")
     except Exception as e:
-        print(f"[PENDING] failed to store link: {e}")
+        start_logger.error(f"Failed to store pending link: {e}")
 
 
 # Build sponsor join markup dynamically (reflects latest @channel set by admin)
@@ -66,9 +79,11 @@ def sponsor_join_markup() -> InlineKeyboardMarkup:
 async def maintenance_gate_msg(client: Client, message: Message):
     try:
         if data.get('bot_status', 'ON') == 'OFF':
+            start_logger.info(f"Bot is in maintenance mode, blocking user {message.from_user.id}")
             await message.reply_text("ربات موقتا خاموش است. لطفاً بعداً مجدد تلاش کنید.")
             raise StopPropagation
-    except Exception:
+    except Exception as e:
+        start_logger.error(f"Error in maintenance gate: {e}")
         # Fail-open to avoid breaking bot if something goes wrong
         return
 
@@ -77,9 +92,11 @@ async def maintenance_gate_msg(client: Client, message: Message):
 async def maintenance_gate_cb(client: Client, callback_query: CallbackQuery):
     try:
         if data.get('bot_status', 'ON') == 'OFF':
+            start_logger.info(f"Bot is in maintenance mode, blocking callback from user {callback_query.from_user.id}")
             await callback_query.answer("ربات موقتا خاموش است.", show_alert=True)
             raise StopPropagation
-    except Exception:
+    except Exception as e:
+        start_logger.error(f"Error in maintenance gate callback: {e}")
         return
 
 # Helper to build main menu; for admins show admin panel keyboard, for others show nothing
@@ -129,7 +146,7 @@ async def join_check(_, client: Client, message: Message):
     # Security: Check if user exists
     try:
         if not message.from_user or not message.from_user.id:
-            print("[JOIN] No user information available")
+            start_logger.warning("No user information available in join check")
             return False
     except Exception:
         return False
@@ -137,7 +154,7 @@ async def join_check(_, client: Client, message: Message):
     # Admins bypass sponsor check
     try:
         if message.from_user.id in ADMIN:
-            print(f"[JOIN] admin bypass user={message.from_user.id}")
+            start_logger.info(f"Admin bypass for user={message.from_user.id}")
             return True
     except Exception:
         pass
@@ -148,21 +165,21 @@ async def join_check(_, client: Client, message: Message):
     except Exception:
         fj = True
     if not fj:
-        print(f"[JOIN] force_join disabled -> allow user={message.from_user.id}")
+        start_logger.info(f"Force join disabled, allowing user={message.from_user.id}")
         return True
         
     try:
         sponsor_tag = data.get('sponser')
         if not sponsor_tag or not sponsor_tag.strip():
-            print("[JOIN] no sponsor configured -> allow")
+            start_logger.info("No sponsor configured, allowing access")
             return True
             
         chat_ref = _resolve_sponsor_chat_id(client, sponsor_tag)
         uid = message.from_user.id
-        print(f"[JOIN] user={uid} sponsor={sponsor_tag} resolved={chat_ref}")
+        start_logger.debug(f"Checking join status for user={uid} sponsor={sponsor_tag} resolved={chat_ref}")
         
         if not chat_ref:
-            print("[JOIN] failed to resolve sponsor -> allow")
+            start_logger.warning("Failed to resolve sponsor chat, allowing access")
             return True
             
         # Resolve username to chat id if needed
@@ -170,17 +187,17 @@ async def join_check(_, client: Client, message: Message):
             try:
                 chat = await client.get_chat(chat_ref)
                 chat_id = chat.id
-                print(f"[JOIN] resolved username to chat_id={chat_id} title={getattr(chat,'title',None)} username={getattr(chat,'username',None)}")
+                start_logger.debug(f"Resolved username to chat_id={chat_id} title={getattr(chat,'title',None)}")
             except Exception as e:
-                print(f"[JOIN] failed to resolve chat {chat_ref}: {e}")
+                start_logger.error(f"Failed to resolve chat {chat_ref}: {e}")
                 return True  # Allow on resolution failure
         else:
             chat_id = chat_ref
-            print(f"[JOIN] using numeric chat_id={chat_id}")
+            start_logger.debug(f"Using numeric chat_id={chat_id}")
         try:
             status = await client.get_chat_member(chat_id=chat_id, user_id=uid)
             st = getattr(status, 'status', None)
-            print(f"[JOIN] member status for user={uid} in chat_id={chat_id} -> {st}")
+            start_logger.debug(f"Member status for user={uid} in chat_id={chat_id} -> {st}")
             # اگر کاربر عضو باشد (member, administrator, creator, restricted) اجازه دسترسی دارد
             if (
                 st in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER, ChatMemberStatus.RESTRICTED)
@@ -197,7 +214,7 @@ async def join_check(_, client: Client, message: Message):
                 )
                 return False
         except Exception as admin_error:
-            print(f"[JOIN] CHAT_ADMIN_REQUIRED or other error: {admin_error}")
+            start_logger.warning(f"CHAT_ADMIN_REQUIRED or other error: {admin_error}")
             # اگر ربات ادمین نیست، کاربر را به عضویت دعوت می‌کنیم
             _store_pending_link_if_any(message)
             await message.reply_text(
@@ -207,7 +224,7 @@ async def join_check(_, client: Client, message: Message):
             return False
 
     except UserNotParticipant:
-        print(f"[JOIN] UserNotParticipant for user={getattr(message.from_user,'id',None)}")
+        start_logger.info(f"UserNotParticipant for user={getattr(message.from_user,'id',None)}")
         _store_pending_link_if_any(message)
         await message.reply_text(
             "برای حمایت از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمهٔ ‘جوین شدم’ بزنید.",
@@ -215,7 +232,7 @@ async def join_check(_, client: Client, message: Message):
         )
         return False
     except Exception as e:
-        print(f"[JOIN] Error checking membership: {e}")
+        start_logger.error(f"Error checking membership: {e}")
         # برای جلوگیری از مشکل، بررسی عضویت را غیرفعال می‌کنیم
         return True
 
@@ -238,9 +255,11 @@ async def start(client: Client, message: Message):
     try:
         user_id = message.from_user.id if message.from_user else None
         if not user_id:
+            start_logger.warning("Start command received without user information")
             await message.reply_text("❌ خطا در شناسایی کاربر")
             return
             
+        start_logger.info(f"Start command received from user {user_id}")
         check_user = DB().check_user_register(user_id)
         welcome_text = (
             "🔴 به ربات YouTube | Instagram Save خوش آمدید\n\n"
@@ -248,19 +267,22 @@ async def start(client: Client, message: Message):
         )
         
         if check_user:
+            start_logger.debug(f"Existing user {user_id} started bot")
             await message.reply_text(welcome_text, reply_markup=build_main_menu(user_id))
             step['start'] = 1
         else:
+            start_logger.info(f"New user {user_id} registering")
             now = datetime.now().isoformat()
             try:
                 DB().register_user(user_id, now)
+                start_logger.info(f"Successfully registered new user {user_id}")
                 await message.reply_text(welcome_text, reply_markup=build_main_menu(user_id))
                 step['start'] = 1
             except Exception as e:
-                print(f"Error registering user {user_id}: {e}")
+                start_logger.error(f"Error registering user {user_id}: {e}")
                 await message.reply_text("❌ خطا در ثبت کاربر. لطفاً مجدداً تلاش کنید.")
     except Exception as e:
-        print(f"Start command error: {e}")
+        start_logger.error(f"Start command error: {e}")
         await message.reply_text("❌ خطای غیرمنتظره رخ داد")
 
 

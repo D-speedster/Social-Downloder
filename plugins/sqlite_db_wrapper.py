@@ -49,6 +49,22 @@ class DB:
                 )"""
             )
             
+            # Create jobs table for download tracking
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    url TEXT NOT NULL DEFAULT '',
+                    title TEXT NOT NULL DEFAULT '',
+                    format_id TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    progress INTEGER NOT NULL DEFAULT 0,
+                    size_bytes INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )"""
+            )
+            
             # Insert default waiting messages if they don't exist
             self.cursor.execute(
                 """INSERT OR IGNORE INTO waiting_messages (platform, message_type, message_content) 
@@ -306,3 +322,60 @@ class DB:
         """Close database connection"""
         if self.mydb:
             self.mydb.close()
+    
+    # Job management methods
+    def create_job(self, user_id: int, url: str = '', title: str = '', format_id: str = '', status: str = 'pending') -> int:
+        """Create a new download job and return its ID"""
+        try:
+            query = '''INSERT INTO jobs (user_id, url, title, format_id, status, created_at, updated_at) 
+                       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)'''
+            self.cursor.execute(query, (user_id, url, title, format_id, status))
+            self.mydb.commit()
+            return self.cursor.lastrowid
+        except sqlite3.Error as error:
+            print(f"Failed to create job: {error}")
+            return 0
+    
+    def update_job_status(self, job_id: int, status: str) -> None:
+        """Update job status"""
+        try:
+            query = 'UPDATE jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+            self.cursor.execute(query, (status, job_id))
+            self.mydb.commit()
+        except sqlite3.Error as error:
+            print(f"Failed to update job status: {error}")
+    
+    def update_job_progress(self, job_id: int, progress: int) -> None:
+        """Update job progress"""
+        try:
+            query = 'UPDATE jobs SET progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+            self.cursor.execute(query, (progress, job_id))
+            self.mydb.commit()
+        except sqlite3.Error as error:
+            print(f"Failed to update job progress: {error}")
+    
+    def get_job(self, job_id: int) -> dict:
+        """Get job by ID"""
+        try:
+            query = 'SELECT * FROM jobs WHERE id = ?'
+            self.cursor.execute(query, (job_id,))
+            row = self.cursor.fetchone()
+            if row:
+                columns = [description[0] for description in self.cursor.description]
+                return dict(zip(columns, row))
+            return {}
+        except sqlite3.Error as error:
+            print(f"Failed to get job: {error}")
+            return {}
+    
+    def get_user_jobs(self, user_id: int, limit: int = 10) -> list:
+        """Get recent jobs for a user"""
+        try:
+            query = 'SELECT * FROM jobs WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'
+            self.cursor.execute(query, (user_id, limit))
+            rows = self.cursor.fetchall()
+            columns = [description[0] for description in self.cursor.description]
+            return [dict(zip(columns, row)) for row in rows]
+        except sqlite3.Error as error:
+            print(f"Failed to get user jobs: {error}")
+            return []

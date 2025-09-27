@@ -17,6 +17,20 @@ import random
 import subprocess
 import shutil
 import sys
+import requests
+import logging
+
+# Configure Instagram logger
+instagram_logger = logging.getLogger('instagram_main')
+instagram_logger.setLevel(logging.DEBUG)
+
+# Create logs directory if it doesn't exist
+os.makedirs('./logs', exist_ok=True)
+
+instagram_handler = logging.FileHandler('./logs/instagram_main.log', encoding='utf-8')
+instagram_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+instagram_handler.setFormatter(instagram_formatter)
+instagram_logger.addHandler(instagram_handler)
 
 # Advertisement function
 async def send_advertisement(client: Client, user_id: int):
@@ -45,11 +59,40 @@ async def send_advertisement(client: Client, user_id: int):
             )
         elif content_type == 'photo' and file_id:
             try:
-                await client.send_photo(
-                    chat_id=user_id,
-                    photo=file_id,
-                    caption=caption
-                )
+                # If the file_id is a URL, download locally to avoid WEBPAGE_MEDIA_EMPTY
+                if isinstance(file_id, str) and (file_id.startswith('http://') or file_id.startswith('https://')):
+                    temp_name = f"ad_photo_{int(time.time())}.jpg"
+                    temp_path = os.path.join(PATH, temp_name)
+                    try:
+                        resp = requests.get(file_id, stream=True, timeout=20)
+                        if resp.status_code == 200:
+                            with open(temp_path, 'wb') as f:
+                                for chunk in resp.iter_content(8192):
+                                    if chunk:
+                                        f.write(chunk)
+                            if os.path.getsize(temp_path) > 0:
+                                await client.send_photo(
+                                    chat_id=user_id,
+                                    photo=temp_path,
+                                    caption=caption
+                                )
+                            else:
+                                raise Exception("Downloaded advertisement photo is empty")
+                        else:
+                            raise Exception(f"Ad photo download failed: status {resp.status_code}")
+                    finally:
+                        try:
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+                        except Exception:
+                            pass
+                else:
+                    # Telegram file_id or local path
+                    await client.send_photo(
+                        chat_id=user_id,
+                        photo=file_id,
+                        caption=caption
+                    )
             except Exception as photo_error:
                 print(f"Error sending photo: {photo_error}")
                 # Fallback to text message if photo fails
@@ -94,6 +137,7 @@ instaregex = r"^((?:https?:)?\/\/)?((?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|r
 async def get_instagram_data_from_api(url):
     """Get Instagram data using RapidAPI"""
     try:
+        instagram_logger.debug(f"شروع درخواست API برای URL: {url}")
         conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com")
         
         payload = json.dumps({"url": url})
@@ -109,10 +153,12 @@ async def get_instagram_data_from_api(url):
         res = conn.getresponse()
         data = res.read()
         
+        instagram_logger.debug(f"وضعیت پاسخ API: {res.status}")
         print(f"Instagram API Response Status: {res.status}")
         print(f"Instagram API Response Data: {data.decode('utf-8')[:500]}...")  # Log first 500 chars
         
         if res.status != 200:
+            instagram_logger.error(f"خطای API: وضعیت {res.status}, پاسخ: {data.decode('utf-8')}")
             print(f"API Error: Status {res.status}, Response: {data.decode('utf-8')}")
             return None
             
@@ -120,24 +166,29 @@ async def get_instagram_data_from_api(url):
         
         # Validate response structure
         if not response_data or 'medias' not in response_data:
+            instagram_logger.error(f"ساختار پاسخ API نامعتبر: {response_data}")
             print(f"Invalid API response structure: {response_data}")
             return None
-            
+        
+        instagram_logger.debug(f"دریافت موفق اطلاعات از API - تعداد رسانه: {len(response_data.get('medias', []))}")
         return response_data
         
     except Exception as e:
+        instagram_logger.error(f"خطای API اینستاگرام: {e}")
         print(f"Instagram API Error: {e}")
         return None
 
 async def download_file_with_progress(url, file_path, status_msg, title, type_label):
     """Download file with progress updates"""
     try:
+        instagram_logger.debug(f"شروع دانلود فایل از URL: {url}")
         import asyncio
         
         # Get file size first
         req = urllib.request.Request(url)
         with urllib.request.urlopen(req) as response:
             total_size = int(response.headers.get('Content-Length', 0))
+            instagram_logger.debug(f"حجم کل فایل: {total_size} bytes")
             
         # Download with progress
         downloaded = 0
@@ -163,6 +214,7 @@ async def download_file_with_progress(url, file_path, status_msg, title, type_la
                             percent = 0
                             size_mb = "نامشخص"
                         
+                        instagram_logger.debug(f"پیشرفت دانلود: {percent}% - {downloaded}/{total_size} bytes")
                         text = _format_status_text(title, type_label, size_mb, "در حال دانلود ...")
                         kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data="ignore")]])
                         
@@ -171,9 +223,11 @@ async def download_file_with_progress(url, file_path, status_msg, title, type_la
                         except Exception:
                             pass
         
+        instagram_logger.debug(f"دانلود کامل - فایل ذخیره شد در: {file_path}")
         return file_path, total_size
         
     except Exception as e:
+        instagram_logger.error(f"خطای دانلود فایل: {e}")
         print(f"Download error: {e}")
         raise e
 
@@ -191,9 +245,12 @@ async def download_instagram(_: Client, message: Message):
     user_id = message.from_user.id
     url = message.text.strip()
     
+    instagram_logger.info(f"درخواست دانلود اینستاگرام از کاربر {user_id}: {url}")
+    
     # Check if user is in database
     db = DB()
     if not db.check_user_register(user_id):
+        instagram_logger.warning(f"کاربر {user_id} در دیتابیس ثبت نشده")
         await message.reply_text(txt['first_message'].format(message.from_user.first_name), reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🔄 شروع مجدد", callback_data="start")]
         ]))
@@ -206,12 +263,14 @@ async def download_instagram(_: Client, message: Message):
         try:
             blocked_until = _dt.fromisoformat(blocked_until_str)
             if blocked_until > _dt.now():
+                instagram_logger.warning(f"کاربر {user_id} مسدود است تا {blocked_until}")
                 await message.reply_text("⛔ شما به دلیل تجاوز از حد مجاز روزانه موقتاً مسدود شده‌اید.\n\n⏰ لطفاً بعداً تلاش کنید.")
                 return
         except Exception:
             pass
     
     # Send initial status message
+    instagram_logger.debug(f"ارسال پیام وضعیت اولیه برای کاربر {user_id}")
     status_msg = await message.reply_text(
         "🔍 **در حال بررسی لینک اینستاگرام...**\n\n⏳ لطفاً صبر کنید...",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⏳ در حال پردازش...", callback_data="ignore")]])
@@ -219,9 +278,11 @@ async def download_instagram(_: Client, message: Message):
     
     try:
         # Get Instagram data from API
+        instagram_logger.debug(f"شروع دریافت اطلاعات از API برای URL: {url}")
         api_data = await get_instagram_data_from_api(url)
         
         if not api_data or not api_data.get('medias'):
+            instagram_logger.error(f"دریافت اطلاعات از API ناموفق برای URL: {url}")
             await status_msg.edit_text(
                 "❌ **خطا در دریافت اطلاعات**\n\n🔍 لینک اینستاگرام معتبر نیست یا در دسترس نمی‌باشد.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
@@ -233,7 +294,10 @@ async def download_instagram(_: Client, message: Message):
         medias = api_data.get('medias', [])
         post_type = api_data.get('type', 'single')
         
+        instagram_logger.debug(f"اطلاعات استخراج شد: عنوان={title}, تعداد رسانه={len(medias)}, نوع={post_type}")
+        
         if not medias:
+            instagram_logger.warning(f"هیچ رسانه‌ای یافت نشد برای URL: {url}")
             await status_msg.edit_text(
                 "❌ **فایل قابل دانلود یافت نشد**\n\n🔍 این پست ممکن است حاوی محتوای قابل دانلود نباشد.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
@@ -259,26 +323,33 @@ async def download_instagram(_: Client, message: Message):
         
         # Handle multiple media (carousel/gallery)
         if post_type == 'multiple' and len(medias) > 1:
+            instagram_logger.debug(f"پردازش چندین رسانه (کاروسل) - تعداد: {len(medias)}")
             await handle_multiple_media(_, message, status_msg, medias, title, user_id)
         else:
             # Handle single media
+            instagram_logger.debug("پردازش رسانه تکی")
             await handle_single_media(_, message, status_msg, medias[0], title, user_id)
         
         # Send advertisement after content if position is 'after' and enabled
         if ad_enabled and ad_position == 'after':
+            instagram_logger.debug("ارسال تبلیغ بعد از محتوا")
             await send_advertisement(_, user_id)
         
         # Update user download count
         db.increment_request(user_id, datetime.now().isoformat())
+        instagram_logger.debug(f"شمارنده دانلود کاربر {user_id} افزایش یافت")
         
         # Delete status message
         try:
             await status_msg.delete()
+            instagram_logger.debug("پیام وضعیت حذف شد")
         except Exception:
+            instagram_logger.warning("خطا در حذف پیام وضعیت")
             pass
     
     except Exception as e:
         error_msg = str(e)
+        instagram_logger.error(f"خطا در دانلود اینستاگرام: {error_msg}")
         print(f"Instagram download error: {error_msg}")
         
         # Handle specific errors
@@ -310,16 +381,19 @@ async def download_instagram(_: Client, message: Message):
 async def handle_single_media(client, message, status_msg, media, title, user_id):
     """Handle single media download and upload"""
     try:
+        instagram_logger.debug(f"شروع پردازش رسانه تکی برای کاربر {user_id}")
         download_url = media.get('url')
         if not download_url:
+            instagram_logger.error("URL دانلود یافت نشد")
             raise Exception("Download URL not found")
         
         # Determine file type and extension
         media_type = media.get('type', 'unknown')
+        instagram_logger.debug(f"نوع رسانه: {media_type}")
         if media_type == 'video':
             type_label = "🎥 ویدیو"
             ext = 'mp4'
-        elif media_type == 'image':
+        elif media_type == 'image' or media_type == 'photo':
             type_label = "🖼️ عکس"
             ext = 'jpg'
         else:
@@ -330,6 +404,7 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()[:50]
         filename = f"{safe_title}_{int(time.time())}.{ext}"
         file_path = os.path.join(PATH, filename)
+        instagram_logger.debug(f"مسیر فایل: {file_path}")
         
         # Update status
         await status_msg.edit_text(
@@ -338,12 +413,15 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         )
         
         # Download file
+        instagram_logger.debug(f"شروع دانلود از URL: {download_url}")
         downloaded_file_path, total_bytes = await download_file_with_progress(download_url, file_path, status_msg, title, type_label)
 
         if not os.path.exists(downloaded_file_path):
+            instagram_logger.error(f"فایل دانلود شده یافت نشد: {downloaded_file_path}")
             raise Exception("Downloaded file not found")
 
         total_mb_text = f"{(total_bytes/1024/1024):.2f}" if total_bytes else "نامشخص"
+        instagram_logger.debug(f"دانلود کامل - حجم: {total_mb_text} MB")
         
         # Update status for upload
         await status_msg.edit_text(
@@ -361,6 +439,7 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         final_path = downloaded_file_path
         try:
             if media_type == 'video':
+                instagram_logger.debug("شروع پردازش ویدیو و تولید thumbnail")
                 # Detect ffmpeg path (similar to youtube module)
                 ffmpeg_path = os.environ.get('FFMPEG_PATH')
                 try:
@@ -378,20 +457,16 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                         if shutil.which(p) or os.path.exists(p):
                             ffmpeg_path = p
                             break
-                # For Instagram most videos are <=720p; choose 1280x720 if source >=720 else 720x480
-                # Probe height using ffprobe minimal; fallback to 720x480
-                target_w, target_h = 720, 480
-                try:
-                    probe_cmd = [ffmpeg_path or 'ffmpeg', '-i', downloaded_file_path]
-                    # Quick text probe by reading stderr output size; skip heavy parsing.
-                except Exception:
-                    pass
+                
+                instagram_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
+                
                 # Prefer 1280x720 as primary
                 target_w, target_h = 1280, 720
                 # Re-encode
                 base_noext, _ = os.path.splitext(downloaded_file_path)
                 enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
                 try:
+                    instagram_logger.debug(f"شروع re-encode ویدیو به {target_w}x{target_h}")
                     vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
                     cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
                            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
@@ -405,13 +480,16 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                             pass
                         final_path = enforced_path
                         width_arg, height_arg = target_w, target_h
+                        instagram_logger.debug(f"re-encode موفق - فایل جدید: {enforced_path}")
                 except Exception as ee:
+                    instagram_logger.error(f"خطای FFmpeg re-encode: {ee}")
                     print(f"FFmpeg re-encode (IG) failed: {ee}")
                     final_path = downloaded_file_path
                 
                 # Thumbnail (<=320px, <=200KB)
                 thumb_path = f"{base_noext}_thumb.jpg"
                 try:
+                    instagram_logger.debug("شروع تولید thumbnail")
                     def make_thumb(q):
                         vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
                         cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', str(q), thumb_path]
@@ -420,25 +498,72 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                         try:
                             await asyncio.to_thread(make_thumb, q)
                             if os.path.exists(thumb_path) and os.path.getsize(thumb_path) <= 200*1024:
+                                instagram_logger.debug(f"thumbnail تولید شد با کیفیت {q}")
                                 break
                         except Exception:
                             continue
                 except Exception as te:
+                    instagram_logger.error(f"خطای تولید thumbnail: {te}")
                     print(f"IG thumbnail error: {te}")
                     thumb_path = None
+            elif media_type == 'image' or media_type == 'photo':
+                instagram_logger.debug("شروع پردازش تصویر")
+                # Normalize images to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP/PNG)
+                ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                try:
+                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                        ffmpeg_path = '/usr/bin/ffmpeg'
+                except Exception:
+                    pass
+                if not ffmpeg_path:
+                    candidates = [
+                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                        "ffmpeg",
+                        "/usr/local/bin/ffmpeg"
+                    ]
+                    for p in candidates:
+                        if shutil.which(p) or os.path.exists(p):
+                            ffmpeg_path = p
+                            break
+                
+                instagram_logger.debug(f"مسیر ffmpeg برای تصویر: {ffmpeg_path}")
+                
+                base_noext, ext0 = os.path.splitext(downloaded_file_path)
+                normalized_path = f"{base_noext}_norm.jpg"
+                try:
+                    instagram_logger.debug("شروع normalize کردن تصویر")
+                    cmd_img = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path,
+                               '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease,setsar=1',
+                               '-q:v', '2', normalized_path]
+                    await asyncio.to_thread(lambda: subprocess.run(cmd_img, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                    if os.path.exists(normalized_path) and os.path.getsize(normalized_path) > 0:
+                        try:
+                            os.remove(downloaded_file_path)
+                        except Exception:
+                            pass
+                        final_path = normalized_path
+                        instagram_logger.debug(f"normalize تصویر موفق - فایل جدید: {normalized_path}")
+                except Exception as norm_e:
+                    instagram_logger.error(f"خطای normalize تصویر: {norm_e}")
+                    print(f"Single image normalization failed: {norm_e}")
+                    final_path = downloaded_file_path
         except Exception as ie:
+            instagram_logger.error(f"خطای pipeline پردازش: {ie}")
             print(f"IG enforce pipeline error: {ie}")
             thumb_path = None
             final_path = downloaded_file_path
         
         # Upload file
+        instagram_logger.debug(f"شروع ارسال فایل - نوع: {media_type}")
         if media_type == 'video':
             # Verify video file exists and has content
             if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
+                instagram_logger.error(f"فایل ویدیو خالی یا موجود نیست: {final_path}")
                 raise Exception("Video file is empty or doesn't exist")
             
             # Send video without width/height to avoid IMAGE_PROCESS_FAILED
             try:
+                instagram_logger.debug("شروع ارسال ویدیو")
                 sent_msg = await message.reply_video(
                     video=final_path,
                     caption=safe_caption,
@@ -446,23 +571,47 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                     progress=lambda current, total: None  # Simple progress without updates
                 )
             except Exception as video_error:
+                instagram_logger.error(f"خطای ارسال ویدیو: {video_error}")
                 print(f"Video upload failed: {video_error}")
                 # Fallback: send as document if video upload fails
+                instagram_logger.debug("تلاش برای ارسال به عنوان document")
                 sent_msg = await message.reply_document(
                     document=final_path,
                     caption=safe_caption,
                     thumb=thumb_path
                 )
-        else:
+        elif media_type == 'image' or media_type == 'photo':
             # Verify image file exists and has content
-            if not os.path.exists(downloaded_file_path) or os.path.getsize(downloaded_file_path) == 0:
+            if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
+                instagram_logger.error(f"فایل تصویر خالی یا موجود نیست: {final_path}")
                 raise Exception("Image file is empty or doesn't exist")
-            
-            sent_msg = await message.reply_photo(
-                photo=downloaded_file_path,
+            try:
+                instagram_logger.debug("شروع ارسال تصویر")
+                sent_msg = await message.reply_photo(
+                    photo=final_path,
+                    caption=safe_caption
+                )
+            except Exception as photo_err:
+                instagram_logger.error(f"خطای ارسال تصویر: {photo_err}")
+                print(f"Photo upload failed: {photo_err}")
+                # Fallback: send as document
+                instagram_logger.debug("تلاش برای ارسال تصویر به عنوان document")
+                sent_msg = await message.reply_document(
+                    document=final_path,
+                    caption=safe_caption
+                )
+        else:
+            # Unknown type: send as document
+            if not os.path.exists(final_path) or os.path.getsize(final_path) == 0:
+                instagram_logger.error(f"فایل نامشخص خالی یا موجود نیست: {final_path}")
+                raise Exception("File is empty or doesn't exist")
+            instagram_logger.debug("ارسال به عنوان document")
+            sent_msg = await message.reply_document(
+                document=final_path,
                 caption=safe_caption
             )
         
+        instagram_logger.debug("ارسال فایل موفق - شروع انتظار و پاکسازی")
         # Wait a moment to ensure upload is complete
         await asyncio.sleep(2)
         
@@ -470,14 +619,19 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         try:
             if os.path.exists(final_path):
                 os.remove(final_path)
+                instagram_logger.debug(f"فایل اصلی پاک شد: {final_path}")
             if final_path != downloaded_file_path and os.path.exists(downloaded_file_path):
                 os.remove(downloaded_file_path)
+                instagram_logger.debug(f"فایل دانلود شده پاک شد: {downloaded_file_path}")
             if thumb_path and os.path.exists(thumb_path):
                 os.remove(thumb_path)
-        except Exception:
+                instagram_logger.debug(f"thumbnail پاک شد: {thumb_path}")
+        except Exception as cleanup_error:
+            instagram_logger.error(f"خطای پاکسازی فایل‌ها: {cleanup_error}")
             pass
             
     except Exception as e:
+        instagram_logger.error(f"خطای پردازش رسانه تکی: {e}")
         print(f"Single media handling error: {e}")
         raise e
 
@@ -485,6 +639,7 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
 async def handle_multiple_media(client, message, status_msg, medias, title, user_id):
     """Handle multiple media download and upload as media group"""
     try:
+        instagram_logger.debug(f"شروع پردازش چندرسانه‌ای - تعداد: {len(medias)} برای کاربر {user_id}")
         # Limit to maximum 10 media items (Telegram limit)
         medias = medias[:10]
         media_group = []
@@ -499,18 +654,22 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
         # Download all media files
         for i, media in enumerate(medias):
             try:
+                instagram_logger.debug(f"پردازش رسانه {i+1} از {len(medias)}")
                 download_url = media.get('url')
                 if not download_url:
+                    instagram_logger.warning(f"URL دانلود برای رسانه {i+1} یافت نشد")
                     continue
                 
                 # Determine file type and extension
                 media_type = media.get('type', 'image')
                 ext = 'mp4' if media_type == 'video' else 'jpg'
+                instagram_logger.debug(f"نوع رسانه {i+1}: {media_type}, پسوند: {ext}")
                 
                 # Create filename
                 safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()[:30]
                 filename = f"{safe_title}_{i+1}_{int(time.time())}.{ext}"
                 file_path = os.path.join(PATH, filename)
+                instagram_logger.debug(f"مسیر فایل رسانه {i+1}: {file_path}")
                 
                 # Update progress
                 await status_msg.edit_text(
@@ -520,7 +679,8 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                 
                 # Download file with proper error handling
                 try:
-                    download_result = await download_file_with_progress(download_url, filename, status_msg, f"⬇️ دانلود فایل {i+1}/{len(medias)}", "Instagram")
+                    instagram_logger.debug(f"شروع دانلود رسانه {i+1} از URL: {download_url}")
+                    download_result = await download_file_with_progress(download_url, file_path, status_msg, f"⬇️ دانلود فایل {i+1}/{len(medias)}", "Instagram")
                     
                     # Extract file_path from tuple (file_path, total_size)
                     if isinstance(download_result, tuple):
@@ -529,43 +689,148 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                         file_path = download_result
                         
                     if not file_path or not os.path.exists(file_path):
+                        instagram_logger.error(f"دانلود رسانه {i+1} ناموفق: فایل یافت نشد")
                         print(f"Download failed for media {i+1}: file not found")
                         continue
                         
-                    # Verify file size
-                    if os.path.getsize(file_path) == 0:
-                        print(f"Downloaded file {i+1} is empty")
-                        os.remove(file_path)
+                    # Validate file existence and size
+                    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                        instagram_logger.error(f"فایل دانلود شده رسانه {i+1} نامعتبر: {file_path}")
+                        raise Exception(f"Downloaded file invalid for item {i+1}: {file_path}")
+                
+                    # Skip unsupported media types (e.g., audio-only streams)
+                    if media_type not in ('video', 'image', 'photo'):
+                        instagram_logger.warning(f"نوع رسانه پشتیبانی نشده '{media_type}' برای آیتم {i+1}")
+                        print(f"Skipping unsupported media type '{media_type}' for item {i+1}")
+                        try:
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                        except Exception:
+                            pass
                         continue
-                        
-                except Exception as download_error:
-                    print(f"Download error for media {i+1}: {download_error}")
-                    continue
                 
-                # File exists and is valid, add to media group
-                downloaded_files.append(file_path)
-                
-                # Add to media group with error handling
-                try:
+                    # For videos in media group, enforce Telegram-friendly encoding
                     if media_type == 'video':
-                        if i == 0:  # First item gets caption
-                            media_group.append(InputMediaVideo(media=file_path, caption=create_safe_caption(title, len(medias))))
-                        else:
-                            media_group.append(InputMediaVideo(media=file_path))
-                    else:
-                        if i == 0:  # First item gets caption
-                            media_group.append(InputMediaPhoto(media=file_path, caption=create_safe_caption(title, len(medias))))
-                        else:
-                            media_group.append(InputMediaPhoto(media=file_path))
-                except Exception as media_error:
-                    print(f"Error creating media object for file {i+1}: {media_error}")
-                    continue
+                        try:
+                            instagram_logger.debug(f"شروع پردازش ویدیو برای رسانه {i+1}")
+                            ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                            try:
+                                if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                                    ffmpeg_path = '/usr/bin/ffmpeg'
+                            except Exception:
+                                pass
+                            if not ffmpeg_path:
+                                candidates = [
+                                    "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                                    "ffmpeg",
+                                    "/usr/local/bin/ffmpeg"
+                                ]
+                                for p in candidates:
+                                    if shutil.which(p) or os.path.exists(p):
+                                        ffmpeg_path = p
+                                        break
+                            instagram_logger.debug(f"مسیر ffmpeg برای رسانه {i+1}: {ffmpeg_path}")
+                            base_noext, _ = os.path.splitext(file_path)
+                            enforced_path = f"{base_noext}_720p.mp4"
+                            vf = "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                            cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', file_path, '-vf', vf,
+                                   '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                                   '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                                   enforced_path]
+                            instagram_logger.debug(f"شروع re-encode ویدیو رسانه {i+1} به 720p")
+                            await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                            if os.path.exists(enforced_path) and os.path.getsize(enforced_path) > 0:
+                                instagram_logger.debug(f"re-encode ویدیو رسانه {i+1} موفق - فایل جدید: {enforced_path}")
+                                try:
+                                    os.remove(file_path)
+                                except Exception:
+                                    pass
+                                file_path = enforced_path
+                        except Exception as reenc_err:
+                            instagram_logger.error(f"خطای re-encode ویدیو رسانه {i+1}: {reenc_err}")
+                            print(f"Media group re-encode error for item {i+1}: {reenc_err}")
                 
-            except Exception as e:
-                print(f"Error downloading media {i+1}: {e}")
+                    # For photos, normalize format to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP)
+                    if media_type == 'image' or media_type == 'photo':
+                        try:
+                            instagram_logger.debug(f"شروع پردازش تصویر رسانه {i+1}")
+                            base_noext, ext2 = os.path.splitext(file_path)
+                            if ext2.lower() not in ('.jpg', '.jpeg'):
+                                instagram_logger.debug(f"تبدیل فرمت تصویر رسانه {i+1} از {ext2} به JPEG")
+                                ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                                try:
+                                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                                        ffmpeg_path = '/usr/bin/ffmpeg'
+                                except Exception:
+                                    pass
+                                if not ffmpeg_path:
+                                    candidates = [
+                                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                                        "ffmpeg",
+                                        "/usr/local/bin/ffmpeg"
+                                    ]
+                                    for p in candidates:
+                                        if shutil.which(p) or os.path.exists(p):
+                                            ffmpeg_path = p
+                                            break
+                                normalized_path = f"{base_noext}_norm.jpg"
+                                cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', file_path,
+                                       '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease,setsar=1',
+                                       '-q:v', '2',
+                                       normalized_path]
+                                instagram_logger.debug(f"شروع تبدیل فرمت تصویر رسانه {i+1}")
+                                await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                                if os.path.exists(normalized_path) and os.path.getsize(normalized_path) > 0:
+                                    instagram_logger.debug(f"تبدیل فرمت تصویر رسانه {i+1} موفق - فایل جدید: {normalized_path}")
+                                    try:
+                                        os.remove(file_path)
+                                    except Exception:
+                                        pass
+                                    file_path = normalized_path
+                        except Exception as norm_err:
+                            instagram_logger.error(f"خطای تبدیل فرمت تصویر رسانه {i+1}: {norm_err}")
+                            print(f"Photo normalization error for item {i+1}: {norm_err}")
+                
+                    # Track final file path for cleanup
+                    downloaded_files.append(file_path)
+                    instagram_logger.debug(f"فایل رسانه {i+1} آماده برای ارسال: {file_path}")
+                
+                    # Add to media group with error handling
+                    try:
+                        if media_type == 'video':
+                            if i == 0:  # First item gets caption
+                                instagram_logger.debug(f"اضافه کردن ویدیو رسانه {i+1} با کپشن به گروه رسانه")
+                                media_group.append(InputMediaVideo(media=file_path, caption=create_safe_caption(title, len(medias))))
+                            else:
+                                instagram_logger.debug(f"اضافه کردن ویدیو رسانه {i+1} بدون کپشن به گروه رسانه")
+                                media_group.append(InputMediaVideo(media=file_path))
+                        else:
+                            if i == 0:  # First item gets caption
+                                instagram_logger.debug(f"اضافه کردن تصویر رسانه {i+1} با کپشن به گروه رسانه")
+                                media_group.append(InputMediaPhoto(media=file_path, caption=create_safe_caption(title, len(medias))))
+                            else:
+                                instagram_logger.debug(f"اضافه کردن تصویر رسانه {i+1} بدون کپشن به گروه رسانه")
+                                media_group.append(InputMediaPhoto(media=file_path))
+                    except Exception as media_error:
+                        instagram_logger.error(f"خطای ایجاد شیء رسانه برای فایل {i+1}: {media_error}")
+                        print(f"Error creating media object for file {i+1}: {media_error}")
+                        continue
+                except Exception as dl_err:
+                    instagram_logger.error(f"خطای دانلود یا آماده‌سازی فایل برای آیتم {i+1}: {dl_err}")
+                    print(f"Error downloading or preparing file for item {i+1}: {dl_err}")
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                    except Exception:
+                        pass
+                    continue
+            except Exception as item_err:
+                instagram_logger.error(f"خطای پردازش آیتم {i+1}: {item_err}")
+                print(f"Error processing item {i+1}: {item_err}")
                 continue
         
         if not media_group:
+            instagram_logger.warning("هیچ رسانه‌ای برای ارسال آماده نشد")
             await status_msg.edit_text(
                 "❌ **خطا در دانلود فایل‌ها**\n\n🔍 هیچ فایل قابل دانلودی یافت نشد.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
@@ -573,25 +838,59 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
             return
         
         # Update status for upload
+        instagram_logger.debug(f"آماده‌سازی برای ارسال {len(media_group)} رسانه")
         await status_msg.edit_text(
             f"📥 **دانلود چندرسانه‌ای اینستاگرام**\n\n📝 **عنوان:** {title[:100]}...\n📊 **فایل‌های آماده:** {len(media_group)}\n📤 **وضعیت:** آماده‌سازی برای ارسال...",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 در حال ارسال...", callback_data="ignore")]])
         )
         
         # Send media group
-        await message.reply_media_group(media=media_group)
+        try:
+            instagram_logger.debug("شروع ارسال گروه رسانه")
+            await message.reply_media_group(media=media_group)
+            instagram_logger.debug("ارسال گروه رسانه موفق")
+        except Exception as group_error:
+            instagram_logger.error(f"خطای ارسال گروه رسانه: {group_error}")
+            print(f"Media group upload failed: {group_error}")
+            # Fallback: send items one-by-one
+            instagram_logger.debug("شروع ارسال تک‌تک رسانه‌ها به عنوان fallback")
+            for idx, m in enumerate(media_group):
+                try:
+                    if isinstance(m, InputMediaVideo):
+                        try:
+                            instagram_logger.debug(f"ارسال ویدیو {idx+1} به صورت جداگانه")
+                            await message.reply_video(video=m.media, caption=m.caption if idx == 0 else None)
+                        except Exception as ve:
+                            instagram_logger.error(f"خطای ارسال ویدیو {idx+1}: {ve}")
+                            print(f"Fallback video send failed for item {idx+1}: {ve}")
+                            await message.reply_document(document=m.media, caption=m.caption if idx == 0 else None)
+                    elif isinstance(m, InputMediaPhoto):
+                        try:
+                            instagram_logger.debug(f"ارسال تصویر {idx+1} به صورت جداگانه")
+                            await message.reply_photo(photo=m.media, caption=m.caption if idx == 0 else None)
+                        except Exception as pe:
+                            instagram_logger.error(f"خطای ارسال تصویر {idx+1}: {pe}")
+                            print(f"Fallback photo send failed for item {idx+1}: {pe}")
+                            await message.reply_document(document=m.media, caption=m.caption if idx == 0 else None)
+                except Exception as item_err:
+                    instagram_logger.error(f"خطای ارسال آیتم {idx+1}: {item_err}")
+                    print(f"Error sending individual item {idx+1}: {item_err}")
         
         # Wait a moment to ensure upload is complete
         await asyncio.sleep(3)
         
         # Clean up files
+        instagram_logger.debug(f"شروع پاکسازی {len(downloaded_files)} فایل")
         for file_path in downloaded_files:
             try:
                 os.remove(file_path)
-            except Exception:
+                instagram_logger.debug(f"فایل پاک شد: {file_path}")
+            except Exception as cleanup_err:
+                instagram_logger.error(f"خطای پاکسازی فایل {file_path}: {cleanup_err}")
                 pass
                 
     except Exception as e:
+        instagram_logger.error(f"خطای کلی در پردازش چندرسانه‌ای: {e}")
         print(f"Multiple media handling error: {e}")
         # Clean up any downloaded files on error
         for file_path in downloaded_files:

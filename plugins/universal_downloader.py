@@ -10,6 +10,17 @@ from plugins.instagram import send_advertisement, download_file_with_progress
 from plugins.db_wrapper import DB
 from plugins import constant
 from datetime import datetime as _dt
+import logging
+
+# Configure Universal Downloader logger
+os.makedirs('./logs', exist_ok=True)
+universal_logger = logging.getLogger('universal_downloader')
+universal_logger.setLevel(logging.DEBUG)
+
+universal_handler = logging.FileHandler('./logs/universal_downloader.log', encoding='utf-8')
+universal_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+universal_handler.setFormatter(universal_formatter)
+universal_logger.addHandler(universal_handler)
 
 # Use the same database system as Instagram handler
 txt = constant.TEXT
@@ -44,10 +55,11 @@ def get_universal_data_from_api(url):
         conn.close()
         
         response_data = json.loads(data.decode("utf-8"))
-        print(f"API Response: {response_data}")
+        universal_logger.info(f"API Response received for URL: {url}")
+        universal_logger.debug(f"API Response data: {response_data}")
         return response_data
     except Exception as e:
-        print(f"API Error: {e}")
+        universal_logger.error(f"API Error for URL {url}: {e}")
         return None
 
 async def handle_universal_link(client: Client, message: Message):

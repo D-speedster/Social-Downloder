@@ -1,80 +1,43 @@
-import shutil
-import requests
-import asyncio
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.enums import ParseMode
-import json
 import os
-import re
-from pytube import YouTube
-from plugins.start import step,join
-from pyrogram.types import Message, CallbackQuery
-from utils.util import convert_size,thubnail_maker
-import random
-from plugins import constant
-from plugins.db_wrapper import DB
-from datetime import datetime, timedelta
-from yt_dlp import YoutubeDL
-from pyrogram.errors import MessageNotModified
-import subprocess
 import sys
+import json
+import time
+import shutil
+import asyncio
+import yt_dlp
+from datetime import datetime
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
+from pyrogram.enums import ParseMode
+from pyrogram.errors import MessageNotModified
+from plugins.start import step
+from plugins.sqlite_db_wrapper import DB
+from plugins.logger_config import get_logger
+from plugins.youtube_helpers import download_youtube_file, get_direct_download_url, safe_edit_text
+from plugins import constant
+from utils.util import convert_size
+import random
+import subprocess
 
-# Advertisement function
-async def send_advertisement(client: Client, user_id: int):
-    """Send advertisement to user based on database settings"""
-    try:
-        # Load advertisement settings from database
-        with open('plugins/database.json', 'r', encoding='utf-8') as f:
-            db_data = json.load(f)
-        
-        ad_settings = db_data.get('advertisement', {})
-        
-        # Check if advertisement is enabled
-        if not ad_settings.get('enabled', False):
-            return
-        
-        content_type = ad_settings.get('content_type')
-        content = ad_settings.get('content')
-        file_id = ad_settings.get('file_id')
-        caption = ad_settings.get('caption', '')
-        
-        if content_type == 'text' and content:
-            await client.send_message(user_id, content)
-        elif content_type == 'photo' and file_id:
-            try:
-                await client.send_photo(user_id, file_id, caption=caption)
-            except Exception as photo_error:
-                print(f"Error sending photo: {photo_error}")
-                # Fallback to text message if photo fails
-                if caption:
-                    await client.send_message(user_id, f"📢 تبلیغ\n\n{caption}")
-        elif content_type == 'video' and file_id:
-            await client.send_video(user_id, file_id, caption=caption)
-        elif content_type == 'gif' and file_id:
-            await client.send_animation(user_id, file_id, caption=caption)
-        elif content_type == 'sticker' and file_id:
-            await client.send_sticker(user_id, file_id)
-        elif content_type == 'audio' and file_id:
-            await client.send_audio(user_id, file_id, caption=caption)
-            
-    except Exception as e:
-        print(f"Error sending advertisement: {e}")
+# Initialize logger
+youtube_callback_logger = get_logger('youtube_callback')
 
 previousprogress_download = 0
 previousprogress_upload = 0
 
-
 PATH = constant.PATH
-txt =constant.TEXT
+txt = constant.TEXT
 data = constant.DATA
 
 
 @Client.on_callback_query(filters.regex(r'^(1|2|3|_file|_link|\d+(vd|vc)|download_video|download_audio)$'))
 async def answer(client: Client, callback_query: CallbackQuery):
+    youtube_callback_logger.info(f"شروع پردازش callback query از کاربر {callback_query.from_user.id}")
+    youtube_callback_logger.debug(f"Callback data: {callback_query.data}")
+    
     # Get video info from step for yt-dlp handlers
     info = step.get('link', {})
+    youtube_callback_logger.debug(f"اطلاعات ویدیو: title={info.get('title', 'نامشخص')}, duration={info.get('duration', 'نامشخص')}")
     loop = asyncio.get_running_loop()
 
     # Helper to safely edit message text without raising on same content
@@ -332,10 +295,26 @@ async def answer(client: Client, callback_query: CallbackQuery):
         )
 
     elif callback_query.data == '_file':
+        youtube_callback_logger.info(f"کاربر {callback_query.from_user.id} انتخاب کرد: دریافت فایل")
+        youtube_callback_logger.debug(f"فرمت انتخابی: {step.get('sort', 'نامشخص')}, حجم: {step.get('filesize', 'نامشخص')}")
+        
+        # بررسی وجود اطلاعات ویدیو
+        if not info or not info.get('title'):
+            youtube_callback_logger.error("اطلاعات ویدیو در step موجود نیست")
+            await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست. لطفاً دوباره تلاش کنید.", show_alert=True)
+            return
+            
+        # بررسی وجود format_id
+        if not step.get('format_id'):
+            youtube_callback_logger.error("format_id در step موجود نیست")
+            await callback_query.answer("❌ فرمت انتخاب نشده. لطفاً ابتدا فرمت مورد نظر را انتخاب کنید.", show_alert=True)
+            return
+        
         # Enforce daily blocked_until if set
         try:
             now = datetime.now()
             blocked_until_str = DB().get_blocked_until(callback_query.from_user.id)
+            youtube_callback_logger.debug(f"بررسی محدودیت نرخ برای کاربر {callback_query.from_user.id}")
             if blocked_until_str:
                 bu = None
                 try:
@@ -347,11 +326,13 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         bu = None
                 if bu and now < bu:
                     seconds = int((bu - now).total_seconds())
+                    youtube_callback_logger.warning(f"کاربر {callback_query.from_user.id} محدود شده تا {bu}")
                     await callback_query.message.reply_text(txt['rate_limit'].format(seconds=seconds))
                     return
         except Exception as e:
-            print(f"Error checking blocked_until: {e}")
+            youtube_callback_logger.error(f"خطا در بررسی محدودیت: {e}")
 
+        youtube_callback_logger.info(f"شروع دانلود برای کاربر {callback_query.from_user.id}")
         # نمایش فوری پیام شروع دانلود به کاربر
         await safe_edit_text(
             f"🚀 **شروع دانلود**\n\n"
@@ -362,232 +343,176 @@ async def answer(client: Client, callback_query: CallbackQuery):
             parse_mode=ParseMode.MARKDOWN
         )
 
-        global previousprogress_download, previousprogress_upload
-        previousprogress_download = 0
-        previousprogress_upload = 0
-        step['random'] = random.randint(0, 500)
-
-        # Create dashboard job as pending
-        try:
-            job_id = DB().create_job(
-                callback_query.from_user.id,
-                info.get('title', 'Unknown'),
-                status='pending',
-                size_bytes=step.get('size_bytes'),
-                link=step.get('format_url')
-            )
-            step['job_id'] = job_id
-        except Exception:
-            step['job_id'] = 0
-
-        # Helpers for formatted status and safe edits with inline progress button
-        def _format_status_text(name: str, sort: str, size_str: str, status: str) -> str:
-            return (
-                f"🏷️ عنوان:\n{name}\n\n"
-                f"🎛️ نوع: {sort}\n"
-                f"💾 حجم: {size_str}\n"
-                f"⏳ وضعیت: {status}"
-            )
-
-        async def _safe_edit_progress(text: str, percent: int):
-            try:
-                await callback_query.edit_message_text(
-                    text,
-                    reply_markup=InlineKeyboardMarkup(
-                        [[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data='noop')]]
-                    )
-                )
-            except MessageNotModified:
-                pass
-            except Exception:
-                pass
+        # Initialize progress variables
+        progress = 0
+        start_time = time.time()
         
-        def progress_hook(d):
-            global previousprogress_download
+        # Create job in database
+        job_id = DB().create_job(
+            user_id=callback_query.from_user.id,
+            url=info.get('webpage_url', ''),
+            title=info.get('title', ''),
+            format_id=step.get('format_id', ''),
+            status='downloading'
+        )
+        youtube_callback_logger.info(f"ایجاد job با ID: {job_id}")
+
+        def status_hook(d):
+            nonlocal progress, start_time
             if d['status'] == 'downloading':
-                # بهبود محاسبه درصد پیشرفت برای فرگمنت‌ها
-                total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate')
-                downloaded_bytes = d.get('downloaded_bytes', 0)
-                
-                # اگر فرگمنت‌ها وجود دارند، از آنها استفاده کن
-                fragment_index = d.get('fragment_index')
-                fragment_count = d.get('fragment_count')
-                
-                if fragment_index is not None and fragment_count is not None and fragment_count > 0:
-                    # محاسبه درصد بر اساس فرگمنت‌ها
-                    percent = int((fragment_index / fragment_count) * 100)
-                elif total_bytes and downloaded_bytes:
-                    # محاسبه درصد بر اساس بایت‌ها
-                    percent = int((downloaded_bytes / total_bytes) * 100)
-                else:
-                    # اگر هیچ اطلاعاتی نداریم، از درصد قبلی استفاده کن
-                    percent = previousprogress_download
-                
-                # فقط هر 3% به‌روزرسانی کن تا UI spam نشود
-                if percent > previousprogress_download and (percent - previousprogress_download) >= 3:
-                    previousprogress_download = percent
-                    size_str = f"{(total_bytes/1024/1024):.2f} MB" if total_bytes else (step.get('filesize') or 'نامشخص')
-                    
-                    # نمایش اطلاعات فرگمنت در صورت وجود
-                    status_text = "در حال دانلود..."
-                    
-                    # Update job status occasionally to reduce DB writes
-                    try:
-                        if step.get('job_id') and percent % 10 == 0:  # Update DB every 10%
-                            DB().update_job_status(
-                                step['job_id'],
-                                'downloading',
-                                link=step.get('format_url'),
-                                size_bytes=int(total_bytes) if total_bytes else None
-                            )
-                    except Exception:
-                        pass
-                    try:
-                        asyncio.run_coroutine_threadsafe(
-                            _safe_edit_progress(
-                                _format_status_text(
-                                    info.get('title'), 
-                                    step['sort'],
-                                    size_str,
-                                    status_text
-                                ),
-                                percent
-                            ),
-                            loop
-                        )
-                    except Exception:
-                        pass
-            elif d['status'] == 'finished':
-                total_bytes = d.get('total_bytes')
-                size_str = f"{(total_bytes/1024/1024):.2f} MB" if total_bytes else (step.get('filesize') or 'نامشخص')
-                # Mark job as ready (download finished, before upload)
                 try:
-                    if step.get('job_id'):
-                        DB().update_job_status(
-                            step['job_id'],
-                            'ready',
-                            link=step.get('format_url'),
-                            size_bytes=int(total_bytes) if total_bytes else step.get('size_bytes')
-                        )
-                except Exception:
-                    pass
-                asyncio.run_coroutine_threadsafe(
-                    _safe_edit_progress(
-                        _format_status_text(
-                            info.get('title'), 
-                            step['sort'],
-                            size_str,
-                            "دانلود با موفیقت به پایان رسید ✅\nآپلود فایل به‌زودی آغاز می‌گردد"
-                        ),
-                        100
-                    ),
-                    loop
-                )
+                    if 'total_bytes' in d:
+                        progress = int((d['downloaded_bytes'] / d['total_bytes']) * 100)
+                    elif 'total_bytes_estimate' in d:
+                        progress = int((d['downloaded_bytes'] / d['total_bytes_estimate']) * 100)
+                    else:
+                        progress = 0
+                    
+                    # Update job status
+                    DB().update_job_progress(job_id, progress)
+                    youtube_callback_logger.debug(f"پیشرفت دانلود: {progress}%")
+                except Exception as e:
+                    youtube_callback_logger.error(f"خطا در محاسبه پیشرفت: {e}")
 
-        filename = f"video_{step['random']}.{step['ext']}" if step['sort'] == "🎥 ویدیو" else f"audio_{step['random']}.{step['ext']}"
-        downloads_dir = os.path.join(os.getcwd(), 'Downloads')
-        try:
-            os.makedirs(downloads_dir, exist_ok=True)
-        except Exception:
-            pass
-        file_path = os.path.join(downloads_dir, filename)
-        
-        # Configure yt-dlp with cookies for authentication
-        cookies_path = os.path.join(os.getcwd(), 'cookies', 'youtube.txt')
-        if not os.path.exists(cookies_path):
-            print(f"Warning: YouTube cookies file not found at {cookies_path}")
-            
-        # Security: Use environment variable for ffmpeg path or auto-detect
-        ffmpeg_path = os.environ.get('FFMPEG_PATH')
-        try:
-            if sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
-                ffmpeg_path = '/usr/bin/ffmpeg'
-        except Exception:
-            pass
-        if not ffmpeg_path:
-            common_paths = [
-                "C:\\ffmpeg\\bin\\ffmpeg.exe",  # Windows
-                "ffmpeg",                      # In PATH
-                "/usr/local/bin/ffmpeg"        # macOS or custom
-            ]
-            for path in common_paths:
-                if shutil.which(path) or os.path.exists(path):
-                    ffmpeg_path = path
+        async def progress_display():
+            while progress < 100:
+                try:
+                    elapsed = time.time() - start_time
+                    await safe_edit_text(
+                        f"⬇️ **در حال دانلود**\n\n"
+                        f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                        f"📊 پیشرفت: {progress}%\n"
+                        f"⏱️ زمان سپری شده: {int(elapsed)}s\n"
+                        f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+                        f"💾 حجم: {step.get('filesize', 'نامشخص')}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    await asyncio.sleep(2)
+                except Exception as e:
+                    youtube_callback_logger.error(f"خطا در نمایش پیشرفت: {e}")
                     break
-        
-        # Configure yt-dlp options
-        ydl_opts = {
-            'format': step['format_id'],
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
-            'cookiefile': cookie_path if cookie_path else None,
-            'ffmpeg_location': ffmpeg_path,
-            'progress_hooks': [progress_hook],
-            'noplaylist': True,
-            'extract_flat': False,
-        }
-        
+
+        # Start progress display task
+        progress_task = asyncio.create_task(progress_display())
+
         try:
-            # Download the video
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([step['link']['webpage_url']])
-            
-            # Find the downloaded file
-            downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
-            if not downloaded_files:
-                await bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text="❌ خطا در دانلود فایل",
-                    reply_markup=None
-                )
-                return
-            
-            downloaded_file = os.path.join(temp_dir, downloaded_files[0])
-            file_size = os.path.getsize(downloaded_file)
-            
-            # Update message for upload
-            await bot.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text="📤 در حال آپلود...",
-                reply_markup=None
+            # Download the file
+            youtube_callback_logger.info("شروع دانلود فایل")
+            downloaded_file = await download_youtube_file(
+                info.get('webpage_url', ''),
+                step.get('format_id', ''),
+                status_hook
             )
             
-            # Upload the file
-            with open(downloaded_file, 'rb') as video_file:
-                if step['format_id'].startswith('audio'):
-                    await bot.send_audio(
-                        chat_id=call.message.chat.id,
-                        audio=video_file,
-                        title=step['link'].get('title', 'Audio'),
-                        duration=step['link'].get('duration'),
-                        reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-                    )
-                else:
-                    await bot.send_video(
-                        chat_id=call.message.chat.id,
-                        video=video_file,
-                        duration=step['link'].get('duration'),
-                        width=step['link'].get('width'),
-                        height=step['link'].get('height'),
-                        caption=f"🎬 {step['link'].get('title', 'Video')}",
-                        reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-                    )
+            # Stop progress display
+            progress_task.cancel()
+            progress = 100
+            
+            # Update job as completed
+            DB().update_job_status(job_id, 'completed')
+            youtube_callback_logger.info(f"دانلود کامل شد: {downloaded_file}")
+
+            # Upload to Telegram
+            await safe_edit_text(
+                f"⬆️ **در حال آپلود به تلگرام**\n\n"
+                f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                f"📁 فایل: {os.path.basename(downloaded_file)}\n"
+                f"💾 حجم: {step.get('filesize', 'نامشخص')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+            # Send the file
+            call = callback_query
+            if step.get('sort') == '🎥 ویدیو':
+                await client.send_video(
+                    chat_id=call.message.chat.id,
+                    video=downloaded_file,
+                    caption=f"🎬 {info.get('title', 'Video')}",
+                    reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
+                )
+            else:
+                await client.send_audio(
+                    chat_id=call.message.chat.id,
+                    audio=downloaded_file,
+                    caption=f"🎵 {info.get('title', 'Audio')}",
+                    reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
+                )
             
             # Clean up
+            youtube_callback_logger.info("پاک‌سازی فایل‌های موقت")
             os.remove(downloaded_file)
             
             # Delete the progress message
-            await bot.delete_message(
+            await client.delete_message(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id
             )
+            youtube_callback_logger.info("دانلود و آپلود با موفقیت کامل شد")
             
         except Exception as e:
-            print(f"Download error: {e}")
-            await bot.edit_message_text(
+            youtube_callback_logger.error(f"خطا در دانلود: {e}")
+            await client.edit_message_text(
                 chat_id=call.message.chat.id,
                 message_id=call.message.message_id,
                 text=f"❌ خطا در دانلود: {str(e)}",
                 reply_markup=None
             )
+            # Update job as failed
+            DB().update_job_status(job_id, 'failed')
+
+    elif callback_query.data == '_link':
+        youtube_callback_logger.info(f"کاربر {callback_query.from_user.id} انتخاب کرد: دریافت لینک")
+        youtube_callback_logger.debug(f"فرمت انتخابی: {step.get('sort', 'نامشخص')}, حجم: {step.get('filesize', 'نامشخص')}")
+        
+        # بررسی وجود اطلاعات ویدیو
+        if not info or not info.get('title'):
+            youtube_callback_logger.error("اطلاعات ویدیو در step موجود نیست")
+            await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست. لطفاً دوباره تلاش کنید.", show_alert=True)
+            return
+            
+        # بررسی وجود format_id
+        if not step.get('format_id'):
+            youtube_callback_logger.error("format_id در step موجود نیست")
+            await callback_query.answer("❌ فرمت انتخاب نشده. لطفاً ابتدا فرمت مورد نظر را انتخاب کنید.", show_alert=True)
+            return
+
+        try:
+            # Get direct download URL
+            youtube_callback_logger.info("دریافت لینک مستقیم دانلود")
+            direct_url = await get_direct_download_url(
+                info.get('webpage_url', ''),
+                step.get('format_id', '')
+            )
+            
+            if direct_url:
+                await safe_edit_text(
+                    f"🔗 **لینک دانلود مستقیم**\n\n"
+                    f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                    f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+                    f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                    f"🔗 لینک: {direct_url}\n\n"
+                    f"⚠️ توجه: این لینک موقت است و ممکن است پس از مدتی منقضی شود.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                youtube_callback_logger.info("لینک مستقیم با موفقیت ارسال شد")
+            else:
+                await safe_edit_text(
+                    f"❌ **خطا در دریافت لینک**\n\n"
+                    f"متأسفانه نتوانستیم لینک مستقیم دانلود را دریافت کنیم.\n"
+                    f"لطفاً گزینه 'دریافت فایل' را انتخاب کنید.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                youtube_callback_logger.error("نتوانست لینک مستقیم دریافت کند")
+                
+        except Exception as e:
+            youtube_callback_logger.error(f"خطا در دریافت لینک مستقیم: {e}")
+            await safe_edit_text(
+                f"❌ **خطا در دریافت لینک**\n\n"
+                f"خطا: {str(e)}\n"
+                f"لطفاً گزینه 'دریافت فایل' را انتخاب کنید.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    else:
+        youtube_callback_logger.warning(f"callback_query.data ناشناخته: {callback_query.data}")
+        await callback_query.answer("❌ گزینه نامعتبر", show_alert=True)

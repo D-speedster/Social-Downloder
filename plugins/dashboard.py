@@ -2,6 +2,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from typing import List, Dict, Optional
+import logging
+import os
 
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
@@ -9,6 +11,16 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from plugins.db_wrapper import DB
 from plugins import constant
 from utils.util import convert_size
+
+# Configure Dashboard logger
+os.makedirs('./logs', exist_ok=True)
+dashboard_logger = logging.getLogger('dashboard_main')
+dashboard_logger.setLevel(logging.DEBUG)
+
+dashboard_handler = logging.FileHandler('./logs/dashboard_main.log', encoding='utf-8')
+dashboard_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+dashboard_handler.setFormatter(dashboard_formatter)
+dashboard_logger.addHandler(dashboard_handler)
 
 PATH = constant.PATH
 TXT = constant.TEXT

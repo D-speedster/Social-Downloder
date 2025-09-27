@@ -1,4 +1,5 @@
 import time
+import logging
 
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 import json, os
@@ -16,6 +17,16 @@ from plugins.sqlite_db_wrapper import DB
 import shutil, platform, asyncio, os as _os
 import psutil
 import subprocess
+
+# Configure Admin logger
+os.makedirs('./logs', exist_ok=True)
+admin_logger = logging.getLogger('admin_main')
+admin_logger.setLevel(logging.DEBUG)
+
+admin_handler = logging.FileHandler('./logs/admin_main.log', encoding='utf-8')
+admin_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+admin_handler.setFormatter(admin_formatter)
+admin_logger.addHandler(admin_handler)
 
 PATH = constant.PATH
 txt = constant.TEXT

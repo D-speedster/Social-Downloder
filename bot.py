@@ -48,10 +48,14 @@ except Exception as e:
 
 # Enhanced logging with rotation and better format
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
+
+# Create logs directory if it doesn't exist
+os.makedirs('./logs', exist_ok=True)
+
 basicConfig(
     level=INFO,  # Changed to INFO for better debugging
     format=log_format,
-    filename='./loader.log',
+    filename='./logs/bot.log',
     filemode='a',  # Append mode
     encoding='utf-8'  # Ensure UTF-8 encoding
 )

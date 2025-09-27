@@ -38,6 +38,15 @@ performance_logger.addHandler(file_handler)
 # Prevent propagation to root logger
 performance_logger.propagate = False
 
+# تنظیم لاگ‌گذاری اصلی برای یوتیوب
+os.makedirs('./logs', exist_ok=True)
+youtube_logger = logging.getLogger('youtube_main')
+youtube_handler = logging.FileHandler('./logs/youtube_main.log', encoding='utf-8')
+youtube_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+youtube_handler.setFormatter(youtube_formatter)
+youtube_logger.addHandler(youtube_handler)
+youtube_logger.setLevel(logging.DEBUG)
+
 txt = constant.TEXT
 
 
@@ -156,10 +165,14 @@ async def display_video_info_with_cover(client: Client, message, info):
 async def show_video(client: Client, message: Message):
     user_id = message.from_user.id
     now = datetime.now()
+    
+    youtube_logger.info(f"درخواست پردازش یوتیوب از کاربر {user_id}")
+    youtube_logger.debug(f"URL دریافتی: {message.text}")
 
     # Enforce daily limit: if user is currently blocked, stop here
     try:
         blocked_until_str = DB().get_blocked_until(user_id)
+        youtube_logger.debug(f"بررسی محدودیت برای کاربر {user_id}")
         if blocked_until_str:
             bu = None
             try:
@@ -171,9 +184,11 @@ async def show_video(client: Client, message: Message):
                     bu = None
             if bu and now < bu:
                 seconds = int((bu - now).total_seconds())
+                youtube_logger.warning(f"کاربر {user_id} محدود شده تا {bu}")
                 await message.reply_text(txt['rate_limit'].format(seconds=seconds))
                 return
     except Exception as e:
+        youtube_logger.error(f"خطا در بررسی محدودیت: {e}")
         print(f"Error checking blocked_until: {e}")
         # Continue execution even if blocked_until check fails
         pass
@@ -183,10 +198,12 @@ async def show_video(client: Client, message: Message):
     # Start timing the process
     start_time = time.time()
     performance_logger.info(f"[USER:{user_id}] YouTube link processing started for: {url}")
+    youtube_logger.info(f"شروع پردازش لینک یوتیوب برای کاربر {user_id}")
     
     # Get custom waiting message from database
     db = DB()
     custom_message_data = db.get_waiting_message_full('youtube')
+    youtube_logger.debug(f"پیام انتظار سفارشی: {custom_message_data}")
     
     # Send initial processing message with timing
     if custom_message_data and custom_message_data.get('type') == 'gif':
@@ -204,17 +221,22 @@ async def show_video(client: Client, message: Message):
     
     message_sent_time = time.time()
     performance_logger.info(f"[USER:{user_id}] Processing message sent after: {message_sent_time - start_time:.2f} seconds")
+    youtube_logger.debug(f"پیام پردازش ارسال شد در {message_sent_time - start_time:.2f} ثانیه")
 
     try:
         # Configure yt-dlp with cookies from cookie pool
         from cookie_manager import cookie_manager
         
+        youtube_logger.debug("شروع تنظیم yt-dlp و کوکی‌ها")
         # Get a cookie from the pool
         cookie_content = cookie_manager.get_cookie('youtube')
         use_cookies = cookie_content is not None
         
         if not use_cookies:
+            youtube_logger.warning("هیچ کوکی یوتیوب در دسترس نیست")
             print("Warning: No YouTube cookies available in pool")
+        else:
+            youtube_logger.debug("کوکی یوتیوب یافت شد")
 
         # Security: Use environment variable for ffmpeg path or auto-detect
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
@@ -234,6 +256,8 @@ async def show_video(client: Client, message: Message):
                 if shutil.which(path) or os.path.exists(path):
                     ffmpeg_path = path
                     break
+        
+        youtube_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
         
         ydl_opts = {
             'quiet': True,
@@ -265,14 +289,17 @@ async def show_video(client: Client, message: Message):
             temp_cookie_file.write(cookie_content)
             temp_cookie_file.close()
             ydl_opts['cookiefile'] = temp_cookie_file.name
+            youtube_logger.debug(f"فایل کوکی موقت ایجاد شد: {temp_cookie_file.name}")
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()
         performance_logger.info(f"[USER:{user_id}] Starting yt-dlp extraction...")
+        youtube_logger.debug("شروع استخراج اطلاعات ویدیو با yt-dlp")
         
         temp_cookie_file_path = None
         try:
             info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+            youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
             
             # Update cookie usage stats
             if use_cookies:
@@ -281,6 +308,7 @@ async def show_video(client: Client, message: Message):
                 for cookie in cookies:
                     if cookie.get('data') == cookie_content:
                         cookie_manager.update_usage('youtube', cookie['id'])
+                        youtube_logger.debug("آمار استفاده کوکی به‌روزرسانی شد")
                         break
                 
         finally:
@@ -289,12 +317,15 @@ async def show_video(client: Client, message: Message):
                 temp_cookie_file_path = temp_cookie_file.name
                 try:
                     os.unlink(temp_cookie_file_path)
+                    youtube_logger.debug("فایل کوکی موقت حذف شد")
                 except:
+                    youtube_logger.warning("خطا در حذف فایل کوکی موقت")
                     pass
         
         extraction_end = time.time()
         extraction_time = extraction_end - extraction_start
         performance_logger.info(f"[USER:{user_id}] yt-dlp extraction completed in: {extraction_time:.2f} seconds")
+        youtube_logger.debug(f"استخراج اطلاعات تکمیل شد در {extraction_time:.2f} ثانیه")
         
         with open("yt_dlp_info.json", "w", encoding="utf-8") as f:
             json.dump(info, f, ensure_ascii=False, indent=4)
@@ -303,23 +334,30 @@ async def show_video(client: Client, message: Message):
         step['title'] = info.get('title', 'Unknown Title')
         step['duration'] = info.get('duration', 0)
         step['thumbnail'] = info.get('thumbnail', None)
+        youtube_logger.debug(f"اطلاعات ویدیو ذخیره شد: {step['title']}")
 
         # Download and display cover with video info
+        youtube_logger.debug("شروع نمایش اطلاعات ویدیو و کاور")
         await display_video_info_with_cover(client, processing_message, info)
+        youtube_logger.debug("نمایش اطلاعات ویدیو تکمیل شد")
         
         end_time = time.time()
         total_time = end_time - start_time
         performance_logger.info(f"[USER:{user_id}] TOTAL PROCESSING TIME: {total_time:.2f} seconds")
         performance_logger.info(f"[USER:{user_id}] Breakdown - Message: {message_sent_time - start_time:.2f}s, Extraction: {extraction_time:.2f}s, UI: {end_time - extraction_end:.2f}s")
+        youtube_logger.info(f"زمان کل پردازش: {total_time:.2f} ثانیه")
         
         # Alert if processing time exceeds target
         if total_time > 8.0:
             performance_logger.warning(f"[USER:{user_id}] ⚠️ SLOW PROCESSING: {total_time:.2f}s (Target: <8s)")
+            youtube_logger.warning(f"پردازش کند: {total_time:.2f} ثانیه (هدف: کمتر از 8 ثانیه)")
         else:
             performance_logger.info(f"[USER:{user_id}] ✅ GOOD PERFORMANCE: {total_time:.2f}s (Target: <8s)")
+            youtube_logger.info(f"عملکرد خوب: {total_time:.2f} ثانیه")
 
     except Exception as e:
         performance_logger.error(f"[USER:{user_id}] yt-dlp extraction failed: {str(e)}")
+        youtube_logger.error(f"خطا در استخراج اطلاعات: {str(e)}")
         print(f"Error processing YouTube link: {e}")
         
         # Mark cookie as invalid if extraction failed with cookies
@@ -329,6 +367,7 @@ async def show_video(client: Client, message: Message):
             for cookie in cookies:
                 if cookie.get('data') == cookie_content:
                     cookie_manager.mark_invalid('youtube', cookie['id'])
+                    youtube_logger.warning("کوکی به عنوان نامعتبر علامت‌گذاری شد")
                     break
         
         error_msg = str(e).lower()
