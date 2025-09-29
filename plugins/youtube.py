@@ -15,6 +15,7 @@ import shutil
 import time
 import logging
 import sys
+from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
 
 # Configure logging for performance monitoring
 import os
@@ -272,7 +273,17 @@ async def show_video(client: Client, message: Message):
         if ffmpeg_path:
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             
-        # دانلود بدون کوکی انجام می‌شود
+        # تلاش برای استفاده از کوکی چرخشی در استخراج اطلاعات
+        cookie_id_used = None
+        try:
+            cookiefile, cid = get_rotated_cookie_file(None)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                cookie_id_used = cid
+                use_cookies = True
+                youtube_logger.debug(f"استفاده از کوکی چرخشی برای استخراج: id={cid}")
+        except Exception:
+            pass
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()
@@ -283,8 +294,12 @@ async def show_video(client: Client, message: Message):
             info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
             youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
             
-            # Usage already updated by get_least_used_cookie()
-            pass
+            # در صورت موفقیت، وضعیت استفاده از کوکی را ثبت کن
+            if cookie_id_used:
+                try:
+                    mark_cookie_used(cookie_id_used, True)
+                except Exception:
+                    pass
                 
         finally:
             # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست

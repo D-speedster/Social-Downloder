@@ -135,6 +135,23 @@ class DB:
                     ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
                     """
                 )
+                # Cookies pool
+                self.cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS cookies (
+                        id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        source_type VARCHAR(32) NOT NULL,
+                        format VARCHAR(32) NOT NULL DEFAULT 'netscape',
+                        cookie_text MEDIUMTEXT NOT NULL,
+                        status VARCHAR(16) NOT NULL DEFAULT 'unknown',
+                        use_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                        fail_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+                        created_at VARCHAR(32) NOT NULL,
+                        last_used_at VARCHAR(32) NULL
+                    ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
+                    """
+                )
                 # User settings (quality, language)
                 self.cursor.execute(
                     """
@@ -169,6 +186,21 @@ class DB:
                         link TEXT,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
+                    )"""
+                )
+                # Cookies pool
+                self.cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS cookies (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        source_type TEXT NOT NULL,
+                        format TEXT NOT NULL DEFAULT 'netscape',
+                        cookie_text TEXT NOT NULL,
+                        status TEXT NOT NULL DEFAULT 'unknown',
+                        use_count INTEGER NOT NULL DEFAULT 0,
+                        fail_count INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        last_used_at TEXT
                     )"""
                 )
             self.mydb.commit()
@@ -599,3 +631,140 @@ class DB:
             self.mydb.close()
         except Exception:
             pass
+
+    # --- Cookie pool operations ---
+    def add_cookie(self, name: str, source_type: str, cookie_text: str, fmt: str = 'netscape', status: str = 'unknown') -> bool:
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            if self.db_type == 'mysql':
+                q = ('INSERT INTO cookies (name, source_type, format, cookie_text, status, use_count, fail_count, created_at) '
+                     'VALUES (%s, %s, %s, %s, %s, 0, 0, %s)')
+                self.cursor.execute(q, (name, source_type, fmt, cookie_text, status, now))
+            else:
+                q = ('INSERT INTO cookies (name, source_type, format, cookie_text, status, use_count, fail_count, created_at) '
+                     'VALUES (?, ?, ?, ?, ?, 0, 0, ?)')
+                self.cursor.execute(q, (name, source_type, fmt, cookie_text, status, now))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to add cookie: {e}")
+            return False
+
+    def list_cookies(self, limit: int = 50) -> list[dict]:
+        try:
+            if self.db_type == 'mysql':
+                q = 'SELECT id, name, source_type, status, use_count, fail_count, last_used_at, created_at FROM cookies ORDER BY id DESC LIMIT %s'
+                self.cursor.execute(q, (limit,))
+            else:
+                q = 'SELECT id, name, source_type, status, use_count, fail_count, last_used_at, created_at FROM cookies ORDER BY id DESC LIMIT ?'
+                self.cursor.execute(q, (limit,))
+            rows = self.cursor.fetchall() or []
+            result = []
+            for r in rows:
+                result.append({
+                    'id': r[0], 'name': r[1], 'source_type': r[2], 'status': r[3],
+                    'use_count': r[4], 'fail_count': r[5], 'last_used_at': r[6], 'created_at': r[7]
+                })
+            return result
+        except Exception as e:
+            print(f"Failed to list cookies: {e}")
+            return []
+
+    def get_cookie_by_id(self, cookie_id: int) -> dict | list[dict]:
+        try:
+            if self.db_type == 'mysql':
+                q = 'SELECT id, name, source_type, format, cookie_text, status, use_count, fail_count, last_used_at, created_at FROM cookies WHERE id = %s'
+                self.cursor.execute(q, (cookie_id,))
+            else:
+                q = 'SELECT id, name, source_type, format, cookie_text, status, use_count, fail_count, last_used_at, created_at FROM cookies WHERE id = ?'
+                self.cursor.execute(q, (cookie_id,))
+            r = self.cursor.fetchone()
+            if not r:
+                return {}
+            return {
+                'id': r[0], 'name': r[1], 'source_type': r[2], 'format': r[3], 'cookie_text': r[4],
+                'status': r[5], 'use_count': r[6], 'fail_count': r[7], 'last_used_at': r[8], 'created_at': r[9]
+            }
+        except Exception as e:
+            print(f"Failed to get cookie by id: {e}")
+            return {}
+
+    def delete_cookie(self, cookie_id: int) -> bool:
+        try:
+            if self.db_type == 'mysql':
+                q = 'DELETE FROM cookies WHERE id = %s'
+                self.cursor.execute(q, (cookie_id,))
+            else:
+                q = 'DELETE FROM cookies WHERE id = ?'
+                self.cursor.execute(q, (cookie_id,))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to delete cookie: {e}")
+            return False
+
+    def update_cookie_status(self, cookie_id: int, status: str) -> None:
+        try:
+            if self.db_type == 'mysql':
+                q = 'UPDATE cookies SET status = %s WHERE id = %s'
+                self.cursor.execute(q, (status, cookie_id))
+            else:
+                q = 'UPDATE cookies SET status = ? WHERE id = ?'
+                self.cursor.execute(q, (status, cookie_id))
+            self.mydb.commit()
+        except Exception as e:
+            print(f"Failed to update cookie status: {e}")
+
+    def mark_cookie_used(self, cookie_id: int, success: bool) -> None:
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            # Get current counters
+            if self.db_type == 'mysql':
+                self.cursor.execute('SELECT use_count, fail_count FROM cookies WHERE id = %s', (cookie_id,))
+            else:
+                self.cursor.execute('SELECT use_count, fail_count FROM cookies WHERE id = ?', (cookie_id,))
+            row = self.cursor.fetchone()
+            use_count = int(row[0] or 0) if row else 0
+            fail_count = int(row[1] or 0) if row else 0
+            use_count += 1
+            if not success:
+                fail_count += 1
+            # Update
+            if self.db_type == 'mysql':
+                self.cursor.execute('UPDATE cookies SET use_count = %s, fail_count = %s, last_used_at = %s WHERE id = %s', (use_count, fail_count, now, cookie_id))
+            else:
+                self.cursor.execute('UPDATE cookies SET use_count = ?, fail_count = ?, last_used_at = ? WHERE id = ?', (use_count, fail_count, now, cookie_id))
+            self.mydb.commit()
+        except Exception as e:
+            print(f"Failed to mark cookie used: {e}")
+
+    def get_next_cookie(self, prev_cookie_id: int | None) -> dict | None:
+        """Pick the least recently used cookie, avoiding immediate reuse of prev_cookie_id."""
+        try:
+            # Exclude disabled/invalid
+            if self.db_type == 'mysql':
+                q = ('SELECT id, name, cookie_text FROM cookies WHERE status != %s '
+                     'ORDER BY COALESCE(last_used_at, "1970-01-01 00:00:00") ASC, use_count ASC LIMIT 2')
+                self.cursor.execute(q, ('disabled',))
+            else:
+                q = ('SELECT id, name, cookie_text FROM cookies WHERE status != ? '
+                     'ORDER BY COALESCE(last_used_at, "1970-01-01 00:00:00") ASC, use_count ASC LIMIT 2')
+                self.cursor.execute(q, ('disabled',))
+            rows = self.cursor.fetchall() or []
+            if not rows:
+                return None
+            # Choose a cookie not equal to prev if possible
+            if prev_cookie_id is None:
+                chosen = rows[0]
+            else:
+                chosen = None
+                for r in rows:
+                    if r[0] != prev_cookie_id:
+                        chosen = r
+                        break
+                if chosen is None:
+                    chosen = rows[0]
+            return {'id': chosen[0], 'name': chosen[1], 'cookie_text': chosen[2]}
+        except Exception as e:
+            print(f"Failed to get next cookie: {e}")
+            return None

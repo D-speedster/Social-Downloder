@@ -26,6 +26,8 @@ class YouTubeAdvancedDownloader:
         self.download_dir = os.path.join(os.getcwd(), 'downloads')  # standardized lowercase
         os.makedirs(self.download_dir, exist_ok=True)
         self.ffmpeg_path = self._find_ffmpeg()
+        # Cookie rotation state
+        self._prev_cookie_id: Optional[int] = None
         advanced_logger.info("YouTubeAdvancedDownloader initialized")
     
     def _find_ffmpeg(self) -> Optional[str]:
@@ -65,6 +67,16 @@ class YouTubeAdvancedDownloader:
             'socket_timeout': 15,
             'connect_timeout': 10,
         }
+        # Try rotated cookie for info extraction
+        try:
+            from .cookie_manager import get_rotated_cookie_file
+            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                self._prev_cookie_id = cid
+                advanced_logger.info(f"Using rotated cookie for info: id={cid}")
+        except Exception as _:
+            pass
         
         try:
             # حذف وابستگی کوکی: اطلاعات ویدیو بدون کوکی استخراج می‌شود
@@ -330,6 +342,16 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
         }
+        # Attach rotated cookie
+        try:
+            from .cookie_manager import get_rotated_cookie_file
+            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                self._prev_cookie_id = cid
+                advanced_logger.info(f"Using rotated cookie for combined download: id={cid}")
+        except Exception:
+            pass
         
         if self.ffmpeg_path:
             ydl_opts['ffmpeg_location'] = self.ffmpeg_path
@@ -347,9 +369,23 @@ class YouTubeAdvancedDownloader:
             
             if success and os.path.exists(output_path):
                 advanced_logger.info("Combined format downloaded successfully")
+                # Mark cookie success
+                try:
+                    from .cookie_manager import mark_cookie_used
+                    if self._prev_cookie_id:
+                        mark_cookie_used(self._prev_cookie_id, True)
+                except Exception:
+                    pass
                 return output_path
             else:
                 advanced_logger.error("Combined format download failed")
+                # Mark cookie failure
+                try:
+                    from .cookie_manager import mark_cookie_used
+                    if self._prev_cookie_id:
+                        mark_cookie_used(self._prev_cookie_id, False)
+                except Exception:
+                    pass
                 return None
                 
         finally:
@@ -404,6 +440,16 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
         }
+        # Attach rotated cookie
+        try:
+            from .cookie_manager import get_rotated_cookie_file
+            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                self._prev_cookie_id = cid
+                advanced_logger.info(f"Using rotated cookie for single format: id={cid}")
+        except Exception:
+            pass
         
         if progress_callback:
             ydl_opts['progress_hooks'] = [progress_callback]
@@ -414,7 +460,22 @@ class YouTubeAdvancedDownloader:
             loop = asyncio.get_event_loop()
             success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
             
-            return success and os.path.exists(output_path)
+            if success and os.path.exists(output_path):
+                try:
+                    from .cookie_manager import mark_cookie_used
+                    if self._prev_cookie_id:
+                        mark_cookie_used(self._prev_cookie_id, True)
+                except Exception:
+                    pass
+                return True
+            else:
+                try:
+                    from .cookie_manager import mark_cookie_used
+                    if self._prev_cookie_id:
+                        mark_cookie_used(self._prev_cookie_id, False)
+                except Exception:
+                    pass
+                return False
             
         finally:
             # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست

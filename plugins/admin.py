@@ -82,6 +82,9 @@ def admin_inline_maker() -> list:
             InlineKeyboardButton("💬 پیام انتظار", callback_data='waiting_msg'),
         ],
         [
+            InlineKeyboardButton("🍪 مدیریت کوکی", callback_data='cookie_mgmt'),
+        ],
+        [
             InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),
             InlineKeyboardButton(fj_label, callback_data='fj_toggle'),
         ],
@@ -97,6 +100,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار"],
+            ["🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
             ["⬅️ بازگشت"],
         ],
@@ -147,6 +151,251 @@ async def admin_menu_broadcast(_: Client, message: Message):
             [InlineKeyboardButton("❌ لغو", callback_data="broadcast_cancel")]
         ])
     )
+
+
+# --- مدیریت کوکی‌ها ---
+
+# منوی اصلی مدیریت کوکی
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🍪 مدیریت کوکی$'))
+async def admin_cookie_menu(_: Client, message: Message):
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ افزودن کوکی متنی", callback_data='cookie_add_text')],
+        [InlineKeyboardButton("📄 افزودن کوکی فایل", callback_data='cookie_add_file')],
+        [InlineKeyboardButton("📜 لیست کوکی‌ها", callback_data='cookie_list')],
+        [InlineKeyboardButton("✅ اعتبارسنجی با شناسه", callback_data='cookie_validate_prompt')],
+        [InlineKeyboardButton("🗑 حذف با شناسه", callback_data='cookie_delete_prompt')],
+        [InlineKeyboardButton("📥 واردسازی از مسیر نمونه", callback_data='cookie_import_sample')],
+    ])
+    await message.reply_text("🍪 مدیریت کوکی — یک گزینه را انتخاب کنید:", reply_markup=keyboard)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_mgmt$'))
+async def admin_cookie_menu_cb(client: Client, callback_query: CallbackQuery):
+    await admin_cookie_menu(client, callback_query.message)
+
+
+from .cookie_manager import import_cookie_text, validate_and_update_cookie_status
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_add_text$'))
+async def cookie_add_text_cb(_: Client, callback_query: CallbackQuery):
+    admin_step['add_cookie'] = 'text'
+    await callback_query.message.edit_text(
+        "لطفاً متن کوکی را ارسال کنید (فرمت‌های پشتیبانی: Netscape، JSON یا txt).\nبرای لغو /cancel را بفرستید.",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_add_file$'))
+async def cookie_add_file_cb(_: Client, callback_query: CallbackQuery):
+    admin_step['add_cookie'] = 'file'
+    await callback_query.message.edit_text(
+        "لطفاً فایل کوکی را ارسال کنید (پسوندهای مجاز: .txt یا .json).\nبرای لغو /cancel را بفرستید.",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_list$'))
+async def cookie_list_cb(_: Client, callback_query: CallbackQuery):
+    db = DB()
+    rows = db.list_cookies(limit=50)
+    if not rows:
+        await callback_query.answer("کوکی یافت نشد", show_alert=True)
+        return
+    lines = [
+        "📜 فهرست کوکی‌ها:",
+    ]
+    for r in rows:
+        lines.append(
+            f"#{r['id']} • {r['name']} • {r['source_type']} • وضعیت: {r['status']} • استفاده: {r['use_count']}"
+        )
+    await callback_query.message.edit_text("\n".join(lines))
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_validate_prompt$'))
+async def cookie_validate_prompt_cb(_: Client, callback_query: CallbackQuery):
+    await callback_query.message.edit_text(
+        "شناسه کوکی را برای اعتبارسنجی ارسال کنید. مثال:\nاعتبارسنجی 12",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_delete_prompt$'))
+async def cookie_delete_prompt_cb(_: Client, callback_query: CallbackQuery):
+    await callback_query.message.edit_text(
+        "شناسه کوکی را برای حذف ارسال کنید. مثال:\nحذف کوکی 12",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_import_sample$'))
+async def cookie_import_sample_cb(_: Client, callback_query: CallbackQuery):
+    # مسیر نمونه ارائه‌شده توسط کاربر
+    sample_path = 'c:/Users/speedster/Desktop/DownloaderYT-V1/cookie.txt'
+    try:
+        if not os.path.exists(sample_path):
+            await callback_query.answer("فایل نمونه یافت نشد", show_alert=True)
+            return
+        with open(sample_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        ok, msg = import_cookie_text(name='sample_cookie', text=text, source_type='auto')
+        if not ok:
+            await callback_query.answer(msg, show_alert=True)
+            return
+        # تلاش برای اعتبارسنجی و بروزرسانی وضعیت
+        db = DB()
+        latest = db.list_cookies(limit=1)
+        if latest:
+            cid = latest[0]['id']
+            valid = validate_and_update_cookie_status(cid)
+            await callback_query.message.edit_text(
+                f"✅ واردسازی انجام شد. شناسه: {cid}\nنتیجه اعتبارسنجی: {'معتبر' if valid else 'نامعتبر'}"
+            )
+        else:
+            await callback_query.message.edit_text("✅ واردسازی انجام شد")
+        await callback_query.answer()
+    except Exception as e:
+        await callback_query.answer(f"خطا: {e}", show_alert=True)
+
+
+# دریافت ورودی متن/فایل برای افزودن کوکی
+add_cookie_filter = filters.create(lambda _, __, m: admin_step.get('add_cookie') in ['text', 'file'])
+
+@Client.on_message(add_cookie_filter & filters.user(ADMIN), group=8)
+async def handle_cookie_input(client: Client, message: Message):
+    mode = admin_step.get('add_cookie')
+    try:
+        if mode == 'text':
+            if not message.text:
+                await message.reply_text("لطفاً متن کوکی را ارسال کنید.")
+                return
+            name = f"manual_{int(time.time())}"
+            ok, msg = import_cookie_text(name=name, text=message.text, source_type='auto')
+            if not ok:
+                await message.reply_text(f"❌ {msg}")
+                admin_step.pop('add_cookie', None)
+                return
+            # اعتبارسنجی خودکار
+            db = DB()
+            latest = db.list_cookies(limit=1)
+            valid = False
+            cid = None
+            if latest:
+                cid = latest[0]['id']
+                valid = validate_and_update_cookie_status(cid)
+            await message.reply_text(
+                f"✅ کوکی ذخیره شد. شناسه: {cid if cid else '-'}\nنتیجه اعتبارسنجی: {'معتبر' if valid else 'نامعتبر'}",
+                reply_markup=admin_reply_kb()
+            )
+            admin_step.pop('add_cookie', None)
+
+        elif mode == 'file':
+            if not message.document:
+                await message.reply_text("لطفاً فایل .txt یا .json ارسال کنید.")
+                return
+            filename = (message.document.file_name or '').lower()
+            ext = 'json' if filename.endswith('.json') else 'txt'
+            # دانلود فایل موقت
+            tmp_path = await message.download()
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+            name = f"file_{int(time.time())}"
+            ok, msg = import_cookie_text(name=name, text=text, source_type=ext)
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+            if not ok:
+                await message.reply_text(f"❌ {msg}")
+                admin_step.pop('add_cookie', None)
+                return
+            # اعتبارسنجی خودکار
+            db = DB()
+            latest = db.list_cookies(limit=1)
+            valid = False
+            cid = None
+            if latest:
+                cid = latest[0]['id']
+                valid = validate_and_update_cookie_status(cid)
+            await message.reply_text(
+                f"✅ کوکی فایل ذخیره شد. شناسه: {cid if cid else '-'}\nنتیجه اعتبارسنجی: {'معتبر' if valid else 'نامعتبر'}",
+                reply_markup=admin_reply_kb()
+            )
+            admin_step.pop('add_cookie', None)
+
+    except Exception as e:
+        await message.reply_text(f"❌ خطا: {e}")
+        admin_step.pop('add_cookie', None)
+
+
+# لیست کوکی‌ها با دستور
+@Client.on_message(filters.command('cookies') & filters.user(ADMIN))
+async def list_cookies_cmd(_: Client, message: Message):
+    rows = DB().list_cookies(limit=50)
+    if not rows:
+        await message.reply_text("کوکی‌ای ثبت نشده است.")
+        return
+    text = "\n".join([
+        "📜 فهرست کوکی‌ها:",
+        *[f"#{r['id']} • {r['name']} • {r['source_type']} • وضعیت: {r['status']} • استفاده: {r['use_count']}" for r in rows]
+    ])
+    await message.reply_text(text)
+
+
+# حذف کوکی با متن "حذف کوکی <id>"
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^حذف کوکی\s+(\d+)$'))
+async def delete_cookie_text(_: Client, message: Message):
+    try:
+        cid = int(re.findall(r'\d+', message.text)[0])
+        ok = DB().delete_cookie(cid)
+        await message.reply_text("✅ حذف شد" if ok else "❌ حذف ناموفق")
+    except Exception:
+        await message.reply_text("❌ فرمت شناسه نادرست است")
+
+
+# اعتبارسنجی کوکی با متن "اعتبارسنجی <id>"
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^اعتبارسنجی\s+(\d+)$'))
+async def validate_cookie_text(_: Client, message: Message):
+    try:
+        cid = int(re.findall(r'\d+', message.text)[0])
+        ok = validate_and_update_cookie_status(cid)
+        await message.reply_text(f"نتیجه اعتبارسنجی: {'✅ معتبر' if ok else '❌ نامعتبر'}")
+    except Exception:
+        await message.reply_text("❌ فرمت شناسه نادرست است")
+
+
+# واردسازی از مسیر فایل محلی: /import_cookie_path <path>
+@Client.on_message(filters.command('import_cookie_path') & filters.user(ADMIN))
+async def import_cookie_path_cmd(_: Client, message: Message):
+    try:
+        parts = (message.text or '').split(maxsplit=1)
+        path = parts[1] if len(parts) > 1 else 'c:/Users/speedster/Desktop/DownloaderYT-V1/cookie.txt'
+        if not os.path.exists(path):
+            await message.reply_text("❌ فایل یافت نشد")
+            return
+        with open(path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        ok, msg = import_cookie_text(name=f"path_{int(time.time())}", text=text, source_type='auto')
+        if not ok:
+            await message.reply_text(f"❌ {msg}")
+            return
+        db = DB()
+        latest = db.list_cookies(limit=1)
+        if latest:
+            cid = latest[0]['id']
+            valid = validate_and_update_cookie_status(cid)
+            await message.reply_text(
+                f"✅ واردسازی انجام شد. شناسه: {cid}\nنتیجه اعتبارسنجی: {'معتبر' if valid else 'نامعتبر'}"
+            )
+        else:
+            await message.reply_text("✅ واردسازی انجام شد")
+    except Exception as e:
+        await message.reply_text(f"❌ خطا: {e}")
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 تنظیم اسپانسر$'))
