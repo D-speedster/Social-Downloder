@@ -98,7 +98,6 @@ async def handle_new_quality_callback(client: Client, call: CallbackQuery):
         # Get stored info
         quality_options = step.get('quality_options')
         url = step.get('url')
-        cookie_content = step.get('cookie_content')
         
         if not quality_options or not url:
             await call.answer("❌ اطلاعات ویدیو یافت نشد. لطفاً دوباره تلاش کنید.", show_alert=True)
@@ -145,7 +144,7 @@ async def handle_new_quality_callback(client: Client, call: CallbackQuery):
             return
         
         # Start download process
-        await start_download_process(client, call, url, selected_quality, quality_options, cookie_content)
+        await start_download_process(client, call, url, selected_quality, quality_options)
         
         # Log callback time
         callback_time = time.time() - start_time
@@ -167,7 +166,7 @@ async def handle_new_quality_callback(client: Client, call: CallbackQuery):
             await call.answer("❌ خطا در پردازش درخواست.", show_alert=True)
 
 async def start_download_process(client: Client, call: CallbackQuery, url: str, 
-                               selected_quality: dict, quality_options: dict, cookie_content: str):
+                               selected_quality: dict, quality_options: dict):
     """شروع فرآیند دانلود"""
     user_id = call.from_user.id
     download_start = time.time()
@@ -213,7 +212,8 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         download_result = await youtube_downloader.download_and_merge(
             url=url,
             quality_info=selected_quality,
-            callback=progress_callback
+            callback=progress_callback,
+            thumbnail_url=quality_options.get('thumbnail')
         )
         
         if not download_result.get('success'):
@@ -258,6 +258,16 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         
         await call.edit_message_text(completion_info, parse_mode=ParseMode.MARKDOWN)
         
+        # اعتبارسنجی سخت‌گیرانه وضوح 1280x720 قبل از آپلود
+        if metadata.get('width') != 1280 or metadata.get('height') != 720:
+            await call.edit_message_text(
+                "❌ خروجی نهایی دقیقاً 1280×720 نیست. پردازش متوقف شد.")
+            try:
+                os.unlink(file_path)
+            except:
+                pass
+            return
+
         # Send file to user
         upload_start = time.time()
         
@@ -277,6 +287,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
                 duration=int(actual_duration) if actual_duration else None,
                 width=metadata.get('width'),
                 height=metadata.get('height'),
+                thumb=download_result.get('thumb_path'),
                 reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
             )
         

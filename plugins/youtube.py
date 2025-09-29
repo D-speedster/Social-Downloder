@@ -224,25 +224,9 @@ async def show_video(client: Client, message: Message):
     youtube_logger.debug(f"پیام پردازش ارسال شد در {message_sent_time - start_time:.2f} ثانیه")
 
     try:
-        # Configure yt-dlp with cookies from cookie pool
-        from cookie_manager import cookie_manager
-        
-        youtube_logger.debug("شروع تنظیم yt-dlp و کوکی‌ها")
-        # Select least-used cookie to keep track of ID and avoid double-counting usage
-        selected_cookie = cookie_manager.get_least_used_cookie('youtube')
-        use_cookies = selected_cookie is not None
-        cookie_content = None
-        if not use_cookies:
-            youtube_logger.warning("هیچ کوکی یوتیوب در دسترس نیست")
-            print("Warning: No YouTube cookies available in pool")
-        else:
-            # Convert to Netscape format if JSON-like
-            data = selected_cookie.get('data')
-            if isinstance(data, dict) or (isinstance(data, str) and data.strip().startswith('{')):
-                cookie_content = cookie_manager._convert_to_netscape_format(data, 'youtube')
-            else:
-                cookie_content = data
-            youtube_logger.debug("کوکی یوتیوب یافت شد")
+        # تنظیم yt-dlp بدون وابستگی به کوکی‌ها
+        youtube_logger.debug("شروع تنظیم yt-dlp بدون کوکی")
+        use_cookies = False
 
         # Security: Use environment variable for ffmpeg path or auto-detect
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
@@ -288,21 +272,13 @@ async def show_video(client: Client, message: Message):
         if ffmpeg_path:
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             
-        if use_cookies:
-            # Write cookie content to temporary file
-            import tempfile
-            temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-            temp_cookie_file.write(cookie_content)
-            temp_cookie_file.close()
-            ydl_opts['cookiefile'] = temp_cookie_file.name
-            youtube_logger.debug(f"فایل کوکی موقت ایجاد شد: {temp_cookie_file.name}")
+        # دانلود بدون کوکی انجام می‌شود
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()
         performance_logger.info(f"[USER:{user_id}] Starting yt-dlp extraction...")
         youtube_logger.debug("شروع استخراج اطلاعات ویدیو با yt-dlp")
         
-        temp_cookie_file_path = None
         try:
             info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
             youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
@@ -311,15 +287,8 @@ async def show_video(client: Client, message: Message):
             pass
                 
         finally:
-            # Clean up temporary cookie file
-            if use_cookies and 'temp_cookie_file' in locals():
-                temp_cookie_file_path = temp_cookie_file.name
-                try:
-                    os.unlink(temp_cookie_file_path)
-                    youtube_logger.debug("فایل کوکی موقت حذف شد")
-                except:
-                    youtube_logger.warning("خطا در حذف فایل کوکی موقت")
-                    pass
+            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+            pass
         
         extraction_end = time.time()
         extraction_time = extraction_end - extraction_start
@@ -359,38 +328,9 @@ async def show_video(client: Client, message: Message):
         youtube_logger.error(f"خطا در استخراج اطلاعات: {str(e)}")
         print(f"Error processing YouTube link: {e}")
         
-        # Mark cookie as invalid if extraction failed with cookies
-        if use_cookies:
-            if 'selected_cookie' in locals() and selected_cookie:
-                cookie_manager.mark_invalid('youtube', selected_cookie['id'])
-                youtube_logger.warning("کوکی به عنوان نامعتبر علامت‌گذاری شد")
-        
-        error_msg = str(e).lower()
-        # If cookies are invalid or verification is required, show explicit error
-        if any(keyword in error_msg for keyword in ["sign in to confirm", "not a bot", "cookies", "authentication", "login"]):
-            try:
-                await processing_message.edit_text(
-                    "⚠️ **مشکل احراز هویت یوتیوب**\n\n"
-                    "کوکی‌های یوتیوب نامعتبر یا منقضی شده است.\n"
-                    "لطفاً کوکی‌های یوتیوب را به‌روزرسانی کنید.\n"
-                    "برای این کار از دستور /setcookies استفاده کنید یا از منوی مدیریت کوکی‌ها اقدام کنید.\n\n"
-                    "📝 راهنما:\n"
-                    "1. وارد حساب یوتیوب خود شوید\n"
-                    "2. کوکی‌های جدید (فرمت Netscape یا JSON) را استخراج کنید\n"
-                    "3. با ارسال فایل یا متن از طریق /setcookies آن را اضافه کنید",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except:
-                await processing_message.edit_text("کوکی‌های یوتیوب نامعتبر است. لطفاً از دستور /setcookies برای به‌روزرسانی کوکی‌ها استفاده کنید.")
-            return
-        
-        # Try alternative extraction methods with different cookie or without cookies
+        # تلاش برای استخراج جایگزین بدون کوکی
         try:
             performance_logger.info(f"[USER:{user_id}] Attempting fallback extraction...")
-            
-            # Try with a different cookie first
-            fallback_selected_cookie = cookie_manager.get_least_used_cookie('youtube')
-            fallback_cookie_content = None
             
             fallback_opts = {
                 'quiet': True,
@@ -414,22 +354,6 @@ async def show_video(client: Client, message: Message):
             if ffmpeg_path:
                 fallback_opts['ffmpeg_location'] = ffmpeg_path
             
-            temp_fallback_file = None
-            if fallback_selected_cookie:
-                data = fallback_selected_cookie.get('data')
-                if isinstance(data, dict) or (isinstance(data, str) and data.strip().startswith('{')):
-                    fallback_cookie_content = cookie_manager._convert_to_netscape_format(data, 'youtube')
-                else:
-                    fallback_cookie_content = data
-                
-            if fallback_cookie_content:
-                # Write fallback cookie content to temporary file
-                import tempfile
-                temp_fallback_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                temp_fallback_file.write(fallback_cookie_content)
-                temp_fallback_file.close()
-                fallback_opts['cookiefile'] = temp_fallback_file.name
-            
             fallback_start = time.time()
             performance_logger.info(f"[USER:{user_id}] Starting fallback extraction...")
             
@@ -440,12 +364,8 @@ async def show_video(client: Client, message: Message):
                 pass
                 
             finally:
-                # Clean up temporary fallback cookie file
-                if temp_fallback_file:
-                    try:
-                        os.unlink(temp_fallback_file.name)
-                    except:
-                        pass
+                # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+                pass
             
             fallback_end = time.time()
             fallback_time = fallback_end - fallback_start

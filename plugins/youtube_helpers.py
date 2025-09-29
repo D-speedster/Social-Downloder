@@ -3,7 +3,6 @@ import asyncio
 import tempfile
 import yt_dlp
 from plugins.logger_config import get_logger
-from cookie_manager import cookie_manager
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
@@ -31,17 +30,7 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         if progress_hook:
             ydl_opts['progress_hooks'] = [progress_hook]
         
-        # Add cookies if available
-        cookie_content = cookie_manager.get_cookie('youtube')
-        if cookie_content:
-            # Create temporary cookie file in Netscape format (txt)
-            cookie_file = os.path.join(temp_dir, 'cookies.txt')
-            with open(cookie_file, 'w', encoding='utf-8') as f:
-                f.write(cookie_content)
-            ydl_opts['cookiefile'] = cookie_file
-            youtube_helpers_logger.debug("کوکی یوتیوب به فرمت Netscape به yt-dlp اضافه شد")
-        else:
-            youtube_helpers_logger.warning("هیچ کوکی فعالی برای یوتیوب یافت نشد")
+        # حذف وابستگی کوکی: دانلود بدون کوکی انجام می‌شود
 
         # Download in thread to avoid blocking
         def download_sync():
@@ -81,17 +70,7 @@ async def get_direct_download_url(url, format_id):
             'extract_flat': False,
         }
         
-        # Add cookies if available
-        cookie_content = cookie_manager.get_cookie('youtube')
-        if cookie_content:
-            # Create temporary cookie file in Netscape format (txt)
-            cookie_file = os.path.join(os.getcwd(), 'temp_cookies.txt')
-            with open(cookie_file, 'w', encoding='utf-8') as f:
-                f.write(cookie_content)
-            ydl_opts['cookiefile'] = cookie_file
-            youtube_helpers_logger.debug("کوکی یوتیوب برای استخراج لینک به yt-dlp اضافه شد")
-        else:
-            youtube_helpers_logger.warning("هیچ کوکی فعالی برای یوتیوب یافت نشد")
+        # حذف وابستگی کوکی: استخراج لینک بدون کوکی انجام می‌شود
         
         # Extract info in thread to avoid blocking
         def extract_sync():

@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import yt_dlp
 from plugins.logger_config import get_logger
-from cookie_manager import cookie_manager
 
 # Initialize logger
 advanced_logger = get_logger('youtube_advanced')
@@ -53,7 +52,7 @@ class YouTubeAdvancedDownloader:
         advanced_logger.warning("FFmpeg not found in common locations")
         return None
     
-    async def get_video_info(self, url: str, cookie_content: Optional[str] = None) -> Optional[Dict]:
+    async def get_video_info(self, url: str) -> Optional[Dict]:
         """دریافت اطلاعات کامل ویدیو"""
         advanced_logger.info(f"Getting video info for: {url}")
         
@@ -67,21 +66,8 @@ class YouTubeAdvancedDownloader:
             'connect_timeout': 10,
         }
         
-        temp_cookie_file = None
         try:
-            # Setup cookies if provided
-            if cookie_content:
-                # Convert JSON-looking cookie content to Netscape format for yt-dlp
-                if isinstance(cookie_content, str) and cookie_content.strip().startswith('{'):
-                    try:
-                        cookie_content = cookie_manager._convert_to_netscape_format(cookie_content, 'youtube')
-                    except Exception:
-                        pass
-                temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                temp_cookie_file.write(cookie_content)
-                temp_cookie_file.close()
-                ydl_opts['cookiefile'] = temp_cookie_file.name
-                advanced_logger.debug("Cookie file created for extraction")
+            # حذف وابستگی کوکی: اطلاعات ویدیو بدون کوکی استخراج می‌شود
             
             # Run extraction in thread pool
             loop = asyncio.get_event_loop()
@@ -98,12 +84,8 @@ class YouTubeAdvancedDownloader:
             advanced_logger.error(f"Error extracting video info: {e}")
             return None
         finally:
-            # Cleanup cookie file
-            if temp_cookie_file and os.path.exists(temp_cookie_file.name):
-                try:
-                    os.unlink(temp_cookie_file.name)
-                except:
-                    pass
+            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+            pass
     
     def _extract_info(self, url: str, ydl_opts: Dict) -> Optional[Dict]:
         """استخراج اطلاعات در thread جداگانه"""
@@ -219,149 +201,94 @@ class YouTubeAdvancedDownloader:
         advanced_logger.info(f"Found {len(unique_qualities)} mergeable qualities")
         return unique_qualities
     
-    async def download_and_merge(self, url: str, quality_info: Dict, callback=None) -> Dict:
-        """دانلود و merge ویدئو با کیفیت انتخابی"""
+    async def download_and_merge(self, url: str, quality_info: Dict, callback=None, thumbnail_url: Optional[str] = None) -> Dict:
+        """دانلود و ادغام با اعمال الزامات خروجی: MP4/H.264/AAC در 1280x720 و تولید thumbnail"""
         try:
-            format_id = quality_info['format_id']
-            file_type = quality_info.get('type', 'video')
-            
-            # تعیین نام فایل خروجی
-            if file_type == 'audio_only':
-                output_filename = f"audio_{int(time.time())}.mp3"
-            else:
-                output_filename = f"video_{int(time.time())}.mp4"
-            
-            output_path = os.path.join(self.download_dir, output_filename)
-            
-            # تنظیمات yt-dlp برای merge واقعی
-            ydl_opts = {
-                'format': format_id,
-                'outtmpl': output_path.replace('.mp4', '.%(ext)s').replace('.mp3', '.%(ext)s'),
-                'merge_output_format': 'mp4' if file_type != 'audio_only' else 'mp3',
-                'writeinfojson': False,
-                'writesubtitles': False,
-                'writeautomaticsub': False,
-                'ignoreerrors': False,
-                'no_warnings': False,
-                'extractflat': False,
-                'writethumbnail': True,  # دانلود thumbnail
-                'embedthumbnail': True,  # اضافه کردن thumbnail به فایل
-            }
-            
-            # اضافه کردن ffmpeg برای merge واقعی
-            if self.ffmpeg_path:
-                ydl_opts['ffmpeg_location'] = os.path.dirname(self.ffmpeg_path)
-            
-            # تنظیمات خاص برای ویدئو
-            if file_type != 'audio_only':
-                ydl_opts.update({
-                    'format': f"{format_id}+bestaudio/best",  # اطمینان از merge video+audio
-                    'postprocessors': [{
-                        'key': 'FFmpegVideoConvertor',
-                        'preferedformat': 'mp4',
-                    }, {
-                        'key': 'EmbedThumbnail',
-                        'already_have_thumbnail': False,
-                    }],
-                    'prefer_ffmpeg': True,
-                    'keepvideo': False,
-                })
-            else:
-                ydl_opts.update({
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '192',
-                    }, {
-                        'key': 'EmbedThumbnail',
-                        'already_have_thumbnail': False,
-                    }],
-                })
-            
-            # Progress hook
+            file_type = quality_info.get('type', 'combined')
+            timestamp = int(time.time())
+            base_name = f"video_{timestamp}"
+            temp_output = os.path.join(self.temp_dir, f"{base_name}.mp4")
+            final_output = os.path.join(self.download_dir, f"{base_name}.mp4")
+
+            # Hook تطبیق با callback پیشرفت
             def progress_hook(d):
-                if callback and d['status'] == 'downloading':
+                if callback and d.get('status') == 'downloading':
                     try:
                         percent = d.get('_percent_str', '0%').replace('%', '')
                         speed = d.get('_speed_str', 'N/A')
-                        # Use asyncio.run_coroutine_threadsafe for thread-safe async call
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
                             asyncio.run_coroutine_threadsafe(callback(f"دانلود: {percent}% - سرعت: {speed}"), loop)
                     except:
                         pass
-                elif callback and d['status'] == 'finished':
+                elif callback and d.get('status') == 'finished':
                     try:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
-                            asyncio.run_coroutine_threadsafe(callback("در حال merge کردن فایل‌ها..."), loop)
+                            asyncio.run_coroutine_threadsafe(callback("در حال ادغام و تبدیل به 720p..."), loop)
                     except:
                         pass
-            
-            ydl_opts['progress_hooks'] = [progress_hook]
-            
-            # دانلود با yt-dlp
-            loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(None, self._download_with_ytdlp, url, ydl_opts)
-            
-            # پیدا کردن فایل نهایی حتی اگر success False باشد
-            final_file = None
-            expected_extensions = ['.mp4', '.mp3', '.mkv', '.webm']
-            
-            # جستجو بر اساس نام پایه فایل
-            base_name = os.path.splitext(output_filename)[0]
-            for file in os.listdir(self.download_dir):
-                if file.startswith(base_name) and any(file.endswith(ext) for ext in expected_extensions):
-                    final_file = os.path.join(self.download_dir, file)
-                    break
-            
-            # اگر فایل پیدا شد، دانلود موفق بوده
-            if final_file and os.path.exists(final_file):
-                success = True
-                advanced_logger.info(f"Found downloaded file: {final_file}")
-            
-            if not success:
-                return {'success': False, 'error': 'دانلود ناموفق'}
-            
-            # پیدا کردن فایل نهایی
-            if not final_file:
-                # جستجو مجدد با الگوهای مختلف
-                for ext in expected_extensions:
-                    test_path = output_path.replace('.%(ext)s', ext)
-                    if os.path.exists(test_path):
-                        final_file = test_path
-                        break
-            
-            if not final_file or not os.path.exists(final_file):
-                return {'success': False, 'error': 'فایل نهایی پیدا نشد'}
-            
-            # تأیید یکپارچگی فایل
-            is_valid = await self._verify_file_integrity(final_file, file_type)
-            if not is_valid:
-                advanced_logger.error(f"File integrity check failed: {final_file}")
-                if os.path.exists(final_file):
-                    os.remove(final_file)
-                return {'success': False, 'error': 'فایل دانلود شده معتبر نیست'}
-            
-            # تغییر نام به mp4 برای ویدئو
-            if file_type != 'audio_only' and not final_file.endswith('.mp4'):
-                new_path = final_file.rsplit('.', 1)[0] + '.mp4'
+
+            # مسیر progressive/combined یا DASH (video+audio جدا)
+            merged_path: Optional[str] = None
+            if file_type == 'combined':
+                # دانلود فرمت ترکیبی و سپس تبدیل به 720p/H.264/AAC
+                merged_path = await self._download_combined(url, quality_info, temp_output, progress_hook)
+            else:
+                # دانلود جداگانه و ادغام با ffmpeg و اعمال 720p/H.264/AAC
+                merged_path = await self._download_and_merge_separate(url, quality_info, temp_output, progress_hook)
+
+            if not merged_path or not os.path.exists(merged_path):
+                return {'success': False, 'error': 'دانلود یا ادغام ناموفق بود'}
+
+            # تبدیل نهایی به خروجی دقیق 720p/H.264/AAC
+            transcode_ok = await self._transcode_to_target(merged_path, final_output)
+            if not transcode_ok or not os.path.exists(final_output):
+                return {'success': False, 'error': 'تبدیل نهایی به 720p/H.264/AAC شکست خورد'}
+
+            # تولید thumbnail برای تلگرام (اختیاری)
+            thumb_path = None
+            if thumbnail_url:
                 try:
-                    os.rename(final_file, new_path)
-                    final_file = new_path
+                    raw_thumb = await self._download_thumbnail_simple(thumbnail_url)
+                    if raw_thumb:
+                        thumb_out = os.path.join(self.temp_dir, f"thumb_{timestamp}.jpg")
+                        gen_thumb_ok = await self._generate_telegram_thumb(raw_thumb, thumb_out)
+                        if gen_thumb_ok:
+                            thumb_path = thumb_out
+                except Exception as e:
+                    advanced_logger.warning(f"Thumbnail processing failed: {e}")
+
+            # اعتبارسنجی خروجی نهایی
+            metadata = await self.get_file_metadata(final_output)
+            width, height = metadata.get('width', 0), metadata.get('height', 0)
+            vcodec = metadata.get('video_codec', '').lower()
+            acodec = metadata.get('audio_codec', '').lower()
+
+            if width != 1280 or height != 720:
+                # پاک‌سازی و گزارش خطا
+                try:
+                    os.unlink(final_output)
                 except:
                     pass
-            
-            advanced_logger.info(f"Download completed successfully: {final_file}")
-            
+                return {'success': False, 'error': f"وضوح نهایی {width}x{height} است؛ باید دقیقاً 1280x720 باشد"}
+
+            if ('264' not in vcodec) or ('aac' not in acodec):
+                try:
+                    os.unlink(final_output)
+                except:
+                    pass
+                return {'success': False, 'error': 'کدک‌های خروجی باید H.264 و AAC باشند'}
+
             return {
                 'success': True,
-                'file_path': final_file,
-                'file_size': os.path.getsize(final_file)
+                'file_path': final_output,
+                'file_size': os.path.getsize(final_output),
+                'thumb_path': thumb_path
             }
-            
+
         except Exception as e:
-            advanced_logger.error(f"Download error: {e}")
+            advanced_logger.error(f"Download/Merge error: {e}")
             return {'success': False, 'error': str(e)}
     
     def _download_with_ytdlp(self, url: str, ydl_opts: Dict) -> bool:
@@ -392,7 +319,7 @@ class YouTubeAdvancedDownloader:
             return False
     
     async def _download_combined(self, url: str, quality_info: Dict, output_path: str, 
-                               cookie_content: Optional[str], progress_callback) -> Optional[str]:
+                               progress_callback) -> Optional[str]:
         """دانلود فرمت combined"""
         format_id = quality_info['format_id']
         
@@ -411,20 +338,8 @@ class YouTubeAdvancedDownloader:
         if progress_callback:
             ydl_opts['progress_hooks'] = [progress_callback]
         
-        temp_cookie_file = None
         try:
-            # Setup cookies
-            if cookie_content:
-                # Convert JSON-looking cookie content to Netscape format for yt-dlp
-                if isinstance(cookie_content, str) and cookie_content.strip().startswith('{'):
-                    try:
-                        cookie_content = cookie_manager._convert_to_netscape_format(cookie_content, 'youtube')
-                    except Exception:
-                        pass
-                temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                temp_cookie_file.write(cookie_content)
-                temp_cookie_file.close()
-                ydl_opts['cookiefile'] = temp_cookie_file.name
+            # حذف وابستگی کوکی: دانلود بدون کوکی انجام می‌شود
             
             # Download in thread pool
             loop = asyncio.get_event_loop()
@@ -438,14 +353,11 @@ class YouTubeAdvancedDownloader:
                 return None
                 
         finally:
-            if temp_cookie_file and os.path.exists(temp_cookie_file.name):
-                try:
-                    os.unlink(temp_cookie_file.name)
-                except:
-                    pass
+            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+            pass
     
     async def _download_and_merge_separate(self, url: str, quality_info: Dict, output_path: str,
-                                         cookie_content: Optional[str], progress_callback) -> Optional[str]:
+                                         progress_callback) -> Optional[str]:
         """دانلود و merge فرمت‌های جداگانه"""
         video_format = quality_info['video_format']
         audio_format = quality_info['audio_format']
@@ -456,7 +368,7 @@ class YouTubeAdvancedDownloader:
         # Download video
         advanced_logger.info("Downloading video stream...")
         video_success = await self._download_single_format(url, video_format['format_id'], 
-                                                          video_path, cookie_content, progress_callback)
+                                                          video_path, progress_callback)
         
         if not video_success:
             advanced_logger.error("Video download failed")
@@ -465,7 +377,7 @@ class YouTubeAdvancedDownloader:
         # Download audio
         advanced_logger.info("Downloading audio stream...")
         audio_success = await self._download_single_format(url, audio_format['format_id'],
-                                                          audio_path, cookie_content, progress_callback)
+                                                          audio_path, progress_callback)
         
         if not audio_success:
             advanced_logger.error("Audio download failed")
@@ -483,7 +395,7 @@ class YouTubeAdvancedDownloader:
             return None
     
     async def _download_single_format(self, url: str, format_id: str, output_path: str,
-                                    cookie_content: Optional[str], progress_callback) -> bool:
+                                    progress_callback) -> bool:
         """دانلود یک فرمت خاص"""
         ydl_opts = {
             'format': format_id,
@@ -496,19 +408,8 @@ class YouTubeAdvancedDownloader:
         if progress_callback:
             ydl_opts['progress_hooks'] = [progress_callback]
         
-        temp_cookie_file = None
         try:
-            if cookie_content:
-                # Convert JSON-looking cookie content to Netscape format for yt-dlp
-                if isinstance(cookie_content, str) and cookie_content.strip().startswith('{'):
-                    try:
-                        cookie_content = cookie_manager._convert_to_netscape_format(cookie_content, 'youtube')
-                    except Exception:
-                        pass
-                temp_cookie_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                temp_cookie_file.write(cookie_content)
-                temp_cookie_file.close()
-                ydl_opts['cookiefile'] = temp_cookie_file.name
+            # حذف وابستگی کوکی: دانلود بدون کوکی انجام می‌شود
             
             loop = asyncio.get_event_loop()
             success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
@@ -516,11 +417,8 @@ class YouTubeAdvancedDownloader:
             return success and os.path.exists(output_path)
             
         finally:
-            if temp_cookie_file and os.path.exists(temp_cookie_file.name):
-                try:
-                    os.unlink(temp_cookie_file.name)
-                except:
-                    pass
+            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+            pass
     
     def _download_with_ydl(self, url: str, ydl_opts: Dict) -> bool:
         """دانلود با yt-dlp در thread جداگانه"""
@@ -532,8 +430,8 @@ class YouTubeAdvancedDownloader:
             advanced_logger.error(f"yt-dlp download error: {e}")
             return False
     
-    async def _merge_with_ffmpeg(self, video_path: str, audio_path: str, output_path: str, target_resolution: str = None) -> bool:
-        """merge ویدئو و صدا با ffmpeg با حفظ وضوح صحیح"""
+    async def _merge_with_ffmpeg(self, video_path: str, audio_path: str, output_path: str, target_resolution: str = '720p') -> bool:
+        """ادغام و اطمینان از خروجی MP4/H.264/AAC با وضوح دقیق 1280x720"""
         if not self.ffmpeg_path:
             advanced_logger.error("FFmpeg not available for merging")
             return False
@@ -551,39 +449,32 @@ class YouTubeAdvancedDownloader:
             # بررسی وضوح فعلی ویدئو
             current_resolution = await self._get_video_resolution(video_path)
             advanced_logger.info(f"Current video resolution: {current_resolution}")
-            
-            # FFmpeg command for merging
+
+            # FFmpeg command برای ادغام و تبدیل به 720p
             cmd = [
                 self.ffmpeg_path,
                 '-i', video_path,
                 '-i', audio_path,
-                '-c:v', 'copy',  # Copy video stream (no re-encoding by default)
-                '-c:a', 'aac',   # Encode audio to AAC
-                '-b:a', '128k',  # Audio bitrate
-                '-strict', 'experimental',
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ar', '48000',
+                '-pix_fmt', 'yuv420p',
+                '-movflags', '+faststart',
                 '-avoid_negative_ts', 'make_zero',
                 '-fflags', '+genpts',
-                '-y',  # Overwrite output file
+                '-y',
             ]
             
             # اضافه کردن فیلتر وضوح فقط در صورت نیاز
             if target_resolution and target_resolution in standard_resolutions:
                 target_res = standard_resolutions[target_resolution]
-                
-                if current_resolution and current_resolution != target_res:
-                    # فقط در صورتی که ویدئو بزرگتر از هدف باشد، resize کن
-                    current_width, current_height = map(int, current_resolution.split('x'))
-                    target_width, target_height = map(int, target_res.split('x'))
-                    
-                    if current_width > target_width or current_height > target_height:
-                        advanced_logger.info(f"Resizing from {current_resolution} to {target_res}")
-                        cmd.extend(['-vf', f'scale={target_res}:force_original_aspect_ratio=decrease,pad={target_res}:(ow-iw)/2:(oh-ih)/2'])
-                        cmd[4] = 'libx264'  # Change from copy to encode when resizing
-                        cmd.extend(['-preset', 'fast', '-crf', '23'])  # Quality settings
-                    else:
-                        advanced_logger.info(f"Keeping original resolution {current_resolution} (target: {target_res})")
-                else:
-                    advanced_logger.info(f"Target resolution matches current: {target_res}")
+                # همیشه به وضوح هدف scale/pad انجام می‌شود (downscale یا upscale)
+                advanced_logger.info(f"Enforcing target resolution: {target_res}")
+                vf_filter = f"scale={target_res}:force_original_aspect_ratio=decrease,pad={target_res}:(ow-iw)/2:(oh-ih)/2"
+                cmd.extend(['-vf', vf_filter, '-preset', 'fast', '-crf', '22'])
             
             cmd.append(output_path)
             
@@ -642,6 +533,73 @@ class YouTubeAdvancedDownloader:
             }
             await self._log_merge_report(merge_report)
             
+            return False
+
+    async def _transcode_to_target(self, input_path: str, output_path: str, target_resolution: str = '720p') -> bool:
+        """تبدیل یک فایل ویدئویی به خروجی MP4/H.264/AAC با 1280x720"""
+        if not self.ffmpeg_path:
+            return False
+
+        standard_resolutions = {
+            '720p': '1280x720'
+        }
+
+        try:
+            target_res = standard_resolutions[target_resolution]
+            cmd = [
+                self.ffmpeg_path,
+                '-i', input_path,
+                '-c:v', 'libx264',
+                '-c:a', 'aac',
+                '-b:a', '192k',
+                '-ar', '48000',
+                '-pix_fmt', 'yuv420p',
+                '-movflags', '+faststart',
+                '-vf', f"scale={target_res}:force_original_aspect_ratio=decrease,pad={target_res}:(ow-iw)/2:(oh-ih)/2",
+                '-preset', 'fast',
+                '-crf', '22',
+                '-y',
+                output_path
+            ]
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self._run_ffmpeg_enhanced, cmd)
+            return result.get('success', False)
+        except Exception as e:
+            advanced_logger.error(f"Transcode error: {e}")
+            return False
+
+    async def _download_thumbnail_simple(self, url: str) -> Optional[str]:
+        """دانلود ساده thumbnail بدون وابستگی خارجی"""
+        try:
+            import urllib.request
+            import tempfile
+            fd, temp_path = tempfile.mkstemp(suffix='.jpg')
+            os.close(fd)
+            urllib.request.urlretrieve(url, temp_path)
+            return temp_path
+        except Exception as e:
+            advanced_logger.warning(f"Thumbnail download failed: {e}")
+            return None
+
+    async def _generate_telegram_thumb(self, input_path: str, output_path: str) -> bool:
+        """تولید فایل thumbnail مناسب تلگرام (JPEG با ابعاد کوچک)"""
+        if not self.ffmpeg_path:
+            return False
+        try:
+            cmd = [
+                self.ffmpeg_path,
+                '-y',
+                '-i', input_path,
+                '-vf', 'scale=320:-2',
+                '-vframes', '1',
+                output_path
+            ]
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self._run_ffmpeg_enhanced, cmd)
+            return result.get('success', False)
+        except Exception as e:
+            advanced_logger.error(f"Thumb generation error: {e}")
             return False
 
     def _run_ffmpeg_enhanced(self, cmd: List[str]) -> Dict[str, Any]:

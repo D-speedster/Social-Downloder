@@ -18,7 +18,6 @@ from plugins.youtube_quality_selector import quality_selector
 # Import callback handler to register it
 import plugins.youtube_new_callback
 from plugins.youtube_advanced_downloader import youtube_downloader
-from cookie_manager import cookie_manager
 from typing import Optional
 
 # Initialize loggers
@@ -54,14 +53,9 @@ async def handle_youtube_url_new(client: Client, message: Message, url: str):
     performance_logger.info(f"[USER:{user_id}] Processing message sent after: {message_sent_time - start_time:.2f} seconds")
     
     try:
-        # Get cookie from pool
-        cookie_content = cookie_manager.get_cookie('youtube')
-        if not cookie_content:
-            youtube_new_logger.warning("No YouTube cookies available")
-        
         # Get quality options
         extraction_start = time.time()
-        quality_options = await quality_selector.get_quality_options(url, cookie_content)
+        quality_options = await quality_selector.get_quality_options(url)
         extraction_time = time.time() - extraction_start
         
         performance_logger.info(f"[USER:{user_id}] Quality extraction completed in: {extraction_time:.2f} seconds")
@@ -87,7 +81,7 @@ async def handle_youtube_url_new(client: Client, message: Message, url: str):
         step['thumbnail'] = quality_options['thumbnail']
         step['quality_options'] = quality_options
         step['url'] = url
-        step['cookie_content'] = cookie_content
+        # کوکی حذف شد؛ دانلود بدون کوکی انجام می‌شود
         
         # Create quality selection interface
         info_text = quality_selector.format_video_info_text(quality_options)

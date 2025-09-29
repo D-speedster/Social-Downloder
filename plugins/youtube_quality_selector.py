@@ -19,13 +19,13 @@ class YouTubeQualitySelector:
         self.downloader = youtube_downloader
         quality_selector_logger.info("YouTubeQualitySelector initialized")
     
-    async def get_available_qualities(self, url: str, cookie_content: Optional[str] = None) -> Optional[List[Dict]]:
+    async def get_available_qualities(self, url: str) -> Optional[List[Dict]]:
         """دریافت لیست کیفیت‌های موجود"""
         quality_selector_logger.info(f"Getting available qualities for: {url}")
         
         try:
             # Get video info
-            info = await self.downloader.get_video_info(url, cookie_content)
+            info = await self.downloader.get_video_info(url)
             if not info:
                 quality_selector_logger.error("Failed to get video info")
                 return None
@@ -63,13 +63,13 @@ class YouTubeQualitySelector:
         
         return info_text
 
-    async def get_quality_options(self, url: str, cookie_content: Optional[str] = None) -> Optional[Dict]:
+    async def get_quality_options(self, url: str) -> Optional[Dict]:
         """دریافت گزینه‌های کیفیت برای نمایش به کاربر"""
         quality_selector_logger.info(f"Getting quality options for: {url}")
         
         try:
             # Get video info
-            info = await self.downloader.get_video_info(url, cookie_content)
+            info = await self.downloader.get_video_info(url)
             if not info:
                 quality_selector_logger.error("Failed to get video info")
                 return None
