@@ -64,6 +64,22 @@ class DB:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )"""
             )
+
+            # Create cookies table for YouTube cookie pool
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS cookies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    format TEXT NOT NULL DEFAULT 'netscape',
+                    cookie_text TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'unknown',
+                    use_count INTEGER NOT NULL DEFAULT 0,
+                    fail_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    last_used_at TEXT
+                )"""
+            )
             
             # Insert default waiting messages if they don't exist
             self.cursor.execute(
@@ -219,6 +235,107 @@ class DB:
         except sqlite3.Error as error:
             print(f"Failed to get blocked_until: {error}")
             return ''
+
+    # --- Cookie pool operations ---
+    def add_cookie(self, name: str, source_type: str, cookie_text: str, fmt: str = 'netscape', status: str = 'unknown') -> bool:
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            q = ('INSERT INTO cookies (name, source_type, format, cookie_text, status, use_count, fail_count, created_at) '
+                 'VALUES (?, ?, ?, ?, ?, 0, 0, ?)')
+            self.cursor.execute(q, (name, source_type, fmt, cookie_text, status, now))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to add cookie: {e}")
+            return False
+
+    def list_cookies(self, limit: int = 50) -> list:
+        try:
+            q = 'SELECT id, name, source_type, status, use_count, fail_count, last_used_at, created_at FROM cookies ORDER BY id DESC LIMIT ?'
+            self.cursor.execute(q, (limit,))
+            rows = self.cursor.fetchall() or []
+            result = []
+            for r in rows:
+                result.append({
+                    'id': r[0], 'name': r[1], 'source_type': r[2], 'status': r[3],
+                    'use_count': r[4], 'fail_count': r[5], 'last_used_at': r[6], 'created_at': r[7]
+                })
+            return result
+        except sqlite3.Error as e:
+            print(f"Failed to list cookies: {e}")
+            return []
+
+    def get_cookie_by_id(self, cookie_id: int) -> dict:
+        try:
+            q = 'SELECT id, name, source_type, format, cookie_text, status, use_count, fail_count, last_used_at, created_at FROM cookies WHERE id = ?'
+            self.cursor.execute(q, (cookie_id,))
+            r = self.cursor.fetchone()
+            if not r:
+                return {}
+            return {
+                'id': r[0], 'name': r[1], 'source_type': r[2], 'format': r[3], 'cookie_text': r[4],
+                'status': r[5], 'use_count': r[6], 'fail_count': r[7], 'last_used_at': r[8], 'created_at': r[9]
+            }
+        except sqlite3.Error as e:
+            print(f"Failed to get cookie by id: {e}")
+            return {}
+
+    def delete_cookie(self, cookie_id: int) -> bool:
+        try:
+            q = 'DELETE FROM cookies WHERE id = ?'
+            self.cursor.execute(q, (cookie_id,))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to delete cookie: {e}")
+            return False
+
+    def update_cookie_status(self, cookie_id: int, status: str) -> None:
+        try:
+            q = 'UPDATE cookies SET status = ? WHERE id = ?'
+            self.cursor.execute(q, (status, cookie_id))
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to update cookie status: {e}")
+
+    def mark_cookie_used(self, cookie_id: int, success: bool) -> None:
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            self.cursor.execute('SELECT use_count, fail_count FROM cookies WHERE id = ?', (cookie_id,))
+            row = self.cursor.fetchone()
+            use_count = int(row[0] or 0) if row else 0
+            fail_count = int(row[1] or 0) if row else 0
+            use_count += 1
+            if not success:
+                fail_count += 1
+            self.cursor.execute('UPDATE cookies SET use_count = ?, fail_count = ?, last_used_at = ? WHERE id = ?', (use_count, fail_count, now, cookie_id))
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to mark cookie used: {e}")
+
+    def get_next_cookie(self, prev_cookie_id: int | None) -> dict | None:
+        """Pick the least recently used cookie, avoiding immediate reuse of prev_cookie_id."""
+        try:
+            q = ('SELECT id, name, cookie_text FROM cookies WHERE status != ? '
+                 'ORDER BY COALESCE(last_used_at, "1970-01-01 00:00:00") ASC, use_count ASC LIMIT 2')
+            self.cursor.execute(q, ('disabled',))
+            rows = self.cursor.fetchall() or []
+            if not rows:
+                return None
+            if prev_cookie_id is None:
+                chosen = rows[0]
+            else:
+                chosen = None
+                for r in rows:
+                    if r[0] != prev_cookie_id:
+                        chosen = r
+                        break
+                if chosen is None:
+                    chosen = rows[0]
+            return {'id': chosen[0], 'name': chosen[1], 'cookie_text': chosen[2]}
+        except sqlite3.Error as e:
+            print(f"Failed to get next cookie: {e}")
+            return None
     
     def set_blocked_until(self, user_id: int, until_str: str) -> None:
         """Set blocked_until timestamp for a user"""
