@@ -1,6 +1,7 @@
 import os
 import json
 import tempfile
+from plugins.proxy_config import get_proxy_url
 import time
 from typing import List, Dict, Optional, Tuple
 
@@ -173,6 +174,12 @@ def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
             'connect_timeout': timeout,
             'no_warnings': True,
             'no_check_certificate': True,
+            'proxy': get_proxy_url(),
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            },
         }
         def _do_extract():
             with YoutubeDL(opts) as ydl:

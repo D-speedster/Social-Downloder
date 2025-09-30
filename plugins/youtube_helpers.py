@@ -3,6 +3,7 @@ import asyncio
 import tempfile
 import yt_dlp
 from plugins.logger_config import get_logger
+from plugins.proxy_config import get_proxy_url
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
 
 # Initialize logger
@@ -20,11 +21,13 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
         
         # Configure yt-dlp options
+        proxy_url = get_proxy_url()
         ydl_opts = {
             'format': format_id,
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
+            'proxy': proxy_url,
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']
@@ -92,12 +95,14 @@ async def get_direct_download_url(url, format_id):
         youtube_helpers_logger.info(f"دریافت لینک مستقیم: {url} با فرمت {format_id}")
         
         # Configure yt-dlp options for URL extraction only
+        proxy_url = get_proxy_url()
         ydl_opts = {
             'format': format_id,
             'quiet': True,
             'simulate': True,
             'noplaylist': True,
             'extract_flat': False,
+            'proxy': proxy_url,
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']

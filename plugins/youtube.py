@@ -6,6 +6,7 @@ from plugins.start import step, join
 from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from yt_dlp import YoutubeDL
+from plugins.proxy_config import get_proxy_url
 import yt_dlp
 from plugins import constant
 import os
@@ -250,6 +251,7 @@ async def show_video(client: Client, message: Message):
         
         youtube_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
         
+        proxy_url = get_proxy_url()
         ydl_opts = {
             'quiet': True,
             'simulate': True,
@@ -268,6 +270,7 @@ async def show_video(client: Client, message: Message):
             'writeautomaticsub': False, # Skip auto subtitles
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
+            'proxy': proxy_url,
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']
@@ -354,6 +357,7 @@ async def show_video(client: Client, message: Message):
         try:
             performance_logger.info(f"[USER:{user_id}] Attempting fallback extraction...")
             
+            proxy_url = get_proxy_url()
             fallback_opts = {
                 'quiet': True,
                 'simulate': True,
@@ -370,7 +374,13 @@ async def show_video(client: Client, message: Message):
                 'writeautomaticsub': False,
                 'writethumbnail': True,
                 'writeinfojson': False,
-                'format': 'best[height>=720]/best[height>=480]/best'  # Maintain quality preference even in fallback
+                'format': 'best[height>=720]/best[height>=480]/best',  # Maintain quality preference even in fallback
+                'proxy': proxy_url,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android']
+                    }
+                },
             }
             
             if ffmpeg_path:
