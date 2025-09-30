@@ -38,9 +38,11 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 cookie_id_used = cid
-                youtube_helpers_logger.debug(f"استفاده از کوکی چرخشی برای دانلود: id={cid}")
-        except Exception:
-            pass
+                youtube_helpers_logger.debug(f"استفاده از کوکی چرخشی برای دانلود: id={cid}, path={cookiefile}")
+            else:
+                youtube_helpers_logger.debug("کوکی چرخشی دردسترس نیست؛ دانلود بدون کوکی")
+        except Exception as e:
+            youtube_helpers_logger.debug(f"دسترسی به کوکی چرخشی با خطا مواجه شد: {e}")
 
         # Download in thread to avoid blocking
         def download_sync():
@@ -100,9 +102,11 @@ async def get_direct_download_url(url, format_id):
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 cookie_id_used = cid
-                youtube_helpers_logger.debug(f"استفاده از کوکی چرخشی برای استخراج لینک: id={cid}")
-        except Exception:
-            pass
+                youtube_helpers_logger.debug(f"استفاده از کوکی چرخشی برای استخراج لینک: id={cid}, path={cookiefile}")
+            else:
+                youtube_helpers_logger.debug("کوکی چرخشی دردسترس نیست؛ استخراج لینک بدون کوکی")
+        except Exception as e:
+            youtube_helpers_logger.debug(f"دسترسی به کوکی چرخشی با خطا مواجه شد: {e}")
         
         # Extract info in thread to avoid blocking
         def extract_sync():

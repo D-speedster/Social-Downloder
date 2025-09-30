@@ -281,9 +281,11 @@ async def show_video(client: Client, message: Message):
                 ydl_opts['cookiefile'] = cookiefile
                 cookie_id_used = cid
                 use_cookies = True
-                youtube_logger.debug(f"استفاده از کوکی چرخشی برای استخراج: id={cid}")
-        except Exception:
-            pass
+                youtube_logger.debug(f"استفاده از کوکی چرخشی برای استخراج: id={cid}, path={cookiefile}")
+            else:
+                youtube_logger.debug("کوکی چرخشی دردسترس نیست؛ استخراج بدون کوکی")
+        except Exception as e:
+            youtube_logger.debug(f"دسترسی به کوکی چرخشی با خطا مواجه شد: {e}")
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()

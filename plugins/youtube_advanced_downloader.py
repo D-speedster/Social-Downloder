@@ -349,9 +349,9 @@ class YouTubeAdvancedDownloader:
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 self._prev_cookie_id = cid
-                advanced_logger.info(f"Using rotated cookie for combined download: id={cid}")
-        except Exception:
-            pass
+                advanced_logger.info(f"Using rotated cookie for combined download: id={cid}, path={cookiefile}")
+            except Exception:
+                pass
         
         if self.ffmpeg_path:
             ydl_opts['ffmpeg_location'] = self.ffmpeg_path
@@ -365,7 +365,7 @@ class YouTubeAdvancedDownloader:
             
             # Download in thread pool
             loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
+            success = await loop.run_in_executor(None, self._download_with_ydlp, url, ydl_opts)
             
             if success and os.path.exists(output_path):
                 advanced_logger.info("Combined format downloaded successfully")
@@ -447,9 +447,9 @@ class YouTubeAdvancedDownloader:
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 self._prev_cookie_id = cid
-                advanced_logger.info(f"Using rotated cookie for single format: id={cid}")
-        except Exception:
-            pass
+                advanced_logger.info(f"Using rotated cookie for single format: id={cid}, path={cookiefile}")
+            except Exception:
+                pass
         
         if progress_callback:
             ydl_opts['progress_hooks'] = [progress_callback]

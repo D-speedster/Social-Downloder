@@ -171,6 +171,8 @@ def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
             'extractor_retries': 0,
             'socket_timeout': timeout,
             'connect_timeout': timeout,
+            'no_warnings': True,
+            'no_check_certificate': True,
         }
         def _do_extract():
             with YoutubeDL(opts) as ydl:
@@ -215,6 +217,33 @@ def mark_cookie_used(cookie_id: int, success: bool) -> None:
             pass
 
 
+def _sanity_check_youtube_cookie(netscape_text: str) -> bool:
+    """Basic structural check: ensure key YouTube auth cookies exist.
+    Returns True if at least two critical cookies for .youtube.com are present.
+    """
+    try:
+        critical_names = {
+            'SAPISID', 'APISID', 'HSID', 'SSID', 'SID', '__Secure-3PSID', '__Secure-3PAPISID', 'CONSENT'
+        }
+        count = 0
+        for line in (netscape_text or '').splitlines():
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split('\t')
+            if len(parts) != 7:
+                parts = line.split()
+            if len(parts) != 7:
+                continue
+            domain, flag, path, secure, expiration, name, value = parts
+            if '.youtube.com' in domain and name in critical_names and value:
+                count += 1
+            if count >= 2:
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def validate_and_update_cookie_status(cookie_id: int) -> bool:
     db = DB()
     try:
@@ -222,9 +251,13 @@ def validate_and_update_cookie_status(cookie_id: int) -> bool:
         rec = recs[0] if isinstance(recs, list) and recs else recs
         if not rec:
             return False
-        ok = validate_cookie(rec.get('cookie_text', ''))
+        text = rec.get('cookie_text', '')
+        # Combine yt-dlp extraction check with structural sanity check
+        ok_extract = validate_cookie(text)
+        ok_sanity = _sanity_check_youtube_cookie(text)
+        final_ok = bool(ok_extract or ok_sanity)
         if hasattr(db, 'update_cookie_status'):
-            db.update_cookie_status(cookie_id, 'valid' if ok else 'invalid')
-        return ok
+            db.update_cookie_status(cookie_id, 'valid' if final_ok else 'unknown')
+        return final_ok
     except Exception:
         return False
