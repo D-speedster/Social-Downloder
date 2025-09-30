@@ -25,6 +25,11 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            },
         }
         
         # Add progress hook if provided
@@ -93,6 +98,11 @@ async def get_direct_download_url(url, format_id):
             'simulate': True,
             'noplaylist': True,
             'extract_flat': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            },
         }
         
         # تلاش برای استفاده از کوکی چرخشی در استخراج لینک

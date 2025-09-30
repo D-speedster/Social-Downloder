@@ -268,6 +268,11 @@ async def show_video(client: Client, message: Message):
             'writeautomaticsub': False, # Skip auto subtitles
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android']
+                }
+            },
         }
         
         if ffmpeg_path:

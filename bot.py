@@ -1,4 +1,4 @@
-from pyrogram import Client
+from pyrogram import Client, idle
 from pyrogram.storage import MemoryStorage
 from plugins.sqlite_db_wrapper import DB
 from logging import basicConfig, ERROR, INFO
@@ -115,9 +115,8 @@ async def main():
         await client.start()
         logger.info("Bot started successfully")
         
-        # Keep the bot running
-        import pyrogram
-        await pyrogram.idle()
+        # Keep the bot running reliably
+        await idle()
         
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
