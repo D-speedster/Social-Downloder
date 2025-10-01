@@ -106,16 +106,33 @@ def _mark_proxy_result(proxy_type: str, success: bool):
         _failure_counts[proxy_type] = 0
 
 
+def _get_all_available_proxies() -> List[Tuple[str, str]]:
+    """Get all available proxies in sequential order. Returns list of (proxy_type, proxy_url)"""
+    proxies = []
+    
+    # Try HTTP proxy first
+    if _is_proxy_available('http_proxy'):
+        proxies.append(('http_proxy', PROXY_CONFIG['http']))
+    
+    # Then try SOCKS5 ports in sequential order
+    for port in SOCKS5_PORTS:
+        if _is_proxy_available(f'socks5_{port}'):
+            proxies.append((f'socks5_{port}', f'socks5h://127.0.0.1:{port}'))
+    
+    return proxies
+
+
 def _choose_proxy() -> Optional[Tuple[str, str]]:
     """Choose an available proxy. Returns (proxy_type, proxy_url) or None"""
     # Try HTTP proxy first
     if _is_proxy_available('http_proxy'):
         return ('http_proxy', PROXY_CONFIG['http'])
     
-    # Fallback to SOCKS5 ports
+    # Fallback to SOCKS5 ports (sequential order)
     available_socks = [port for port in SOCKS5_PORTS if _is_proxy_available(f'socks5_{port}')]
     if available_socks:
-        port = random.choice(available_socks)
+        # Use first available port (sequential order) instead of random
+        port = available_socks[0]
         return (f'socks5_{port}', f'socks5h://127.0.0.1:{port}')
     
     return None
@@ -124,27 +141,21 @@ def _choose_proxy() -> Optional[Tuple[str, str]]:
 async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile: Optional[str] = None,
                                 max_attempts: int = 3) -> Dict[str, Any]:
     """
-    Attempt to extract info via yt-dlp using HTTP proxy first, then SOCKS5H fallback, then no proxy.
+    Attempt to extract info via yt-dlp using all available proxies in sequential order, then no proxy.
     - HTTP proxy on port 10808 (primary)
-    - SOCKS5H proxy rotation as fallback
+    - SOCKS5H proxy rotation in sequential order (1081, 1082, 1083, ...)
     - No proxy as final fallback
     - Timeout 8–12 seconds (socket_timeout randomized)
     - Standard browser headers
     - Logs each attempt and response time
     """
     last_error: Optional[Exception] = None
-    tried_proxies: set = set()
     
-    # First try with proxies
-    for attempt in range(1, max_attempts + 1):
-        proxy_info = _choose_proxy()
-        if proxy_info is None:
-            break
-        
-        proxy_type, proxy_url = proxy_info
-        if proxy_type in tried_proxies:
-            continue
-        tried_proxies.add(proxy_type)
+    # Get all available proxies in sequential order
+    available_proxies = _get_all_available_proxies()
+    
+    # Try each proxy in sequential order
+    for attempt, (proxy_type, proxy_url) in enumerate(available_proxies, 1):
 
         timeout = random.randint(8, 12)
         opts = dict(base_opts)
@@ -226,22 +237,16 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
 async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile: Optional[str] = None,
                                  max_attempts: int = 3) -> None:
     """
-    Attempt to download using yt-dlp with HTTP proxy first, then SOCKS5H fallback, then no proxy.
+    Attempt to download using yt-dlp with all available proxies in sequential order, then no proxy.
     On success returns None; on failure raises the last encountered exception.
     """
     last_error: Optional[Exception] = None
-    tried_proxies: set = set()
     
-    # First try with proxies
-    for attempt in range(1, max_attempts + 1):
-        proxy_info = _choose_proxy()
-        if proxy_info is None:
-            break
-        
-        proxy_type, proxy_url = proxy_info
-        if proxy_type in tried_proxies:
-            continue
-        tried_proxies.add(proxy_type)
+    # Get all available proxies in sequential order
+    available_proxies = _get_all_available_proxies()
+    
+    # Try each proxy in sequential order
+    for attempt, (proxy_type, proxy_url) in enumerate(available_proxies, 1):
 
         timeout = random.randint(8, 12)
         opts = dict(base_opts)

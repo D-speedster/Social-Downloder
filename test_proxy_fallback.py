@@ -30,7 +30,7 @@ async def test_problematic_link():
     """Test the problematic YouTube link cgzAu5NUVkw"""
     
     # Test URL - using a more common video
-    test_url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"  # Rick Roll - always available
+    test_url = "https://www.youtube.com/watch?v=cgzAu5NUVkw"  # Original problematic link
     
     logger.info(f"Testing problematic link: {test_url}")
     logger.info("=" * 60)
