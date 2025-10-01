@@ -174,7 +174,6 @@ def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
             'connect_timeout': timeout,
             'no_warnings': True,
             'no_check_certificate': True,
-            'proxy': get_proxy_url(),
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']

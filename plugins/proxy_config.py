@@ -1,14 +1,15 @@
 import os
 
 
-def get_proxy_url() -> str:
-    """Return proxy URL for network calls.
+def get_proxy_url() -> str | None:
+    """Return proxy URL only if configured in environment.
 
     Priority:
     - V2RAY_PROXY
     - HTTPS_PROXY / HTTP_PROXY / ALL_PROXY
     - SOCKS_PROXY
-    Fallback to V2Ray's default HTTP port.
+
+    No built-in default is returned to avoid forcing local proxies.
     """
     return (
         os.getenv("V2RAY_PROXY")
@@ -16,13 +17,15 @@ def get_proxy_url() -> str:
         or os.getenv("HTTP_PROXY")
         or os.getenv("ALL_PROXY")
         or os.getenv("SOCKS_PROXY")
-        or "http://127.0.0.1:10808"
+        or None
     )
 
 
 def get_requests_proxies() -> dict:
-    """Return proxies dict suitable for requests library."""
+    """Return proxies dict suitable for requests library, if available."""
     proxy = get_proxy_url()
+    if not proxy:
+        return {}
     return {
         "http": proxy,
         "https": proxy,

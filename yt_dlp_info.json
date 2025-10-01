@@ -1,24 +1,24 @@
 {
-    "id": "7-_qRtGbCTE",
-    "title": "Dedublüman - Belki - Akustik (Lyric Video)",
+    "id": "LSH2W6Aw-7A",
+    "title": "Behesht",
     "formats": [
         {
-            "format_id": "sb3",
+            "format_id": "sb2",
             "format_note": "storyboard",
             "ext": "mhtml",
             "protocol": "mhtml",
             "acodec": "none",
             "vcodec": "none",
-            "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L0/default.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDj1VBW4spTpodZa0m99k0WTtjW1A",
+            "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L0/default.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLDSuTQGTEAAi8YjwwVQZtukpEB6sA",
             "width": 48,
             "height": 27,
-            "fps": 0.5555555555555556,
+            "fps": 0.2597402597402597,
             "rows": 10,
             "columns": 10,
             "fragments": [
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L0/default.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDj1VBW4spTpodZa0m99k0WTtjW1A",
-                    "duration": 180.0
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L0/default.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLDSuTQGTEAAi8YjwwVQZtukpEB6sA",
+                    "duration": 385.0
                 }
             ],
             "audio_ext": "none",
@@ -30,47 +30,12 @@
             "aspect_ratio": 1.78,
             "filesize_approx": null,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-us,en;q=0.5",
                 "Sec-Fetch-Mode": "navigate"
             },
-            "format": "sb3 - 48x27 (storyboard)"
-        },
-        {
-            "format_id": "sb2",
-            "format_note": "storyboard",
-            "ext": "mhtml",
-            "protocol": "mhtml",
-            "acodec": "none",
-            "vcodec": "none",
-            "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L1/M$M.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDgCDODpfkQBiFx7NKhkY0osAJ4TA",
-            "width": 80,
-            "height": 45,
-            "fps": 0.5111111111111111,
-            "rows": 10,
-            "columns": 10,
-            "fragments": [
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L1/M0.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDgCDODpfkQBiFx7NKhkY0osAJ4TA",
-                    "duration": 180.0
-                }
-            ],
-            "audio_ext": "none",
-            "video_ext": "none",
-            "vbr": 0,
-            "abr": 0,
-            "tbr": null,
-            "resolution": "80x45",
-            "aspect_ratio": 1.78,
-            "filesize_approx": null,
-            "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "en-us,en;q=0.5",
-                "Sec-Fetch-Mode": "navigate"
-            },
-            "format": "sb2 - 80x45 (storyboard)"
+            "format": "sb2 - 48x27 (storyboard)"
         },
         {
             "format_id": "sb1",
@@ -79,28 +44,16 @@
             "protocol": "mhtml",
             "acodec": "none",
             "vcodec": "none",
-            "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L2/M$M.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDkLB-FWaJlzYbKoHDDxEnjL0J_sg",
-            "width": 160,
-            "height": 90,
-            "fps": 0.5111111111111111,
-            "rows": 5,
-            "columns": 5,
+            "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L1/M$M.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLAFcYYx9cgcHU5TbU98fXCKyqI7tg",
+            "width": 45,
+            "height": 45,
+            "fps": 0.2025974025974026,
+            "rows": 10,
+            "columns": 10,
             "fragments": [
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L2/M0.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDkLB-FWaJlzYbKoHDDxEnjL0J_sg",
-                    "duration": 48.91304347826087
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L2/M1.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDkLB-FWaJlzYbKoHDDxEnjL0J_sg",
-                    "duration": 48.91304347826087
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L2/M2.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDkLB-FWaJlzYbKoHDDxEnjL0J_sg",
-                    "duration": 48.91304347826087
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L2/M3.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLDkLB-FWaJlzYbKoHDDxEnjL0J_sg",
-                    "duration": 33.260869565217405
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L1/M0.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLAFcYYx9cgcHU5TbU98fXCKyqI7tg",
+                    "duration": 385.0
                 }
             ],
             "audio_ext": "none",
@@ -108,16 +61,16 @@
             "vbr": 0,
             "abr": 0,
             "tbr": null,
-            "resolution": "160x90",
-            "aspect_ratio": 1.78,
+            "resolution": "45x45",
+            "aspect_ratio": 1.0,
             "filesize_approx": null,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-us,en;q=0.5",
                 "Sec-Fetch-Mode": "navigate"
             },
-            "format": "sb1 - 160x90 (storyboard)"
+            "format": "sb1 - 45x45 (storyboard)"
         },
         {
             "format_id": "sb0",
@@ -126,56 +79,28 @@
             "protocol": "mhtml",
             "acodec": "none",
             "vcodec": "none",
-            "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M$M.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-            "width": 320,
-            "height": 180,
-            "fps": 0.5111111111111111,
-            "rows": 3,
-            "columns": 3,
+            "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L2/M$M.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLBP4KiQMRS3wJyBxhX01RxY2BjF0A",
+            "width": 90,
+            "height": 90,
+            "fps": 0.2025974025974026,
+            "rows": 5,
+            "columns": 5,
             "fragments": [
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M0.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L2/M0.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLBP4KiQMRS3wJyBxhX01RxY2BjF0A",
+                    "duration": 123.3974358974359
                 },
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M1.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L2/M1.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLBP4KiQMRS3wJyBxhX01RxY2BjF0A",
+                    "duration": 123.3974358974359
                 },
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M2.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L2/M2.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLBP4KiQMRS3wJyBxhX01RxY2BjF0A",
+                    "duration": 123.3974358974359
                 },
                 {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M3.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M4.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M5.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M6.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M7.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M8.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M9.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 17.608695652173914
-                },
-                {
-                    "url": "https://i.ytimg.com/sb/7-_qRtGbCTE/storyboard3_L3/M10.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgjn4_CnBg==&sigh=rs$AOn4CLBhq6tuXFTYiY4NgjV-4gSQJaG5UQ",
-                    "duration": 3.9130434782608745
+                    "url": "https://i.ytimg.com/sb/LSH2W6Aw-7A/storyboard3_L2/M3.jpg?sqp=-oaymwENSDfyq4qpAwVwAcABBqLzl_8DBgj0zdGVBg==&sigh=rs$AOn4CLBP4KiQMRS3wJyBxhX01RxY2BjF0A",
+                    "duration": 14.80769230769232
                 }
             ],
             "audio_ext": "none",
@@ -183,16 +108,16 @@
             "vbr": 0,
             "abr": 0,
             "tbr": null,
-            "resolution": "320x180",
-            "aspect_ratio": 1.78,
+            "resolution": "90x90",
+            "aspect_ratio": 1.0,
             "filesize_approx": null,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-us,en;q=0.5",
                 "Sec-Fetch-Mode": "navigate"
             },
-            "format": "sb0 - 320x180 (storyboard)"
+            "format": "sb0 - 90x90 (storyboard)"
         },
         {
             "asr": 44100,
@@ -205,10 +130,10 @@
             "height": 360,
             "quality": 6.0,
             "has_drm": false,
-            "tbr": 247.808,
-            "filesize_approx": 5583609,
-            "url": "https://rr8---sn-8vq54voxu-n5fe.googlevideo.com/videoplayback?expire=1759288510&ei=XkjcaJ7xB4uP6dsPupSCyAw&ip=185.219.133.53&id=o-AO6KleIJa3BE3VQWT49nvQMjWIHGtYy1c1yTjq5MIFYx&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1759266910%2C&mh=pn&mm=31%2C29&mn=sn-8vq54voxu-n5fe%2Csn-nv47zn7y&ms=au%2Crdu&mv=m&mvi=8&pl=24&rms=au%2Cau&initcwndbps=1090000&bui=ATw7iSUI-qtUS6ZNJZ_izBBukxN2blb67kCejRNdLpfJoIqejM7KD2yNCEhXfDGuto_TLnJCFtcI8jOn&spc=hcYD5b00bWUTGxMVGGWRy0BGvrLTkAUhqMecK6NcBd4jyadvIuQcJ-e7lU6f6iW67n8&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&cnr=14&ratebypass=yes&dur=180.256&lmt=1750264107966806&mt=1759266349&fvip=1&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=4538534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRQIgZGjUbkAp2F92SClqpg73HaS7dzNzMuaY_El70ClEnxECIQCbF2ZqzFX7I6KF_FHEcjJJWRgxcSr7xFvK4Z_k0KGpgg%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgQgcnHU3MqzWrmLujYfrcGDTSuq5bpfzaGVW-toflYmgCIDQSTw-CH2F7lP3BD3vsBR2mn3GcobH7h3JvSFArPWBD",
-            "width": 640,
+            "tbr": 217.242,
+            "filesize_approx": 10447466,
+            "url": "https://rr1---sn-aigl6ns6.googlevideo.com/videoplayback?expire=1759342635&ei=yxvdaM_ODIKezPsPwraEyAg&ip=45.89.63.135&id=o-AAwuIbro6nUUFBsgroXCNk6LicSlA-uGrm_zfx6M1on3&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1759321035%2C&mh=WL&mm=31%2C26&mn=sn-aigl6ns6%2Csn-5hnekn7z&ms=au%2Conr&mv=m&mvi=1&pl=24&rms=au%2Cau&gcr=ru&initcwndbps=638750&bui=ATw7iSWi9IzKUTLBWlnagob9-u7ieEf7xeKFqCdSK5Rm8R77V2d5DIqCO8VQxdxPVhqVrcShAucv79ft&spc=hcYD5czTfDt9NMj7SMfI7qd_nE5KXJb3zIu5MipjrbpSFtq1Z96G_fZnq_XlMzXSThk&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&cnr=14&ratebypass=yes&dur=384.731&lmt=1661000093157824&mt=1759320405&fvip=5&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=2318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cgcr%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRgIhAJ4TCTjGUI7NPSMdpmbtxknHGU_d7BXkAcG-MA6ZH6tlAiEAzpyemyowXZvxe83fr8O2scWCrVSiLt2-D0PvKwFxg1w%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgQ1jYx8KYPvV1v24W6EvZvBJI1yX2v1y3RPISIgdPmY4CIQCr_BigoD8Z0kkoxLYUx2Cr3GWq8bEL_cZ2YFM7WJRh3w%3D%3D",
+            "width": 360,
             "language": null,
             "language_preference": -1,
             "preference": null,
@@ -216,7 +141,7 @@
             "vcodec": "avc1.42001E",
             "acodec": "mp4a.40.2",
             "dynamic_range": "SDR",
-            "available_at": 1759266916,
+            "available_at": 1759321042,
             "downloader_options": {
                 "http_chunk_size": 10485760
             },
@@ -225,298 +150,279 @@
             "audio_ext": "none",
             "vbr": null,
             "abr": null,
-            "resolution": "640x360",
-            "aspect_ratio": 1.78,
+            "resolution": "360x360",
+            "aspect_ratio": 1.0,
             "http_headers": {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
                 "Accept-Language": "en-us,en;q=0.5",
                 "Sec-Fetch-Mode": "navigate"
             },
-            "format": "18 - 640x360 (360p)"
+            "format": "18 - 360x360 (360p)"
         }
     ],
     "thumbnails": [
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/3.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/3.jpg",
             "preference": -37,
             "id": "0"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/3.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/3.webp",
             "preference": -36,
             "id": "1"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/2.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/2.jpg",
             "preference": -35,
             "id": "2"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/2.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/2.webp",
             "preference": -34,
             "id": "3"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/1.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/1.jpg",
             "preference": -33,
             "id": "4"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/1.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/1.webp",
             "preference": -32,
             "id": "5"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/mq3.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/mq3.jpg",
             "preference": -31,
             "id": "6"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/mq3.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/mq3.webp",
             "preference": -30,
             "id": "7"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/mq2.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/mq2.jpg",
             "preference": -29,
             "id": "8"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/mq2.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/mq2.webp",
             "preference": -28,
             "id": "9"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/mq1.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/mq1.jpg",
             "preference": -27,
             "id": "10"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/mq1.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/mq1.webp",
             "preference": -26,
             "id": "11"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hq3.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hq3.jpg",
             "preference": -25,
             "id": "12"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/hq3.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/hq3.webp",
             "preference": -24,
             "id": "13"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hq2.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hq2.jpg",
             "preference": -23,
             "id": "14"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/hq2.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/hq2.webp",
             "preference": -22,
             "id": "15"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hq1.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hq1.jpg",
             "preference": -21,
             "id": "16"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/hq1.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/hq1.webp",
             "preference": -20,
             "id": "17"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/sd3.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/sd3.jpg",
             "preference": -19,
             "id": "18"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/sd3.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/sd3.webp",
             "preference": -18,
             "id": "19"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/sd2.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/sd2.jpg",
             "preference": -17,
             "id": "20"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/sd2.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/sd2.webp",
             "preference": -16,
             "id": "21"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/sd1.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/sd1.jpg",
             "preference": -15,
             "id": "22"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/sd1.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/sd1.webp",
             "preference": -14,
             "id": "23"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/default.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/default.jpg",
             "preference": -13,
             "id": "24"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/default.jpg?sqp=-oaymwEkCHgQWvKriqkDGvABAfgB_gmAAtAFigIMCAAQARhPIFooZTAP&rs=AOn4CLDm_qqGxCBWievTBNohbHou8oIYlg",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/default.webp",
             "height": 90,
             "width": 120,
-            "preference": -13,
+            "preference": -12,
             "id": "25",
             "resolution": "120x90"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/default.webp",
-            "preference": -12,
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/mqdefault.jpg",
+            "preference": -11,
             "id": "26"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/mqdefault.jpg",
-            "preference": -11,
-            "id": "27"
-        },
-        {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/mqdefault.jpg?sqp=-oaymwEmCMACELQB8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLDVjsTVlfB1jx02Pfx2hRqKOFfN5g",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/mqdefault.webp",
             "height": 180,
             "width": 320,
-            "preference": -11,
-            "id": "28",
+            "preference": -10,
+            "id": "27",
             "resolution": "320x180"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/mqdefault.webp",
-            "preference": -10,
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/0.jpg",
+            "preference": -9,
+            "id": "28"
+        },
+        {
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/0.webp",
+            "preference": -8,
             "id": "29"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/0.jpg",
-            "preference": -9,
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hqdefault.jpg",
+            "preference": -7,
             "id": "30"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/0.webp",
-            "preference": -8,
-            "id": "31"
-        },
-        {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg",
-            "preference": -7,
-            "id": "32"
-        },
-        {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg?sqp=-oaymwE1CKgBEF5IVfKriqkDKAgBFQAAiEIYAXABwAEG8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLCoGnk7UmenverGr6-zwUx_5JYSfg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hqdefault.jpg?sqp=-oaymwEbCKgBEF5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLA9cEbd0drJj5hGrfWbyC2CX82BZQ",
             "height": 94,
             "width": 168,
             "preference": -7,
-            "id": "33",
+            "id": "31",
             "resolution": "168x94"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg?sqp=-oaymwE1CMQBEG5IVfKriqkDKAgBFQAAiEIYAXABwAEG8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLDNTceSsjerFgN_8NotcA66hhZdzA",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hqdefault.jpg?sqp=-oaymwEbCMQBEG5IVfKriqkDDggBFQAAiEIYAXABwAEG&rs=AOn4CLBHZ0O4rasHUIxRcSJk3wGQ-QKy4g",
             "height": 110,
             "width": 196,
             "preference": -7,
-            "id": "34",
+            "id": "32",
             "resolution": "196x110"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg?sqp=-oaymwE2CPYBEIoBSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARhPIFooZTAP&rs=AOn4CLDhUWl1SHpuk7uyKXKFBYwZ4_tmlA",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hqdefault.jpg?sqp=-oaymwEcCPYBEIoBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLDanr9YYyfhaJv7r_SInL1VjAPZ9A",
             "height": 138,
             "width": 246,
             "preference": -7,
-            "id": "35",
+            "id": "33",
             "resolution": "246x138"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg?sqp=-oaymwE2CNACELwBSFXyq4qpAygIARUAAIhCGAFwAcABBvABAfgB_gmAAtAFigIMCAAQARhPIFooZTAP&rs=AOn4CLDkwn4sVv43FR52G4uuMKZcCLCpkQ",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBUmpWjV3YVxr7V1TmYFNhtkQeGIQ",
             "height": 188,
             "width": 336,
             "preference": -7,
-            "id": "36",
+            "id": "34",
             "resolution": "336x188"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hqdefault.jpg?sqp=-oaymwEmCOADEOgC8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLBFWSpVaYA8rlVmL4z-CBaC3DIGug",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/hqdefault.webp",
             "height": 360,
             "width": 480,
-            "preference": -7,
-            "id": "37",
+            "preference": -6,
+            "id": "35",
             "resolution": "480x360"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/hqdefault.webp",
-            "preference": -6,
-            "id": "38"
-        },
-        {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/sddefault.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/sddefault.jpg",
             "preference": -5,
-            "id": "39"
+            "id": "36"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/sddefault.jpg?sqp=-oaymwEmCIAFEOAD8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLBRq0GxQ0AkUPmz1JyZFViuMYDi-A",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/sddefault.webp",
             "height": 480,
             "width": 640,
-            "preference": -5,
-            "id": "40",
+            "preference": -4,
+            "id": "37",
             "resolution": "640x480"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/sddefault.webp",
-            "preference": -4,
-            "id": "41"
-        },
-        {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/hq720.jpg",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/hq720.jpg",
             "preference": -3,
-            "id": "42"
+            "id": "38"
         },
         {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/hq720.webp",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/hq720.webp",
             "preference": -2,
-            "id": "43"
+            "id": "39"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/maxresdefault.jpg?sqp=-oaymwEmCIAKENAF8quKqQMa8AEB-AH-CYAC0AWKAgwIABABGE8gWihlMA8=&rs=AOn4CLA0bljH7jOWXC7OnqgYUHw28Rvz7g",
+            "url": "https://i.ytimg.com/vi/LSH2W6Aw-7A/maxresdefault.jpg",
+            "height": 720,
+            "width": 1280,
             "preference": -1,
-            "id": "44"
+            "id": "40",
+            "resolution": "1280x720"
         },
         {
-            "url": "https://i.ytimg.com/vi/7-_qRtGbCTE/maxresdefault.jpg",
+            "url": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/maxresdefault.webp",
             "height": 1080,
             "width": 1920,
-            "preference": -1,
-            "id": "45",
-            "resolution": "1920x1080"
-        },
-        {
-            "url": "https://i.ytimg.com/vi_webp/7-_qRtGbCTE/maxresdefault.webp",
             "preference": 0,
-            "id": "46"
+            "id": "41",
+            "resolution": "1920x1080"
         }
     ],
-    "thumbnail": "https://i.ytimg.com/vi/7-_qRtGbCTE/maxresdefault.jpg",
-    "description": "Harbiye Konseri Biletleri İçin: https://bit.ly/3EJ1457\n\nSöz: Mustafa Yavuz\nMüzik: Hazar Altın / Mustafa Yavuz\nDüzenleme: Dedublüman \nVokal,Gitar,Yaylı Tambur: Mustafa Yavuz\nBağlama: Özay Altın\nKlarnet: Çağrı Çelik\nKlavye: Hazar Altın\nBas Gitar: Kıvanç Kumlu \nDavul: Kurthan Sarpkaya\nMixing: Mustafa Yavuz\nMastering: Çağlar Türkmen\nFotoğraf: Furkan Sağlam\nVideo: Çağrı Yükünç\n\nOmzumda işlemediğim günahlar\nSözlerimde riya var\nKederim de bir aşk\nGörüyor mu?\n\nBelki de yanlıştı doğrularım \nAşkını, sevgini sorguladım\nYolların kapalıydı zorlamadım \nÖldürdüm çiçeğimi, yaşatamadım.\n\nDuyamadım, gidişin sessizdi\nBilemem ki ben yarın \nSessizce döner misin ?\nSanmam ki\n\nAşkını, sevgini sorguladım\nYolların kapalıydı zorlamadım \nÖldürdüm çiçeğimi, yaşatamadım.",
-    "channel_id": "UClR0JfkCf0IuzLpGgM5nl5w",
-    "channel_url": "https://www.youtube.com/channel/UClR0JfkCf0IuzLpGgM5nl5w",
-    "duration": 180,
-    "view_count": 125127567,
+    "thumbnail": "https://i.ytimg.com/vi_webp/LSH2W6Aw-7A/maxresdefault.webp",
+    "description": "Provided to YouTube by Tataloo\n\nBehesht · Amir Tataloo · Amir Tataloo · Amir Tataloo\n\nBehesht\n\n℗ Tataloo\n\nReleased on: 2022-06-14\n\nAuto-generated by YouTube.",
+    "channel_id": "UC6KYDUajalB1UuYOpsa8Yog",
+    "channel_url": "https://www.youtube.com/channel/UC6KYDUajalB1UuYOpsa8Yog",
+    "duration": 385,
+    "view_count": 784432,
     "average_rating": null,
     "age_limit": 0,
-    "webpage_url": "http://www.youtube.com/watch?v=7-_qRtGbCTE",
+    "webpage_url": "http://www.youtube.com/watch?v=LSH2W6Aw-7A",
     "categories": [
         "Music"
     ],
-    "tags": [],
+    "tags": [
+        "Amir Tataloo",
+        "Behesht"
+    ],
     "playable_in_embed": true,
     "live_status": "not_live",
     "media_type": "video",
-    "release_timestamp": 1659646812,
+    "release_timestamp": null,
     "_format_sort_fields": [
         "quality",
         "res",
@@ -530,598 +436,552 @@
         "proto"
     ],
     "automatic_captions": {},
-    "subtitles": {
-        "en": [
-            {
-                "ext": "json3",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=json3",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "srv1",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=srv1",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "srv2",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=srv2",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "srv3",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=srv3",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "ttml",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=ttml",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "srt",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=srt",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            },
-            {
-                "ext": "vtt",
-                "url": "https://www.youtube.com/api/timedtext?v=7-_qRtGbCTE&ei=XkjcaJ7xB4uP6dsPupSCyAw&caps=asr&opi=112496729&xoaf=5&xowf=1&hl=en&ip=0.0.0.0&ipbits=0&expire=1759292110&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cxoaf&signature=045DEA64C30FCCE1B3AE710382D1C754333BE5FB.839EEC30135BB7865661A3F5591659ECEE2919A3&key=yt8&lang=en&fmt=vtt",
-                "name": "English",
-                "impersonate": true,
-                "__yt_dlp_client": "android"
-            }
-        ],
-        "live_chat": [
-            {
-                "url": "https://www.youtube.com/watch?v=7-_qRtGbCTE&bpctr=9999999999&has_verified=1",
-                "video_id": "7-_qRtGbCTE",
-                "ext": "json",
-                "protocol": "youtube_live_chat_replay"
-            }
-        ]
-    },
-    "comment_count": 20000,
+    "subtitles": {},
+    "album": "Behesht",
+    "artists": [
+        "Amir Tataloo",
+        "Amir Tataloo",
+        "Amir Tataloo"
+    ],
+    "track": "Behesht",
+    "release_date": "20220614",
+    "release_year": 2022,
+    "comment_count": 1300,
     "chapters": null,
     "heatmap": [
         {
             "start_time": 0.0,
-            "end_time": 1.81,
+            "end_time": 3.85,
+            "value": 0.8681198022530469
+        },
+        {
+            "start_time": 3.85,
+            "end_time": 7.7,
+            "value": 0.5229550125534517
+        },
+        {
+            "start_time": 7.7,
+            "end_time": 11.55,
+            "value": 0.5973357884440784
+        },
+        {
+            "start_time": 11.55,
+            "end_time": 15.4,
+            "value": 0.6037997215203141
+        },
+        {
+            "start_time": 15.4,
+            "end_time": 19.25,
+            "value": 0.6358683717978844
+        },
+        {
+            "start_time": 19.25,
+            "end_time": 23.1,
+            "value": 0.6526950123838203
+        },
+        {
+            "start_time": 23.1,
+            "end_time": 26.95,
+            "value": 0.610872856486674
+        },
+        {
+            "start_time": 26.95,
+            "end_time": 30.8,
+            "value": 0.5833857221138276
+        },
+        {
+            "start_time": 30.8,
+            "end_time": 34.65,
+            "value": 0.5777593558403346
+        },
+        {
+            "start_time": 34.65,
+            "end_time": 38.5,
+            "value": 0.5675198026158421
+        },
+        {
+            "start_time": 38.5,
+            "end_time": 42.35,
+            "value": 0.558490318685736
+        },
+        {
+            "start_time": 42.35,
+            "end_time": 46.2,
+            "value": 0.550413907727142
+        },
+        {
+            "start_time": 46.2,
+            "end_time": 50.05,
+            "value": 0.5474044719615394
+        },
+        {
+            "start_time": 50.05,
+            "end_time": 53.9,
+            "value": 0.5427231383320213
+        },
+        {
+            "start_time": 53.9,
+            "end_time": 57.75,
+            "value": 0.5494690711887168
+        },
+        {
+            "start_time": 57.75,
+            "end_time": 61.6,
+            "value": 0.5652748843357212
+        },
+        {
+            "start_time": 61.6,
+            "end_time": 65.45,
+            "value": 0.562607848859884
+        },
+        {
+            "start_time": 65.45,
+            "end_time": 69.3,
+            "value": 0.5786762473379284
+        },
+        {
+            "start_time": 69.3,
+            "end_time": 73.15,
+            "value": 0.5914846852106362
+        },
+        {
+            "start_time": 73.15,
+            "end_time": 77.0,
+            "value": 0.5977606511174903
+        },
+        {
+            "start_time": 77.0,
+            "end_time": 80.85,
+            "value": 0.5870124981498667
+        },
+        {
+            "start_time": 80.85,
+            "end_time": 84.7,
+            "value": 0.5913039739465933
+        },
+        {
+            "start_time": 84.7,
+            "end_time": 88.55,
+            "value": 0.5754692352310091
+        },
+        {
+            "start_time": 88.55,
+            "end_time": 92.4,
+            "value": 0.5583618695506865
+        },
+        {
+            "start_time": 92.4,
+            "end_time": 96.25,
+            "value": 0.5440029231493237
+        },
+        {
+            "start_time": 96.25,
+            "end_time": 100.1,
+            "value": 0.5507309123482222
+        },
+        {
+            "start_time": 100.1,
+            "end_time": 103.95,
+            "value": 0.5528208091913103
+        },
+        {
+            "start_time": 103.95,
+            "end_time": 107.8,
+            "value": 0.555032585633533
+        },
+        {
+            "start_time": 107.8,
+            "end_time": 111.65,
+            "value": 0.5431693765103498
+        },
+        {
+            "start_time": 111.65,
+            "end_time": 115.5,
+            "value": 0.5538233988141203
+        },
+        {
+            "start_time": 115.5,
+            "end_time": 119.35,
+            "value": 0.5645604718181862
+        },
+        {
+            "start_time": 119.35,
+            "end_time": 123.2,
+            "value": 0.5778488780237698
+        },
+        {
+            "start_time": 123.2,
+            "end_time": 127.05,
+            "value": 0.5761770782126293
+        },
+        {
+            "start_time": 127.05,
+            "end_time": 130.9,
+            "value": 0.5783718915248035
+        },
+        {
+            "start_time": 130.9,
+            "end_time": 134.75,
+            "value": 0.5892050562482194
+        },
+        {
+            "start_time": 134.75,
+            "end_time": 138.6,
+            "value": 0.6169911535315742
+        },
+        {
+            "start_time": 138.6,
+            "end_time": 142.45,
+            "value": 0.631426188886218
+        },
+        {
+            "start_time": 142.45,
+            "end_time": 146.3,
+            "value": 0.695117937632454
+        },
+        {
+            "start_time": 146.3,
+            "end_time": 150.15,
+            "value": 0.7434807038757664
+        },
+        {
+            "start_time": 150.15,
+            "end_time": 154.0,
+            "value": 0.7814949802617313
+        },
+        {
+            "start_time": 154.0,
+            "end_time": 157.85,
+            "value": 0.7512104002225014
+        },
+        {
+            "start_time": 157.85,
+            "end_time": 161.7,
+            "value": 0.712762632518938
+        },
+        {
+            "start_time": 161.7,
+            "end_time": 165.55,
+            "value": 0.6998010362119194
+        },
+        {
+            "start_time": 165.55,
+            "end_time": 169.4,
+            "value": 0.6918878831234456
+        },
+        {
+            "start_time": 169.4,
+            "end_time": 173.25,
+            "value": 0.6779080087496413
+        },
+        {
+            "start_time": 173.25,
+            "end_time": 177.1,
+            "value": 0.6902756013466372
+        },
+        {
+            "start_time": 177.1,
+            "end_time": 180.95,
+            "value": 0.6832790455974329
+        },
+        {
+            "start_time": 180.95,
+            "end_time": 184.8,
+            "value": 0.6683552171601769
+        },
+        {
+            "start_time": 184.8,
+            "end_time": 188.65,
+            "value": 0.6466315268400596
+        },
+        {
+            "start_time": 188.65,
+            "end_time": 192.5,
+            "value": 0.6433723506569218
+        },
+        {
+            "start_time": 192.5,
+            "end_time": 196.35,
+            "value": 0.6365940603845267
+        },
+        {
+            "start_time": 196.35,
+            "end_time": 200.2,
+            "value": 0.6342243209220255
+        },
+        {
+            "start_time": 200.2,
+            "end_time": 204.05,
+            "value": 0.619459730191121
+        },
+        {
+            "start_time": 204.05,
+            "end_time": 207.9,
+            "value": 0.6266844547473942
+        },
+        {
+            "start_time": 207.9,
+            "end_time": 211.75,
+            "value": 0.6324861393823136
+        },
+        {
+            "start_time": 211.75,
+            "end_time": 215.6,
+            "value": 0.6441860906353766
+        },
+        {
+            "start_time": 215.6,
+            "end_time": 219.45,
+            "value": 0.6481776229938464
+        },
+        {
+            "start_time": 219.45,
+            "end_time": 223.3,
+            "value": 0.6834215162792855
+        },
+        {
+            "start_time": 223.3,
+            "end_time": 227.15,
+            "value": 0.720837670738684
+        },
+        {
+            "start_time": 227.15,
+            "end_time": 231.0,
+            "value": 0.7600485831888811
+        },
+        {
+            "start_time": 231.0,
+            "end_time": 234.85,
+            "value": 0.7425255717959822
+        },
+        {
+            "start_time": 234.85,
+            "end_time": 238.7,
+            "value": 0.733396760404956
+        },
+        {
+            "start_time": 238.7,
+            "end_time": 242.55,
+            "value": 0.7289588918153829
+        },
+        {
+            "start_time": 242.55,
+            "end_time": 246.4,
+            "value": 0.7328306036829897
+        },
+        {
+            "start_time": 246.4,
+            "end_time": 250.25,
+            "value": 0.7332076166022762
+        },
+        {
+            "start_time": 250.25,
+            "end_time": 254.1,
+            "value": 0.7553211647551851
+        },
+        {
+            "start_time": 254.1,
+            "end_time": 257.95,
+            "value": 0.7936188136604576
+        },
+        {
+            "start_time": 257.95,
+            "end_time": 261.8,
+            "value": 0.8383210737131835
+        },
+        {
+            "start_time": 261.8,
+            "end_time": 265.65,
+            "value": 0.8676750348663411
+        },
+        {
+            "start_time": 265.65,
+            "end_time": 269.5,
+            "value": 0.9439766646162198
+        },
+        {
+            "start_time": 269.5,
+            "end_time": 273.35,
+            "value": 0.9948597793841982
+        },
+        {
+            "start_time": 273.35,
+            "end_time": 277.2,
             "value": 1.0
         },
         {
-            "start_time": 1.81,
-            "end_time": 3.62,
-            "value": 0.4494888582069805
+            "start_time": 277.2,
+            "end_time": 281.05,
+            "value": 0.9482614728242568
         },
         {
-            "start_time": 3.62,
-            "end_time": 5.43,
-            "value": 0.49458773835732583
+            "start_time": 281.05,
+            "end_time": 284.9,
+            "value": 0.9196832071729135
         },
         {
-            "start_time": 5.43,
-            "end_time": 7.24,
-            "value": 0.4987598353617595
+            "start_time": 284.9,
+            "end_time": 288.75,
+            "value": 0.8997497644159518
         },
         {
-            "start_time": 7.24,
-            "end_time": 9.05,
-            "value": 0.5142063711362846
+            "start_time": 288.75,
+            "end_time": 292.6,
+            "value": 0.8809271615452313
         },
         {
-            "start_time": 9.05,
-            "end_time": 10.86,
-            "value": 0.5364060269548766
+            "start_time": 292.6,
+            "end_time": 296.45,
+            "value": 0.8360186965070022
         },
         {
-            "start_time": 10.86,
-            "end_time": 12.67,
-            "value": 0.5493210427688602
+            "start_time": 296.45,
+            "end_time": 300.3,
+            "value": 0.8402864435322159
         },
         {
-            "start_time": 12.67,
-            "end_time": 14.48,
-            "value": 0.5537064530413792
+            "start_time": 300.3,
+            "end_time": 304.15,
+            "value": 0.8001830547253618
         },
         {
-            "start_time": 14.48,
-            "end_time": 16.29,
-            "value": 0.54757628424488
+            "start_time": 304.15,
+            "end_time": 308.0,
+            "value": 0.7722350723107347
         },
         {
-            "start_time": 16.29,
-            "end_time": 18.1,
-            "value": 0.5490537261417661
+            "start_time": 308.0,
+            "end_time": 311.85,
+            "value": 0.711701701495094
         },
         {
-            "start_time": 18.1,
-            "end_time": 19.91,
-            "value": 0.5843280452044117
+            "start_time": 311.85,
+            "end_time": 315.7,
+            "value": 0.7020428168032452
         },
         {
-            "start_time": 19.91,
-            "end_time": 21.72,
-            "value": 0.5821067070371777
+            "start_time": 315.7,
+            "end_time": 319.55,
+            "value": 0.6875908183185527
         },
         {
-            "start_time": 21.72,
-            "end_time": 23.53,
-            "value": 0.6081162998338496
+            "start_time": 319.55,
+            "end_time": 323.4,
+            "value": 0.6668814839542272
         },
         {
-            "start_time": 23.53,
-            "end_time": 25.34,
-            "value": 0.6166294793536158
+            "start_time": 323.4,
+            "end_time": 327.25,
+            "value": 0.6301693484182298
         },
         {
-            "start_time": 25.34,
-            "end_time": 27.15,
-            "value": 0.6101147616381739
+            "start_time": 327.25,
+            "end_time": 331.1,
+            "value": 0.5622731947393314
         },
         {
-            "start_time": 27.15,
-            "end_time": 28.96,
-            "value": 0.6074051430999008
+            "start_time": 331.1,
+            "end_time": 334.95,
+            "value": 0.4907503630771687
         },
         {
-            "start_time": 28.96,
-            "end_time": 30.77,
-            "value": 0.6329873218114167
+            "start_time": 334.95,
+            "end_time": 338.8,
+            "value": 0.44602476646402917
         },
         {
-            "start_time": 30.77,
-            "end_time": 32.58,
-            "value": 0.6277083809612958
+            "start_time": 338.8,
+            "end_time": 342.65,
+            "value": 0.4245378245687798
         },
         {
-            "start_time": 32.58,
-            "end_time": 34.39,
-            "value": 0.6537655642180944
+            "start_time": 342.65,
+            "end_time": 346.5,
+            "value": 0.3738541981712275
         },
         {
-            "start_time": 34.39,
-            "end_time": 36.2,
-            "value": 0.6495291132108417
+            "start_time": 346.5,
+            "end_time": 350.35,
+            "value": 0.33709538951440293
         },
         {
-            "start_time": 36.2,
-            "end_time": 38.01,
-            "value": 0.6446365213916305
+            "start_time": 350.35,
+            "end_time": 354.2,
+            "value": 0.302167226163971
         },
         {
-            "start_time": 38.01,
-            "end_time": 39.82,
-            "value": 0.6843967194759514
+            "start_time": 354.2,
+            "end_time": 358.05,
+            "value": 0.24957421808182395
         },
         {
-            "start_time": 39.82,
-            "end_time": 41.63,
-            "value": 0.6917475892000482
+            "start_time": 358.05,
+            "end_time": 361.9,
+            "value": 0.18925558284309807
         },
         {
-            "start_time": 41.63,
-            "end_time": 43.44,
-            "value": 0.6863443281172089
+            "start_time": 361.9,
+            "end_time": 365.75,
+            "value": 0.1440731093255592
         },
         {
-            "start_time": 43.44,
-            "end_time": 45.25,
-            "value": 0.6858635857150315
+            "start_time": 365.75,
+            "end_time": 369.6,
+            "value": 0.10640412578621779
         },
         {
-            "start_time": 45.25,
-            "end_time": 47.06,
-            "value": 0.7174714142219646
+            "start_time": 369.6,
+            "end_time": 373.45,
+            "value": 0.0796436605277622
         },
         {
-            "start_time": 47.06,
-            "end_time": 48.87,
-            "value": 0.7014066524937851
+            "start_time": 373.45,
+            "end_time": 377.3,
+            "value": 0.05861526243408464
         },
         {
-            "start_time": 48.87,
-            "end_time": 50.68,
-            "value": 0.6895890299376621
+            "start_time": 377.3,
+            "end_time": 381.15,
+            "value": 0.0319687345000012
         },
         {
-            "start_time": 50.68,
-            "end_time": 52.49,
-            "value": 0.7125632964370384
-        },
-        {
-            "start_time": 52.49,
-            "end_time": 54.3,
-            "value": 0.6998838702767313
-        },
-        {
-            "start_time": 54.3,
-            "end_time": 56.11,
-            "value": 0.7441325350436797
-        },
-        {
-            "start_time": 56.11,
-            "end_time": 57.92,
-            "value": 0.7394933089838188
-        },
-        {
-            "start_time": 57.92,
-            "end_time": 59.73,
-            "value": 0.7363685396231645
-        },
-        {
-            "start_time": 59.73,
-            "end_time": 61.54,
-            "value": 0.7335178373094806
-        },
-        {
-            "start_time": 61.54,
-            "end_time": 63.35,
-            "value": 0.7690107574691146
-        },
-        {
-            "start_time": 63.35,
-            "end_time": 65.16,
-            "value": 0.7523357577841342
-        },
-        {
-            "start_time": 65.16,
-            "end_time": 66.97,
-            "value": 0.7351293875479055
-        },
-        {
-            "start_time": 66.97,
-            "end_time": 68.78,
-            "value": 0.7354580204888744
-        },
-        {
-            "start_time": 68.78,
-            "end_time": 70.59,
-            "value": 0.6997265854936177
-        },
-        {
-            "start_time": 70.59,
-            "end_time": 72.4,
-            "value": 0.6839563670860328
-        },
-        {
-            "start_time": 72.4,
-            "end_time": 74.21,
-            "value": 0.6517566392629621
-        },
-        {
-            "start_time": 74.21,
-            "end_time": 76.02,
-            "value": 0.6291408200590076
-        },
-        {
-            "start_time": 76.02,
-            "end_time": 77.83,
-            "value": 0.6128967221761193
-        },
-        {
-            "start_time": 77.83,
-            "end_time": 79.64,
-            "value": 0.613630830337647
-        },
-        {
-            "start_time": 79.64,
-            "end_time": 81.45,
-            "value": 0.6013596920728469
-        },
-        {
-            "start_time": 81.45,
-            "end_time": 83.26,
-            "value": 0.598846173231975
-        },
-        {
-            "start_time": 83.26,
-            "end_time": 85.07,
-            "value": 0.5946441493660906
-        },
-        {
-            "start_time": 85.07,
-            "end_time": 86.88,
-            "value": 0.5856515775281222
-        },
-        {
-            "start_time": 86.88,
-            "end_time": 88.69,
-            "value": 0.5959454053042099
-        },
-        {
-            "start_time": 88.69,
-            "end_time": 90.5,
-            "value": 0.5901831343909592
-        },
-        {
-            "start_time": 90.5,
-            "end_time": 92.31,
-            "value": 0.5975958829639204
-        },
-        {
-            "start_time": 92.31,
-            "end_time": 94.12,
-            "value": 0.5999830564461109
-        },
-        {
-            "start_time": 94.12,
-            "end_time": 95.93,
-            "value": 0.5928099477787518
-        },
-        {
-            "start_time": 95.93,
-            "end_time": 97.74,
-            "value": 0.588283453730822
-        },
-        {
-            "start_time": 97.74,
-            "end_time": 99.55,
-            "value": 0.6054259199922235
-        },
-        {
-            "start_time": 99.55,
-            "end_time": 101.36,
-            "value": 0.6062642096338392
-        },
-        {
-            "start_time": 101.36,
-            "end_time": 103.17,
-            "value": 0.6193172715342894
-        },
-        {
-            "start_time": 103.17,
-            "end_time": 104.98,
-            "value": 0.62424204035491
-        },
-        {
-            "start_time": 104.98,
-            "end_time": 106.79,
-            "value": 0.6201811002644364
-        },
-        {
-            "start_time": 106.79,
-            "end_time": 108.6,
-            "value": 0.6180472925415961
-        },
-        {
-            "start_time": 108.6,
-            "end_time": 110.41,
-            "value": 0.6359830456454392
-        },
-        {
-            "start_time": 110.41,
-            "end_time": 112.22,
-            "value": 0.6336077979050297
-        },
-        {
-            "start_time": 112.22,
-            "end_time": 114.03,
-            "value": 0.650154314598368
-        },
-        {
-            "start_time": 114.03,
-            "end_time": 115.84,
-            "value": 0.6458982873734747
-        },
-        {
-            "start_time": 115.84,
-            "end_time": 117.65,
-            "value": 0.6388644623695594
-        },
-        {
-            "start_time": 117.65,
-            "end_time": 119.46,
-            "value": 0.6774765265399508
-        },
-        {
-            "start_time": 119.46,
-            "end_time": 121.27,
-            "value": 0.6866926497828165
-        },
-        {
-            "start_time": 121.27,
-            "end_time": 123.08,
-            "value": 0.6786451367275045
-        },
-        {
-            "start_time": 123.08,
-            "end_time": 124.89,
-            "value": 0.6741787214164721
-        },
-        {
-            "start_time": 124.89,
-            "end_time": 126.7,
-            "value": 0.7033358099873812
-        },
-        {
-            "start_time": 126.7,
-            "end_time": 128.51,
-            "value": 0.6939788279831005
-        },
-        {
-            "start_time": 128.51,
-            "end_time": 130.32,
-            "value": 0.6760912278743738
-        },
-        {
-            "start_time": 130.32,
-            "end_time": 132.13,
-            "value": 0.6813126776485497
-        },
-        {
-            "start_time": 132.13,
-            "end_time": 133.94,
-            "value": 0.6486614592427649
-        },
-        {
-            "start_time": 133.94,
-            "end_time": 135.75,
-            "value": 0.6435672548832537
-        },
-        {
-            "start_time": 135.75,
-            "end_time": 137.56,
-            "value": 0.6219096577807139
-        },
-        {
-            "start_time": 137.56,
-            "end_time": 139.37,
-            "value": 0.6006081453266393
-        },
-        {
-            "start_time": 139.37,
-            "end_time": 141.18,
-            "value": 0.5792600549754194
-        },
-        {
-            "start_time": 141.18,
-            "end_time": 142.99,
-            "value": 0.5688207556510015
-        },
-        {
-            "start_time": 142.99,
-            "end_time": 144.8,
-            "value": 0.5426841424536606
-        },
-        {
-            "start_time": 144.8,
-            "end_time": 146.61,
-            "value": 0.5189816181566493
-        },
-        {
-            "start_time": 146.61,
-            "end_time": 148.42,
-            "value": 0.5153853319676484
-        },
-        {
-            "start_time": 148.42,
-            "end_time": 150.23,
-            "value": 0.4965047450951449
-        },
-        {
-            "start_time": 150.23,
-            "end_time": 152.04,
-            "value": 0.49240026479647037
-        },
-        {
-            "start_time": 152.04,
-            "end_time": 153.85,
-            "value": 0.4721505802660925
-        },
-        {
-            "start_time": 153.85,
-            "end_time": 155.66,
-            "value": 0.45326425553669436
-        },
-        {
-            "start_time": 155.66,
-            "end_time": 157.47,
-            "value": 0.43477969329692306
-        },
-        {
-            "start_time": 157.47,
-            "end_time": 159.28,
-            "value": 0.4278455494931785
-        },
-        {
-            "start_time": 159.28,
-            "end_time": 161.09,
-            "value": 0.40948913272405546
-        },
-        {
-            "start_time": 161.09,
-            "end_time": 162.9,
-            "value": 0.3883190284435692
-        },
-        {
-            "start_time": 162.9,
-            "end_time": 164.71,
-            "value": 0.3630004536282157
-        },
-        {
-            "start_time": 164.71,
-            "end_time": 166.52,
-            "value": 0.3430579132022012
-        },
-        {
-            "start_time": 166.52,
-            "end_time": 168.33,
-            "value": 0.3156450206202826
-        },
-        {
-            "start_time": 168.33,
-            "end_time": 170.14,
-            "value": 0.2884592796671953
-        },
-        {
-            "start_time": 170.14,
-            "end_time": 171.95,
-            "value": 0.25022377641889326
-        },
-        {
-            "start_time": 171.95,
-            "end_time": 173.76,
-            "value": 0.19819874046165672
-        },
-        {
-            "start_time": 173.76,
-            "end_time": 175.57,
-            "value": 0.1296053614534824
-        },
-        {
-            "start_time": 175.57,
-            "end_time": 177.38,
-            "value": 0.06616857193517436
-        },
-        {
-            "start_time": 177.38,
-            "end_time": 179.19,
-            "value": 0.013061949953287095
-        },
-        {
-            "start_time": 179.19,
-            "end_time": 181.0,
+            "start_time": 381.15,
+            "end_time": 385.0,
             "value": 0.0
         }
     ],
-    "like_count": 767582,
-    "channel": "Dedublüman",
-    "channel_follower_count": 512000,
-    "channel_is_verified": true,
-    "uploader": "Dedublüman",
-    "uploader_id": "@Dedublüman",
-    "uploader_url": "https://www.youtube.com/@Dedublüman",
-    "upload_date": "20220804",
-    "timestamp": 1659646812,
+    "like_count": 6053,
+    "channel": "Amir Tataloo",
+    "channel_follower_count": 859000,
+    "uploader": "Amir Tataloo",
+    "uploader_id": null,
+    "uploader_url": null,
+    "upload_date": "20220623",
+    "timestamp": 1655990012,
+    "creators": [
+        "Amir Tataloo",
+        "Amir Tataloo",
+        "Amir Tataloo"
+    ],
+    "alt_title": "Behesht",
     "availability": "public",
-    "original_url": "https://www.youtube.com/watch?v=7-_qRtGbCTE",
+    "original_url": "https://www.youtube.com/watch?v=LSH2W6Aw-7A",
     "webpage_url_basename": "watch",
     "webpage_url_domain": "youtube.com",
     "extractor": "youtube",
     "extractor_key": "Youtube",
     "playlist": null,
     "playlist_index": null,
-    "display_id": "7-_qRtGbCTE",
-    "fulltitle": "Dedublüman - Belki - Akustik (Lyric Video)",
-    "duration_string": "3:00",
-    "release_date": "20220804",
-    "release_year": 2022,
+    "display_id": "LSH2W6Aw-7A",
+    "fulltitle": "Behesht",
+    "duration_string": "6:25",
     "is_live": false,
     "was_live": false,
+    "artist": "Amir Tataloo, Amir Tataloo, Amir Tataloo",
+    "creator": "Amir Tataloo, Amir Tataloo, Amir Tataloo",
     "requested_subtitles": null,
     "_has_drm": null,
-    "epoch": 1759266910,
+    "epoch": 1759321036,
     "asr": 44100,
     "filesize": null,
     "format_id": "18",
@@ -1132,10 +992,10 @@
     "height": 360,
     "quality": 6.0,
     "has_drm": false,
-    "tbr": 247.808,
-    "filesize_approx": 5583609,
-    "url": "https://rr8---sn-8vq54voxu-n5fe.googlevideo.com/videoplayback?expire=1759288510&ei=XkjcaJ7xB4uP6dsPupSCyAw&ip=185.219.133.53&id=o-AO6KleIJa3BE3VQWT49nvQMjWIHGtYy1c1yTjq5MIFYx&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1759266910%2C&mh=pn&mm=31%2C29&mn=sn-8vq54voxu-n5fe%2Csn-nv47zn7y&ms=au%2Crdu&mv=m&mvi=8&pl=24&rms=au%2Cau&initcwndbps=1090000&bui=ATw7iSUI-qtUS6ZNJZ_izBBukxN2blb67kCejRNdLpfJoIqejM7KD2yNCEhXfDGuto_TLnJCFtcI8jOn&spc=hcYD5b00bWUTGxMVGGWRy0BGvrLTkAUhqMecK6NcBd4jyadvIuQcJ-e7lU6f6iW67n8&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&cnr=14&ratebypass=yes&dur=180.256&lmt=1750264107966806&mt=1759266349&fvip=1&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=4538534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRQIgZGjUbkAp2F92SClqpg73HaS7dzNzMuaY_El70ClEnxECIQCbF2ZqzFX7I6KF_FHEcjJJWRgxcSr7xFvK4Z_k0KGpgg%3D%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRAIgQgcnHU3MqzWrmLujYfrcGDTSuq5bpfzaGVW-toflYmgCIDQSTw-CH2F7lP3BD3vsBR2mn3GcobH7h3JvSFArPWBD",
-    "width": 640,
+    "tbr": 217.242,
+    "filesize_approx": 10447466,
+    "url": "https://rr1---sn-aigl6ns6.googlevideo.com/videoplayback?expire=1759342635&ei=yxvdaM_ODIKezPsPwraEyAg&ip=45.89.63.135&id=o-AAwuIbro6nUUFBsgroXCNk6LicSlA-uGrm_zfx6M1on3&itag=18&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&met=1759321035%2C&mh=WL&mm=31%2C26&mn=sn-aigl6ns6%2Csn-5hnekn7z&ms=au%2Conr&mv=m&mvi=1&pl=24&rms=au%2Cau&gcr=ru&initcwndbps=638750&bui=ATw7iSWi9IzKUTLBWlnagob9-u7ieEf7xeKFqCdSK5Rm8R77V2d5DIqCO8VQxdxPVhqVrcShAucv79ft&spc=hcYD5czTfDt9NMj7SMfI7qd_nE5KXJb3zIu5MipjrbpSFtq1Z96G_fZnq_XlMzXSThk&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&cnr=14&ratebypass=yes&dur=384.731&lmt=1661000093157824&mt=1759320405&fvip=5&fexp=51552689%2C51565115%2C51565682%2C51580968&c=ANDROID&txp=2318224&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cgcr%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Ccnr%2Cratebypass%2Cdur%2Clmt&sig=AJfQdSswRgIhAJ4TCTjGUI7NPSMdpmbtxknHGU_d7BXkAcG-MA6ZH6tlAiEAzpyemyowXZvxe83fr8O2scWCrVSiLt2-D0PvKwFxg1w%3D&lsparams=met%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgQ1jYx8KYPvV1v24W6EvZvBJI1yX2v1y3RPISIgdPmY4CIQCr_BigoD8Z0kkoxLYUx2Cr3GWq8bEL_cZ2YFM7WJRh3w%3D%3D",
+    "width": 360,
     "language": null,
     "language_preference": -1,
     "preference": null,
@@ -1143,7 +1003,7 @@
     "vcodec": "avc1.42001E",
     "acodec": "mp4a.40.2",
     "dynamic_range": "SDR",
-    "available_at": 1759266916,
+    "available_at": 1759321042,
     "downloader_options": {
         "http_chunk_size": 10485760
     },
@@ -1152,13 +1012,13 @@
     "audio_ext": "none",
     "vbr": null,
     "abr": null,
-    "resolution": "640x360",
-    "aspect_ratio": 1.78,
+    "resolution": "360x360",
+    "aspect_ratio": 1.0,
     "http_headers": {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-us,en;q=0.5",
         "Sec-Fetch-Mode": "navigate"
     },
-    "format": "18 - 640x360 (360p)"
+    "format": "18 - 360x360 (360p)"
 }
