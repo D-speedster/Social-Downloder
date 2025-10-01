@@ -20,6 +20,9 @@ _USER_AGENTS = [
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
 ]
 
+# Player client rotation per attempt
+_PLAYER_CLIENTS = ["web", "ios", "android"]
+
 # Logger configuration
 os.makedirs('./logs', exist_ok=True)
 proxy_logger = logging.getLogger('youtube_proxy_rotator')
@@ -69,6 +72,8 @@ def _headers() -> Dict[str, str]:
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'gzip, deflate, br',
+        'Referer': 'https://www.youtube.com/',
+        'Origin': 'https://www.youtube.com',
     }
 
 
@@ -95,6 +100,15 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         opts['socket_timeout'] = timeout
         opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
         opts['proxy'] = f'socks5h://127.0.0.1:{port}'
+        opts['geo_bypass'] = True
+
+        # Rotate player client per attempt
+        client = _PLAYER_CLIENTS[(attempt - 1) % len(_PLAYER_CLIENTS)]
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': [client]
+            }
+        }
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -109,7 +123,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         duration = _now() - start
         if error is None and isinstance(result, dict):
             _mark_result(port, True)
-            proxy_logger.info(f"OK url={url} port={port} time={duration:.2f}s")
+            proxy_logger.info(f"OK url={url} port={port} client={client} time={duration:.2f}s")
             return result
         else:
             _mark_result(port, False)
@@ -118,7 +132,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
             if '429' in msg or 'rate' in msg.lower():
                 proxy_logger.warning(f"Rate-limit detected on port={port}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR url={url} port={port} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR url={url} port={port} client={client} time={duration:.2f}s err={msg}")
             last_error = error or Exception('Invalid response from yt-dlp')
 
     if last_error:
@@ -145,6 +159,15 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
         opts['socket_timeout'] = timeout
         opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
         opts['proxy'] = f'socks5h://127.0.0.1:{port}'
+        opts['geo_bypass'] = True
+
+        # Rotate player client per attempt
+        client = _PLAYER_CLIENTS[(attempt - 1) % len(_PLAYER_CLIENTS)]
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': [client]
+            }
+        }
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -159,7 +182,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
         duration = _now() - start
         if error is None:
             _mark_result(port, True)
-            proxy_logger.info(f"OK-DL url={url} port={port} time={duration:.2f}s")
+            proxy_logger.info(f"OK-DL url={url} port={port} client={client} time={duration:.2f}s")
             return
         else:
             _mark_result(port, False)
@@ -167,7 +190,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
             if '429' in msg or 'rate' in msg.lower():
                 proxy_logger.warning(f"Rate-limit detected on port={port}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR-DL url={url} port={port} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR-DL url={url} port={port} client={client} time={duration:.2f}s err={msg}")
             last_error = error
 
     if last_error:
