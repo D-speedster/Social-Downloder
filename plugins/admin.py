@@ -98,6 +98,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
+            ["🔌 بررسی پروکسی"],
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار"],
             ["🍪 مدیریت کوکی"],
@@ -137,6 +138,36 @@ async def admin_menu_stats(_: Client, message: Message):
 async def admin_menu_server(_: Client, message: Message):
     print("[ADMIN] server status via text by", message.from_user.id)
     await message.reply_text(_server_status_text(), reply_markup=admin_reply_kb())
+
+
+# --- بررسی پروکسی‌ها ---
+from .youtube_proxy_rotator import is_enabled as proxy_rotation_enabled, probe_ports_status
+
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔌 بررسی پروکسی$'))
+async def admin_menu_proxy_check(_: Client, message: Message):
+    # If proxy rotation is disabled, inform admin
+    if not proxy_rotation_enabled():
+        await message.reply_text("🔴 پروکسی خاموش است. برای فعال‌سازی، متغیر محیطی YOUTUBE_PROXY_ROTATION را روی 1 بگذارید.", reply_markup=admin_reply_kb())
+        return
+
+    # Probe ports and build a status report
+    results = probe_ports_status()
+    lines = ["🔌 وضعیت پروکسی‌ها (SOCKS5H روی 127.0.0.1):\n"]
+    for r in results:
+        port = r['port']
+        local = '🟢 باز' if r['local_ok'] else '🔴 بسته'
+        ext = r['external_ok']
+        if ext is True:
+            ext_s = '🌐 OK'
+        elif ext is False:
+            ext_s = '🌐 خطا'
+        else:
+            ext_s = '🌐 (رد شد)'
+        lines.append(f"پورت {port}: {local} | {ext_s}")
+
+    lines.append("\n💡 اگر پورت‌ها باز هستند ولی خارجی خطا می‌دهد، سرویس پروکسی را بررسی کنید.")
+    await message.reply_text("\n".join(lines), reply_markup=admin_reply_kb())
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 ارسال همگانی$'))

@@ -3,6 +3,7 @@ import time
 import random
 import logging
 import asyncio
+import socket
 from typing import Optional, Dict, Any, Tuple, List
 from yt_dlp import YoutubeDL
 
@@ -196,3 +197,49 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
     if last_error:
         raise last_error
     raise Exception('No available proxy ports for rotation')
+
+
+def probe_ports_status(timeout_seconds: float = 0.8) -> List[Dict[str, Any]]:
+    """
+    Probe local SOCKS5 proxy ports to check basic liveness.
+    - Checks TCP connect to 127.0.0.1:port
+    - Optionally attempts external reachability via requests + socks (if available)
+    Returns list of dicts with per-port status.
+    """
+    results: List[Dict[str, Any]] = []
+    try:
+        import requests  # type: ignore
+    except Exception:
+        requests = None  # fallback without external probe
+
+    for port in PORTS:
+        local_ok = False
+        external_ok = None  # None means skipped
+        # Local TCP check
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(timeout_seconds)
+                local_ok = s.connect_ex(('127.0.0.1', port)) == 0
+        except Exception:
+            local_ok = False
+
+        # External probe via socks if requests available and local is OK
+        if requests and local_ok:
+            try:
+                proxies = {
+                    'http': f'socks5h://127.0.0.1:{port}',
+                    'https': f'socks5h://127.0.0.1:{port}',
+                }
+                # Use lightweight connectivity endpoint
+                resp = requests.get('https://www.youtube.com/generate_204', timeout=3, proxies=proxies)
+                external_ok = resp.status_code in (200, 204)
+            except Exception:
+                external_ok = False
+
+        results.append({
+            'port': port,
+            'local_ok': local_ok,
+            'external_ok': external_ok,
+        })
+
+    return results
