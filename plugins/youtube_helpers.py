@@ -5,6 +5,7 @@ import yt_dlp
 from plugins.logger_config import get_logger
 from plugins.proxy_config import get_proxy_url
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
+from plugins.youtube_proxy_rotator import is_enabled as proxy_rotation_enabled, extract_with_rotation, download_with_rotation
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
@@ -39,13 +40,15 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         
         cookie_id_used = None
 
-        # Download in thread to avoid blocking
-        def download_sync():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-        
+        # Initial attempt: use proxy rotation if enabled
         try:
-            await asyncio.to_thread(download_sync)
+            if proxy_rotation_enabled():
+                await download_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
+            else:
+                def download_sync():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                await asyncio.to_thread(download_sync)
         except Exception as first_err:
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
@@ -57,7 +60,13 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
                         youtube_helpers_logger.debug(f"تلاش مجدد دانلود با کوکی: id={cid}, path={cookiefile}")
-                        await asyncio.to_thread(download_sync)
+                        if proxy_rotation_enabled():
+                            await download_with_rotation(url, ydl_opts, cookiefile=cookiefile, max_attempts=3)
+                        else:
+                            def download_sync_cookie():
+                                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                    ydl.download([url])
+                            await asyncio.to_thread(download_sync_cookie)
                         if cookie_id_used:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
@@ -67,13 +76,21 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                         youtube_helpers_logger.debug("کوکی دردسترس نیست؛ عبور")
                 except Exception as cookie_err:
                     # اگر خطا مرتبط با محدودیت/شبکه باشد و پراکسی سیستم موجود باشد، تلاش با پراکسی
-                    proxy_url = get_proxy_url()
                     needs_proxy = any(h in str(cookie_err).lower() for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                    if proxy_url and needs_proxy:
+                    if needs_proxy:
                         ydl_opts.pop('cookiefile', None)
-                        ydl_opts['proxy'] = proxy_url
-                        youtube_helpers_logger.debug(f"تلاش دانلود با پراکسی سیستم: {proxy_url}")
-                        await asyncio.to_thread(download_sync)
+                        if proxy_rotation_enabled():
+                            youtube_helpers_logger.debug("تلاش دانلود با چرخش پراکسی SOCKS5H")
+                            await download_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
+                        else:
+                            proxy_url = get_proxy_url()
+                            if proxy_url:
+                                ydl_opts['proxy'] = proxy_url
+                                youtube_helpers_logger.debug(f"تلاش دانلود با پراکسی سیستم: {proxy_url}")
+                                def download_sync_proxy():
+                                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                        ydl.download([url])
+                                await asyncio.to_thread(download_sync_proxy)
         
         # ثبت موفقیت استفاده از کوکی
         if cookie_id_used:
@@ -133,7 +150,10 @@ async def get_direct_download_url(url, format_id):
                 return info
         
         try:
-            info = await asyncio.to_thread(extract_sync)
+            if proxy_rotation_enabled():
+                info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
+            else:
+                info = await asyncio.to_thread(extract_sync)
         except Exception as first_err:
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
@@ -145,7 +165,10 @@ async def get_direct_download_url(url, format_id):
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
                         youtube_helpers_logger.debug(f"تلاش مجدد استخراج لینک با کوکی: id={cid}, path={cookiefile}")
-                        info = await asyncio.to_thread(extract_sync)
+                        if proxy_rotation_enabled():
+                            info = await extract_with_rotation(url, ydl_opts, cookiefile=cookiefile, max_attempts=3)
+                        else:
+                            info = await asyncio.to_thread(extract_sync)
                         if cookie_id_used:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
@@ -155,21 +178,31 @@ async def get_direct_download_url(url, format_id):
                         youtube_helpers_logger.debug("کوکی دردسترس نیست؛ عبور")
                 except Exception as cookie_err:
                     # اگر خطا مرتبط با محدودیت/شبکه باشد و پراکسی سیستم موجود باشد، تلاش با پراکسی
-                    proxy_url = get_proxy_url()
                     needs_proxy = any(h in str(cookie_err).lower() for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                    if proxy_url and needs_proxy:
+                    if needs_proxy:
                         ydl_opts.pop('cookiefile', None)
-                        ydl_opts['proxy'] = proxy_url
-                        youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
-                        info = await asyncio.to_thread(extract_sync)
+                        if proxy_rotation_enabled():
+                            youtube_helpers_logger.debug("تلاش استخراج لینک با چرخش پراکسی SOCKS5H")
+                            info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
+                        else:
+                            proxy_url = get_proxy_url()
+                            if proxy_url:
+                                ydl_opts['proxy'] = proxy_url
+                                youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
+                                info = await asyncio.to_thread(extract_sync)
             else:
                 # شاید صرفاً محدودیت/شبکه باشد؛ اگر پراکسی سیستم موجود است امتحان می‌کنیم
-                proxy_url = get_proxy_url()
                 needs_proxy = any(h in msg for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                if proxy_url and needs_proxy:
-                    ydl_opts['proxy'] = proxy_url
-                    youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
-                    info = await asyncio.to_thread(extract_sync)
+                if needs_proxy:
+                    if proxy_rotation_enabled():
+                        youtube_helpers_logger.debug("تلاش استخراج لینک با چرخش پراکسی SOCKS5H")
+                        info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
+                    else:
+                        proxy_url = get_proxy_url()
+                        if proxy_url:
+                            ydl_opts['proxy'] = proxy_url
+                            youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
+                            info = await asyncio.to_thread(extract_sync)
         return info
     except Exception as e:
         youtube_helpers_logger.error(f"خطا در دریافت لینک مستقیم: {e}")
