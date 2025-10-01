@@ -29,7 +29,7 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'extract_flat': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android']
+                    'player_client': ['ios']
                 }
             },
         }
@@ -136,7 +136,7 @@ async def get_direct_download_url(url, format_id):
             'extract_flat': False,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android']
+                    'player_client': ['ios']
                 }
             },
         }

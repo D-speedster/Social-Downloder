@@ -353,7 +353,7 @@ class YouTubeAdvancedDownloader:
             'proxy': proxy_url,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android']
+                    'player_client': ['ios']
                 }
             },
         }
@@ -458,7 +458,7 @@ class YouTubeAdvancedDownloader:
             'proxy': proxy_url,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android']
+                    'player_client': ['ios']
                 }
             },
         }

@@ -21,8 +21,8 @@ _USER_AGENTS = [
     "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
 ]
 
-# Player client rotation per attempt
-_PLAYER_CLIENTS = ["web", "ios", "android"]
+# Player client rotation per attempt (smart fallback: ios → android → web)
+_PLAYER_CLIENTS = ["ios", "android", "web"]
 
 # Logger configuration
 os.makedirs('./logs', exist_ok=True)
