@@ -7,12 +7,23 @@ import socket
 from typing import Optional, Dict, Any, Tuple, List
 from yt_dlp import YoutubeDL
 
-# Ports pool on localhost for SOCKS5 proxies
-PORTS: List[int] = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088]
+# Proxy configuration - HTTP proxy on port 10808 (V2Ray)
+PROXY_CONFIG = {
+    'http': 'http://127.0.0.1:10808',
+    'https': 'http://127.0.0.1:10808'
+}
+
+# Fallback SOCKS5 ports (if HTTP proxy fails)
+SOCKS5_PORTS: List[int] = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088]
 
 # Failure tracking and temporary disable store
-_failure_counts: Dict[int, int] = {p: 0 for p in PORTS}
-_disabled_until: Dict[int, float] = {p: 0.0 for p in PORTS}
+_failure_counts: Dict[str, int] = {'http_proxy': 0}
+_disabled_until: Dict[str, float] = {'http_proxy': 0.0}
+
+# Add SOCKS5 ports to failure tracking
+for port in SOCKS5_PORTS:
+    _failure_counts[f'socks5_{port}'] = 0
+    _disabled_until[f'socks5_{port}'] = 0.0
 
 # Simple UA pool
 _USER_AGENTS = [
@@ -78,29 +89,68 @@ def _headers() -> Dict[str, str]:
     }
 
 
+def _is_proxy_available(proxy_type: str) -> bool:
+    """Check if a proxy type is available (not disabled)"""
+    return _disabled_until.get(proxy_type, 0.0) <= _now()
+
+
+def _mark_proxy_result(proxy_type: str, success: bool):
+    """Mark proxy result and disable if too many failures"""
+    if success:
+        _failure_counts[proxy_type] = 0
+        return
+    _failure_counts[proxy_type] = _failure_counts.get(proxy_type, 0) + 1
+    if _failure_counts[proxy_type] >= 3:
+        _disabled_until[proxy_type] = _now() + 60.0
+        proxy_logger.warning(f"Proxy {proxy_type} disabled for 60s due to 3 consecutive failures")
+        _failure_counts[proxy_type] = 0
+
+
+def _choose_proxy() -> Optional[Tuple[str, str]]:
+    """Choose an available proxy. Returns (proxy_type, proxy_url) or None"""
+    # Try HTTP proxy first
+    if _is_proxy_available('http_proxy'):
+        return ('http_proxy', PROXY_CONFIG['http'])
+    
+    # Fallback to SOCKS5 ports
+    available_socks = [port for port in SOCKS5_PORTS if _is_proxy_available(f'socks5_{port}')]
+    if available_socks:
+        port = random.choice(available_socks)
+        return (f'socks5_{port}', f'socks5h://127.0.0.1:{port}')
+    
+    return None
+
+
 async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile: Optional[str] = None,
                                 max_attempts: int = 3) -> Dict[str, Any]:
     """
-    Attempt to extract info via yt-dlp using SOCKS5H proxy rotation over localhost ports.
-    - Random port each attempt, avoiding previously tried ports
+    Attempt to extract info via yt-dlp using HTTP proxy first, then SOCKS5H fallback, then no proxy.
+    - HTTP proxy on port 10808 (primary)
+    - SOCKS5H proxy rotation as fallback
+    - No proxy as final fallback
     - Timeout 8–12 seconds (socket_timeout randomized)
     - Standard browser headers
-    - DNS via proxy by using socks5h scheme
     - Logs each attempt and response time
     """
     last_error: Optional[Exception] = None
-    tried: set = set()
+    tried_proxies: set = set()
+    
+    # First try with proxies
     for attempt in range(1, max_attempts + 1):
-        port = _choose_port(tried)
-        if port is None:
+        proxy_info = _choose_proxy()
+        if proxy_info is None:
             break
-        tried.add(port)
+        
+        proxy_type, proxy_url = proxy_info
+        if proxy_type in tried_proxies:
+            continue
+        tried_proxies.add(proxy_type)
 
         timeout = random.randint(8, 12)
         opts = dict(base_opts)
         opts['socket_timeout'] = timeout
         opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
-        opts['proxy'] = f'socks5h://127.0.0.1:{port}'
+        opts['proxy'] = proxy_url
         opts['geo_bypass'] = True
 
         # Rotate player client per attempt
@@ -123,43 +173,81 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
 
         duration = _now() - start
         if error is None and isinstance(result, dict):
-            _mark_result(port, True)
-            proxy_logger.info(f"OK url={url} port={port} client={client} time={duration:.2f}s")
+            _mark_proxy_result(proxy_type, True)
+            proxy_logger.info(f"OK url={url} proxy={proxy_type} client={client} time={duration:.2f}s")
             return result
         else:
-            _mark_result(port, False)
+            _mark_proxy_result(proxy_type, False)
             msg = str(error) if error else 'invalid_response'
             # Handle rate-limit hints
             if '429' in msg or 'rate' in msg.lower():
-                proxy_logger.warning(f"Rate-limit detected on port={port}; slowing next attempt")
+                proxy_logger.warning(f"Rate-limit detected on proxy={proxy_type}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR url={url} port={port} client={client} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR url={url} proxy={proxy_type} client={client} time={duration:.2f}s err={msg}")
             last_error = error or Exception('Invalid response from yt-dlp')
+
+    # Final fallback: try without proxy
+    proxy_logger.warning(f"All proxies failed for {url}, trying without proxy as final fallback")
+    try:
+        timeout = random.randint(8, 12)
+        opts = dict(base_opts)
+        opts['socket_timeout'] = timeout
+        opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
+        opts['geo_bypass'] = True
+        # Remove any proxy setting
+        opts.pop('proxy', None)
+        
+        # Use ios client for no-proxy attempt
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': ['ios']
+            }
+        }
+        if cookiefile:
+            opts['cookiefile'] = cookiefile
+
+        start = _now()
+        result = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
+        duration = _now() - start
+        
+        if isinstance(result, dict):
+            proxy_logger.info(f"OK url={url} proxy=none client=ios time={duration:.2f}s (fallback success)")
+            return result
+    except Exception as e:
+        duration = _now() - start
+        proxy_logger.error(f"ERR url={url} proxy=none client=ios time={duration:.2f}s err={str(e)} (fallback failed)")
+        last_error = e
 
     if last_error:
         raise last_error
-    raise Exception('No available proxy ports for rotation')
+    raise Exception('All proxy attempts and no-proxy fallback failed')
 
 
 async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile: Optional[str] = None,
                                  max_attempts: int = 3) -> None:
     """
-    Attempt to download using yt-dlp with SOCKS5H proxy rotation.
+    Attempt to download using yt-dlp with HTTP proxy first, then SOCKS5H fallback, then no proxy.
     On success returns None; on failure raises the last encountered exception.
     """
     last_error: Optional[Exception] = None
-    tried: set = set()
+    tried_proxies: set = set()
+    
+    # First try with proxies
     for attempt in range(1, max_attempts + 1):
-        port = _choose_port(tried)
-        if port is None:
+        proxy_info = _choose_proxy()
+        if proxy_info is None:
             break
-        tried.add(port)
+        
+        proxy_type, proxy_url = proxy_info
+        if proxy_type in tried_proxies:
+            continue
+        tried_proxies.add(proxy_type)
 
         timeout = random.randint(8, 12)
         opts = dict(base_opts)
         opts['socket_timeout'] = timeout
         opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
-        opts['proxy'] = f'socks5h://127.0.0.1:{port}'
+        opts['proxy'] = proxy_url
         opts['geo_bypass'] = True
 
         # Rotate player client per attempt
@@ -182,26 +270,58 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
 
         duration = _now() - start
         if error is None:
-            _mark_result(port, True)
-            proxy_logger.info(f"OK-DL url={url} port={port} client={client} time={duration:.2f}s")
+            _mark_proxy_result(proxy_type, True)
+            proxy_logger.info(f"OK-DL url={url} proxy={proxy_type} client={client} time={duration:.2f}s")
             return
         else:
-            _mark_result(port, False)
+            _mark_proxy_result(proxy_type, False)
             msg = str(error)
             if '429' in msg or 'rate' in msg.lower():
-                proxy_logger.warning(f"Rate-limit detected on port={port}; slowing next attempt")
+                proxy_logger.warning(f"Rate-limit detected on proxy={proxy_type}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR-DL url={url} port={port} client={client} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR-DL url={url} proxy={proxy_type} client={client} time={duration:.2f}s err={msg}")
             last_error = error
+
+    # Final fallback: try without proxy
+    proxy_logger.warning(f"All proxies failed for download {url}, trying without proxy as final fallback")
+    try:
+        timeout = random.randint(8, 12)
+        opts = dict(base_opts)
+        opts['socket_timeout'] = timeout
+        opts['http_headers'] = {**_headers(), **(base_opts.get('http_headers') or {})}
+        opts['geo_bypass'] = True
+        # Remove any proxy setting
+        opts.pop('proxy', None)
+        
+        # Use ios client for no-proxy attempt
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': ['ios']
+            }
+        }
+        if cookiefile:
+            opts['cookiefile'] = cookiefile
+
+        start = _now()
+        with YoutubeDL(opts) as ydl:
+            ydl.download([url])
+        duration = _now() - start
+        
+        proxy_logger.info(f"OK-DL url={url} proxy=none client=ios time={duration:.2f}s (fallback success)")
+        return
+    except Exception as e:
+        duration = _now() - start
+        proxy_logger.error(f"ERR-DL url={url} proxy=none client=ios time={duration:.2f}s err={str(e)} (fallback failed)")
+        last_error = e
 
     if last_error:
         raise last_error
-    raise Exception('No available proxy ports for rotation')
+    raise Exception('All proxy attempts and no-proxy fallback failed')
 
 
 def probe_ports_status(timeout_seconds: float = 0.8) -> List[Dict[str, Any]]:
     """
-    Probe local SOCKS5 proxy ports to check basic liveness.
+    Probe local proxy ports to check basic liveness.
     - Checks TCP connect to 127.0.0.1:port
     - Optionally attempts external reachability via requests + socks (if available)
     Returns list of dicts with per-port status.
@@ -212,7 +332,40 @@ def probe_ports_status(timeout_seconds: float = 0.8) -> List[Dict[str, Any]]:
     except Exception:
         requests = None  # fallback without external probe
 
-    for port in PORTS:
+    # Check HTTP proxy first
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout_seconds)
+            local_ok = s.connect_ex(('127.0.0.1', 10808)) == 0
+        
+        external_ok = None
+        if requests and local_ok:
+            try:
+                proxies = {
+                    'http': 'http://127.0.0.1:10808',
+                    'https': 'http://127.0.0.1:10808',
+                }
+                resp = requests.get('https://www.youtube.com/generate_204', timeout=3, proxies=proxies)
+                external_ok = resp.status_code in (200, 204)
+            except Exception:
+                external_ok = False
+        
+        results.append({
+            'port': 10808,
+            'type': 'http',
+            'local_ok': local_ok,
+            'external_ok': external_ok,
+        })
+    except Exception:
+        results.append({
+            'port': 10808,
+            'type': 'http',
+            'local_ok': False,
+            'external_ok': None,
+        })
+
+    # Check SOCKS5 ports
+    for port in SOCKS5_PORTS:
         local_ok = False
         external_ok = None  # None means skipped
         # Local TCP check
@@ -238,6 +391,7 @@ def probe_ports_status(timeout_seconds: float = 0.8) -> List[Dict[str, Any]]:
 
         results.append({
             'port': port,
+            'type': 'socks5',
             'local_ok': local_ok,
             'external_ok': external_ok,
         })
