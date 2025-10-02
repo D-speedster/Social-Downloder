@@ -152,6 +152,28 @@ def _get_all_available_proxies() -> List[Tuple[str, str]]:
     """Get all available SOCKS5 proxies sequentially."""
     return _iterate_socks_proxies()
 
+def _needs_cookie(err: Exception) -> bool:
+    msg = str(err).lower()
+    return any(h in msg for h in [
+        'login required', 'sign in', 'age', 'restricted', 'private', 'consent', 'verify your age', 'this video is'  # common yt errors
+    ])
+
+def _fetch_cookie_from_pool(prev_cookie_id: Optional[int] = None) -> Tuple[Optional[str], Optional[int]]:
+    try:
+        from .cookie_manager import get_rotated_cookie_file
+        return get_rotated_cookie_file(prev_cookie_id)
+    except Exception:
+        return None, None
+
+def _mark_cookie_usage(cookie_id: Optional[int], success: bool) -> None:
+    if cookie_id is None:
+        return
+    try:
+        from .cookie_manager import mark_cookie_used
+        mark_cookie_used(cookie_id, success)
+    except Exception:
+        pass
+
 
 def _choose_proxy() -> Optional[Tuple[str, str]]:
     """Choose the first available SOCKS5 proxy."""
@@ -173,15 +195,12 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
     _server_only_guard()
     last_error: Optional[Exception] = None
 
-    # Ensure we have a cookie if not provided (use existing cookie pool)
-    if cookiefile is None:
-        try:
-            from .cookie_manager import get_rotated_cookie_file
-            cookiefile, _ = get_rotated_cookie_file(None)
-            if cookiefile:
-                proxy_logger.debug(f"Cookie pool attached for extract: {cookiefile}")
-        except Exception:
-            pass
+    # Proactive cookie attach if requested via env
+    cookie_id_used: Optional[int] = None
+    if cookiefile is None and os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
+        cookiefile, cookie_id_used = _fetch_cookie_from_pool(None)
+        if cookiefile:
+            proxy_logger.debug(f"Cookie pool proactively attached for extract: id={cookie_id_used}, path={cookiefile}")
 
     # Iterate proxies sequentially; retry per proxy
     proxies = _get_all_available_proxies()
@@ -216,6 +235,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
                 proxy_logger.info(f"OK-EX url={url} proxy={proxy_url} client={client_choice} retry={retry} time={duration:.2f}s")
                 _mark_proxy_result(proxy_type, True)
                 attempt_logs.append(f"{proxy_url}#{client_choice}@{duration:.2f}s:OK")
+                _mark_cookie_usage(cookie_id_used, True)
                 # Summary
                 proxy_logger.info(f"SUMMARY-EX success via {proxy_url} after {retry} attempt(s)")
                 return result
@@ -225,6 +245,28 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
                 _mark_proxy_result(proxy_type, False)
                 attempt_logs.append(f"{proxy_url}#{client_choice}@{duration:.2f}s:ERR {str(e)[:80]}")
                 last_error = e
+
+                # If cookie may be required and we haven't attached one yet, retry once with cookie
+                if cookiefile is None and _needs_cookie(e):
+                    cookiefile, cookie_id_used = _fetch_cookie_from_pool(cookie_id_used)
+                    if cookiefile:
+                        opts2 = dict(opts)
+                        opts2['cookiefile'] = cookiefile
+                        start2 = _now()
+                        try:
+                            result = await asyncio.to_thread(lambda: YoutubeDL(opts2).extract_info(url, download=False))
+                            duration2 = _now() - start2
+                            proxy_logger.info(f"OK-EX-COOKIE url={url} proxy={proxy_url} client={client_choice} time={duration2:.2f}s")
+                            _mark_proxy_result(proxy_type, True)
+                            attempt_logs.append(f"{proxy_url}#{client_choice}@{duration2:.2f}s:OK-C")
+                            _mark_cookie_usage(cookie_id_used, True)
+                            proxy_logger.info(f"SUMMARY-EX success via {proxy_url} with cookie after failure")
+                            return result
+                        except Exception as e2:
+                            duration2 = _now() - start2
+                            proxy_logger.error(f"ERR-EX-COOKIE url={url} proxy={proxy_url} client={client_choice} time={duration2:.2f}s err={str(e2)}")
+                            _mark_cookie_usage(cookie_id_used, False)
+                            last_error = e2
 
     # Final failure: no direct connection allowed
     proxy_logger.warning(f"SUMMARY-EX failed for {url}; attempts: {len(attempt_logs)}; last_err={str(last_error)[:120]}")
@@ -243,15 +285,12 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
     _server_only_guard()
     last_error: Optional[Exception] = None
 
-    # Ensure we have a cookie if not provided (use existing cookie pool)
-    if cookiefile is None:
-        try:
-            from .cookie_manager import get_rotated_cookie_file
-            cookiefile, _ = get_rotated_cookie_file(None)
-            if cookiefile:
-                proxy_logger.debug(f"Cookie pool attached for download: {cookiefile}")
-        except Exception:
-            pass
+    # Proactive cookie attach if requested via env
+    cookie_id_used: Optional[int] = None
+    if cookiefile is None and os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
+        cookiefile, cookie_id_used = _fetch_cookie_from_pool(None)
+        if cookiefile:
+            proxy_logger.debug(f"Cookie pool proactively attached for download: id={cookie_id_used}, path={cookiefile}")
 
     proxies = _get_all_available_proxies()
     if not proxies:
@@ -285,6 +324,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
                 proxy_logger.info(f"OK-DL url={url} proxy={proxy_url} client={client_choice} retry={retry} time={duration:.2f}s")
                 _mark_proxy_result(proxy_type, True)
                 attempt_logs.append(f"{proxy_url}#{client_choice}@{duration:.2f}s:OK")
+                _mark_cookie_usage(cookie_id_used, True)
                 proxy_logger.info(f"SUMMARY-DL success via {proxy_url} after {retry} attempt(s)")
                 return
             except Exception as e:
@@ -293,6 +333,28 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
                 _mark_proxy_result(proxy_type, False)
                 attempt_logs.append(f"{proxy_url}#{client_choice}@{duration:.2f}s:ERR {str(e)[:80]}")
                 last_error = e
+
+                # If cookie may be required and we haven't attached one yet, retry once with cookie
+                if cookiefile is None and _needs_cookie(e):
+                    cookiefile, cookie_id_used = _fetch_cookie_from_pool(cookie_id_used)
+                    if cookiefile:
+                        opts2 = dict(opts)
+                        opts2['cookiefile'] = cookiefile
+                        start2 = _now()
+                        try:
+                            await asyncio.to_thread(lambda: YoutubeDL(opts2).download([url]))
+                            duration2 = _now() - start2
+                            proxy_logger.info(f"OK-DL-COOKIE url={url} proxy={proxy_url} client={client_choice} time={duration2:.2f}s")
+                            _mark_proxy_result(proxy_type, True)
+                            attempt_logs.append(f"{proxy_url}#{client_choice}@{duration2:.2f}s:OK-C")
+                            _mark_cookie_usage(cookie_id_used, True)
+                            proxy_logger.info(f"SUMMARY-DL success via {proxy_url} with cookie after failure")
+                            return
+                        except Exception as e2:
+                            duration2 = _now() - start2
+                            proxy_logger.error(f"ERR-DL-COOKIE url={url} proxy={proxy_url} client={client_choice} time={duration2:.2f}s err={str(e2)}")
+                            _mark_cookie_usage(cookie_id_used, False)
+                            last_error = e2
 
     proxy_logger.warning(f"SUMMARY-DL failed for {url}; attempts: {len(attempt_logs)}; last_err={str(last_error)[:120]}")
     raise last_error or RuntimeError('All SOCKS5 proxy attempts failed for download')
