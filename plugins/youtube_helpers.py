@@ -3,9 +3,7 @@ import asyncio
 import tempfile
 import yt_dlp
 from plugins.logger_config import get_logger
-from plugins.proxy_config import get_proxy_url
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
-from plugins.youtube_proxy_rotator import is_enabled as proxy_rotation_enabled, extract_with_rotation, download_with_rotation
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
@@ -21,12 +19,13 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         temp_dir = tempfile.mkdtemp()
         youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
         
-        # Configure yt-dlp options (initially without proxy/cookie)
+        # Configure yt-dlp options with proxy
         ydl_opts = {
             'format': format_id,
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
+            'proxy': 'socks5h://127.0.0.1:1084',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['ios']
@@ -51,15 +50,12 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             except Exception:
                 pass
 
-        # Initial attempt: use proxy rotation if enabled
+        # Initial attempt: direct download
         try:
-            if proxy_rotation_enabled():
-                await download_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-            else:
-                def download_sync():
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        ydl.download([url])
-                await asyncio.to_thread(download_sync)
+            def download_sync():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            await asyncio.to_thread(download_sync)
         except Exception as first_err:
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
@@ -71,13 +67,10 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
                         youtube_helpers_logger.debug(f"تلاش مجدد دانلود با کوکی: id={cid}, path={cookiefile}")
-                        if proxy_rotation_enabled():
-                            await download_with_rotation(url, ydl_opts, cookiefile=cookiefile, max_attempts=3)
-                        else:
-                            def download_sync_cookie():
-                                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                                    ydl.download([url])
-                            await asyncio.to_thread(download_sync_cookie)
+                        def download_sync_cookie():
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                ydl.download([url])
+                        await asyncio.to_thread(download_sync_cookie)
                         if cookie_id_used:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
@@ -86,22 +79,13 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                     else:
                         youtube_helpers_logger.debug("کوکی دردسترس نیست؛ عبور")
                 except Exception as cookie_err:
-                    # اگر خطا مرتبط با محدودیت/شبکه باشد و پراکسی سیستم موجود باشد، تلاش با پراکسی
-                    needs_proxy = any(h in str(cookie_err).lower() for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                    if needs_proxy:
-                        ydl_opts.pop('cookiefile', None)
-                        if proxy_rotation_enabled():
-                            youtube_helpers_logger.debug("تلاش دانلود با چرخش پراکسی SOCKS5H")
-                            await download_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-                        else:
-                            proxy_url = get_proxy_url()
-                            if proxy_url:
-                                ydl_opts['proxy'] = proxy_url
-                                youtube_helpers_logger.debug(f"تلاش دانلود با پراکسی سیستم: {proxy_url}")
-                                def download_sync_proxy():
-                                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                                        ydl.download([url])
-                                await asyncio.to_thread(download_sync_proxy)
+                    # اگر خطا رخ داد، تلاش مجدد بدون کوکی
+                    youtube_helpers_logger.debug(f"خطا در دانلود با کوکی: {cookie_err}")
+                    ydl_opts.pop('cookiefile', None)
+                    def download_sync_retry():
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            ydl.download([url])
+                    await asyncio.to_thread(download_sync_retry)
         
         # ثبت موفقیت استفاده از کوکی
         if cookie_id_used:
@@ -138,13 +122,14 @@ async def get_direct_download_url(url, format_id):
     try:
         youtube_helpers_logger.info(f"دریافت لینک مستقیم: {url} با فرمت {format_id}")
         
-        # Configure yt-dlp options for URL extraction only (initially without proxy/cookie)
+        # Configure yt-dlp options for URL extraction with proxy
         ydl_opts = {
             'format': format_id,
             'quiet': True,
             'simulate': True,
             'noplaylist': True,
             'extract_flat': False,
+            'proxy': 'socks5h://127.0.0.1:1084',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['ios']
@@ -172,10 +157,7 @@ async def get_direct_download_url(url, format_id):
                 return info
         
         try:
-            if proxy_rotation_enabled():
-                info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-            else:
-                info = await asyncio.to_thread(extract_sync)
+            info = await asyncio.to_thread(extract_sync)
         except Exception as first_err:
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
@@ -187,10 +169,7 @@ async def get_direct_download_url(url, format_id):
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
                         youtube_helpers_logger.debug(f"تلاش مجدد استخراج لینک با کوکی: id={cid}, path={cookiefile}")
-                        if proxy_rotation_enabled():
-                            info = await extract_with_rotation(url, ydl_opts, cookiefile=cookiefile, max_attempts=3)
-                        else:
-                            info = await asyncio.to_thread(extract_sync)
+                        info = await asyncio.to_thread(extract_sync)
                         if cookie_id_used:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
@@ -199,32 +178,14 @@ async def get_direct_download_url(url, format_id):
                     else:
                         youtube_helpers_logger.debug("کوکی دردسترس نیست؛ عبور")
                 except Exception as cookie_err:
-                    # اگر خطا مرتبط با محدودیت/شبکه باشد و پراکسی سیستم موجود باشد، تلاش با پراکسی
-                    needs_proxy = any(h in str(cookie_err).lower() for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                    if needs_proxy:
-                        ydl_opts.pop('cookiefile', None)
-                        if proxy_rotation_enabled():
-                            youtube_helpers_logger.debug("تلاش استخراج لینک با چرخش پراکسی SOCKS5H")
-                            info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-                        else:
-                            proxy_url = get_proxy_url()
-                            if proxy_url:
-                                ydl_opts['proxy'] = proxy_url
-                                youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
-                                info = await asyncio.to_thread(extract_sync)
+                    # اگر خطا مرتبط با محدودیت/شبکه باشد، تلاش مجدد
+                    youtube_helpers_logger.debug(f"خطا در استخراج لینک با کوکی: {cookie_err}")
+                    ydl_opts.pop('cookiefile', None)
+                    info = await asyncio.to_thread(extract_sync)
             else:
-                # شاید صرفاً محدودیت/شبکه باشد؛ اگر پراکسی سیستم موجود است امتحان می‌کنیم
-                needs_proxy = any(h in msg for h in ['403', '429', 'proxy', 'forbidden', 'blocked'])
-                if needs_proxy:
-                    if proxy_rotation_enabled():
-                        youtube_helpers_logger.debug("تلاش استخراج لینک با چرخش پراکسی SOCKS5H")
-                        info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-                    else:
-                        proxy_url = get_proxy_url()
-                        if proxy_url:
-                            ydl_opts['proxy'] = proxy_url
-                            youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
-                            info = await asyncio.to_thread(extract_sync)
+                # شاید صرفاً محدودیت/شبکه باشد، تلاش مجدد
+                youtube_helpers_logger.debug("تلاش مجدد استخراج لینک")
+                info = await asyncio.to_thread(extract_sync)
         # تبدیل info به URL مستقیم
         direct_url = None
         try:

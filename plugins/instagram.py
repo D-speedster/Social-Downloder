@@ -19,7 +19,6 @@ import shutil
 import sys
 import requests
 import logging
-from plugins.proxy_config import get_requests_proxies
 
 # Configure Instagram logger
 instagram_logger = logging.getLogger('instagram_main')
@@ -151,9 +150,6 @@ async def get_instagram_data_from_api(url):
                 'Content-Type': "application/json"
             }
             
-            # Get proxy settings
-            proxies = get_requests_proxies()
-            
             # Make request with SSL verification disabled and timeout
             response = requests.post(
                 "https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink",
@@ -220,8 +216,7 @@ def _fetch_og_media_instagram(url: str):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
         }
-        proxies = get_requests_proxies() if callable(get_requests_proxies) else None
-        resp = requests.get(url, headers=headers, timeout=12, proxies=proxies)
+        resp = requests.get(url, headers=headers, timeout=12)
         html = resp.text
         # Try og:video first
         vid = re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)

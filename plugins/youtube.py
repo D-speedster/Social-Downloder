@@ -6,8 +6,6 @@ from plugins.start import step, join
 from plugins.sqlite_db_wrapper import DB
 from datetime import datetime
 from yt_dlp import YoutubeDL
-from plugins.proxy_config import get_proxy_url
-from plugins.youtube_proxy_rotator import is_enabled as proxy_rotation_enabled, extract_with_rotation
 import yt_dlp
 from plugins import constant
 import os
@@ -270,6 +268,7 @@ async def show_video(client: Client, message: Message):
             'writeautomaticsub': False, # Skip auto subtitles
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
+            'proxy': 'socks5h://127.0.0.1:1084',  # SOCKS5 proxy for all requests
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']
@@ -289,10 +288,7 @@ async def show_video(client: Client, message: Message):
         youtube_logger.debug("شروع استخراج اطلاعات ویدیو با yt-dlp")
         
         try:
-            if proxy_rotation_enabled():
-                info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-            else:
-                info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+            info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
             youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
             
             # اگر از کوکی استفاده شد و موفق بود، ثبت کن
@@ -351,12 +347,6 @@ async def show_video(client: Client, message: Message):
             hints = ['login required', 'sign in', 'age', 'restricted', 'private', 'consent']
             return any(h in msg_l for h in hints)
 
-        def _needs_proxy(msg: str) -> bool:
-            msg_l = (msg or '').lower()
-            hints = ['403', '429', 'proxy', 'forbidden', 'blocked', 'tls', 'ssl']
-            return any(h in msg_l for h in hints)
-
-        proxy_url = get_proxy_url()
         cookiefile = None
         cookie_id_used = None
         # اجرای تلاش‌های جایگزین بدون بلاک try بیرونی که لازم نیست
@@ -368,6 +358,7 @@ async def show_video(client: Client, message: Message):
                     if cookiefile:
                         opts = dict(ydl_opts)
                         opts['cookiefile'] = cookiefile
+                        opts['proxy'] = 'socks5h://127.0.0.1:1084'  # Ensure proxy is set
                         performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
                         youtube_logger.debug("تلاش مجدد با کوکی")
                         info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
@@ -381,41 +372,24 @@ async def show_video(client: Client, message: Message):
                         except Exception:
                             pass
 
-        # Attempt 2: تلاش با چرخش پراکسی اگر فعال باشد
-        if not info and _needs_proxy(err_text):
-            try:
-                if proxy_rotation_enabled():
-                    performance_logger.info(f"[USER:{user_id}] Retrying with proxy rotation...")
-                    youtube_logger.debug("تلاش مجدد با چرخش پراکسی SOCKS5H")
-                    info = await extract_with_rotation(url, ydl_opts, cookiefile=None, max_attempts=3)
-                elif proxy_url:
-                    opts = dict(ydl_opts)
-                    opts['proxy'] = proxy_url
-                    performance_logger.info(f"[USER:{user_id}] Retrying with system proxy...")
-                    youtube_logger.debug(f"تلاش مجدد با پراکسی سیستم: {proxy_url}")
-                    info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
-            except Exception as pe:
-                youtube_logger.error(f"خطا در تلاش با پراکسی: {pe}")
-
-        # Attempt 3: ترکیبی کوکی + پراکسی (چرخش) اگر هر دو لازم باشند
-        if not info and _needs_cookie(err_text) and _needs_proxy(err_text):
+        # Attempt 2: تلاش مجدد با کوکی اگر قبلاً موفق نبوده
+        if not info:
             try:
                 if not cookiefile:
                     cookiefile, cookie_id_used = get_rotated_cookie_file(None)
-                if proxy_rotation_enabled():
-                    performance_logger.info(f"[USER:{user_id}] Retrying with cookie + proxy rotation...")
-                    youtube_logger.debug("تلاش مجدد با کوکی و چرخش پراکسی")
-                    info = await extract_with_rotation(url, ydl_opts, cookiefile=cookiefile, max_attempts=3)
-                elif proxy_url:
+                if cookiefile:
                     opts = dict(ydl_opts)
-                    if cookiefile:
-                        opts['cookiefile'] = cookiefile
-                    opts['proxy'] = proxy_url
-                    performance_logger.info(f"[USER:{user_id}] Retrying with cookie + system proxy...")
-                    youtube_logger.debug("تلاش مجدد با کوکی و پراکسی سیستم")
+                    opts['cookiefile'] = cookiefile
+                    opts['proxy'] = 'socks5h://127.0.0.1:1084'  # Ensure proxy is set
+                    performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
+                    youtube_logger.debug("تلاش مجدد با کوکی")
                     info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
+            except Exception as ce:
+                youtube_logger.error(f"خطا در تلاش مجدد با کوکی: {ce}")
+                    
+                    
                 if info and cookie_id_used:
-                    mark_cookie_used(cookie_id_used, True)
+                     mark_cookie_used(cookie_id_used, True)
             except Exception as cpe:
                 youtube_logger.error(f"خطا در تلاش ترکیبی: {cpe}")
                 if cookie_id_used:

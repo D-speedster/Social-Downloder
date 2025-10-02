@@ -1,7 +1,7 @@
 import os
 import json
 import tempfile
-from plugins.proxy_config import get_proxy_url
+
 import time
 from typing import List, Dict, Optional, Tuple
 

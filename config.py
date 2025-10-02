@@ -48,6 +48,3 @@ APP_ID = API_ID
 youtube_next_fetch = 1  # time in minute
 
 EDIT_TIME = 5
-# HTTP Proxy Configuration - Added by configure_http_proxy_10808.py
-YOUTUBE_SINGLE_PROXY = "http://127.0.0.1:10808"
-YOUTUBE_ENABLE_SOCKS = False

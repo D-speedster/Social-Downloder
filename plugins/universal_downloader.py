@@ -17,7 +17,6 @@ from plugins import constant
 from datetime import datetime as _dt
 import logging
 import requests
-from plugins.proxy_config import get_requests_proxies
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -99,8 +98,7 @@ def _fetch_og_media(url: str):
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
         }
-        proxies = get_requests_proxies() if callable(get_requests_proxies) else None
-        resp = requests.get(url, headers=headers, timeout=12, proxies=proxies)
+        resp = requests.get(url, headers=headers, timeout=12)
         html = resp.text
         # Try og:video first
         import re as _re

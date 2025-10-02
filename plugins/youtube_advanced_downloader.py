@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import yt_dlp
 from plugins.logger_config import get_logger
-from plugins.proxy_config import get_proxy_url
 
 # Initialize logger
 advanced_logger = get_logger('youtube_advanced')
@@ -59,7 +58,6 @@ class YouTubeAdvancedDownloader:
         """دریافت اطلاعات کامل ویدیو"""
         advanced_logger.info(f"Getting video info for: {url}")
         
-        proxy_url = get_proxy_url()
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
@@ -68,7 +66,7 @@ class YouTubeAdvancedDownloader:
             'no_check_certificate': True,
             'socket_timeout': 15,
             'connect_timeout': 10,
-            'proxy': proxy_url,
+            'proxy': 'socks5h://127.0.0.1:1084',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['android']
@@ -343,14 +341,13 @@ class YouTubeAdvancedDownloader:
         """دانلود فرمت combined"""
         format_id = quality_info['format_id']
         
-        proxy_url = get_proxy_url()
         ydl_opts = {
             'format': format_id,
             'outtmpl': output_path,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': False,
-            'proxy': proxy_url,
+            'proxy': 'socks5h://127.0.0.1:1084',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['ios']
@@ -448,14 +445,13 @@ class YouTubeAdvancedDownloader:
     async def _download_single_format(self, url: str, format_id: str, output_path: str,
                                     progress_callback) -> bool:
         """دانلود یک فرمت خاص"""
-        proxy_url = get_proxy_url()
         ydl_opts = {
             'format': format_id,
             'outtmpl': output_path,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': False,
-            'proxy': proxy_url,
+            'proxy': 'socks5h://127.0.0.1:1084',
             'extractor_args': {
                 'youtube': {
                     'player_client': ['ios']
