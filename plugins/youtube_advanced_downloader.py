@@ -38,8 +38,9 @@ class YouTubeAdvancedDownloader:
             return ffmpeg_path
         
         # Common paths to check
+        from config import FFMPEG_PATH
         common_paths = [
-            "C:\\ffmpeg\\bin\\ffmpeg.exe",
+            FFMPEG_PATH,
             "C:\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
             "/usr/bin/ffmpeg",
             "/usr/local/bin/ffmpeg",

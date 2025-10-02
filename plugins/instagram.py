@@ -519,8 +519,9 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                 except Exception:
                     pass
                 if not ffmpeg_path:
+                    from config import FFMPEG_PATH
                     candidates = [
-                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                        FFMPEG_PATH,
                         "ffmpeg",
                         "/usr/local/bin/ffmpeg"
                     ]
@@ -587,8 +588,9 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                 except Exception:
                     pass
                 if not ffmpeg_path:
+                    from config import FFMPEG_PATH
                     candidates = [
-                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                        FFMPEG_PATH,
                         "ffmpeg",
                         "/usr/local/bin/ffmpeg"
                     ]
@@ -791,8 +793,9 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                             except Exception:
                                 pass
                             if not ffmpeg_path:
+                                from config import FFMPEG_PATH
                                 candidates = [
-                                    "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                                    FFMPEG_PATH,
                                     "ffmpeg",
                                     "/usr/local/bin/ffmpeg"
                                 ]
@@ -835,8 +838,9 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                                 except Exception:
                                     pass
                                 if not ffmpeg_path:
+                                    from config import FFMPEG_PATH
                                     candidates = [
-                                        "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                                        FFMPEG_PATH,
                                         "ffmpeg",
                                         "/usr/local/bin/ffmpeg"
                                     ]

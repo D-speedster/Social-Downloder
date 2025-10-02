@@ -45,6 +45,10 @@ except (ValueError, TypeError):
 # Keep APP_ID for backward compatibility
 APP_ID = API_ID
 
+# File paths configuration
+COOKIE_FILE_PATH = os.environ.get("COOKIE_FILE_PATH", "./cookie.txt")
+FFMPEG_PATH = os.environ.get("FFMPEG_PATH", "ffmpeg")
+
 youtube_next_fetch = 1  # time in minute
 
 EDIT_TIME = 5

@@ -238,8 +238,9 @@ async def show_video(client: Client, message: Message):
             pass
         if not ffmpeg_path:
             # Try common locations
+            from config import FFMPEG_PATH
             common_paths = [
-                "C:\\ffmpeg\\bin\\ffmpeg.exe",
+                FFMPEG_PATH,
                 "ffmpeg",  # If in PATH
                 "/usr/local/bin/ffmpeg"  # macOS
             ]

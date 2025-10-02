@@ -267,7 +267,8 @@ async def cookie_delete_prompt_cb(_: Client, callback_query: CallbackQuery):
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_import_sample$'))
 async def cookie_import_sample_cb(_: Client, callback_query: CallbackQuery):
     # مسیر نمونه ارائه‌شده توسط کاربر
-    sample_path = 'c:/Users/speedster/Desktop/DownloaderYT-V1/cookie.txt'
+    from config import COOKIE_FILE_PATH
+    sample_path = COOKIE_FILE_PATH
     try:
         if not os.path.exists(sample_path):
             await callback_query.answer("فایل نمونه یافت نشد", show_alert=True)
@@ -404,8 +405,9 @@ async def validate_cookie_text(_: Client, message: Message):
 @Client.on_message(filters.command('import_cookie_path') & filters.user(ADMIN))
 async def import_cookie_path_cmd(_: Client, message: Message):
     try:
+        from config import COOKIE_FILE_PATH
         parts = (message.text or '').split(maxsplit=1)
-        path = parts[1] if len(parts) > 1 else 'c:/Users/speedster/Desktop/DownloaderYT-V1/cookie.txt'
+        path = parts[1] if len(parts) > 1 else COOKIE_FILE_PATH
         if not os.path.exists(path):
             await message.reply_text("❌ فایل یافت نشد")
             return
