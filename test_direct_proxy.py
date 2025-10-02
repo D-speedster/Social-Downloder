@@ -17,7 +17,7 @@ async def test_direct_proxy():
     
     # تنظیمات دقیقاً مثل دستور دستی
     opts = {
-        'proxy': 'socks5://127.0.0.1:1082',
+        'proxy': 'socks5://127.0.0.1:10808',
         'quiet': False,
         'no_warnings': False,
     }
