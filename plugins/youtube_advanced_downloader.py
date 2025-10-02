@@ -68,11 +68,7 @@ class YouTubeAdvancedDownloader:
             'socket_timeout': 15,
             'connect_timeout': 10,
             'proxy': 'socks5h://127.0.0.1:1084',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
@@ -89,7 +85,7 @@ class YouTubeAdvancedDownloader:
             pass
         
         try:
-            # حذف وابستگی کوکی: اطلاعات ویدیو بدون کوکی استخراج می‌شود
+            # استخراج اطلاعات ویدیو با کوکی
             
             # Run extraction in thread pool
             loop = asyncio.get_event_loop()
@@ -106,7 +102,7 @@ class YouTubeAdvancedDownloader:
             advanced_logger.error(f"Error extracting video info: {e}")
             return None
         finally:
-            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
+            # کوکی‌ها به درستی مدیریت می‌شوند
             pass
     
     def _extract_info(self, url: str, ydl_opts: Dict) -> Optional[Dict]:
@@ -352,11 +348,7 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             'proxy': 'socks5h://127.0.0.1:1084',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
@@ -380,7 +372,7 @@ class YouTubeAdvancedDownloader:
             ydl_opts['progress_hooks'] = [progress_callback]
         
         try:
-            # حذف وابستگی کوکی: دانلود بدون کوکی انجام می‌شود
+            # دانلود با کوکی
             
             # Download in thread pool
             loop = asyncio.get_event_loop()
@@ -459,11 +451,7 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             'proxy': 'socks5h://127.0.0.1:1084',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
@@ -483,7 +471,7 @@ class YouTubeAdvancedDownloader:
             ydl_opts['progress_hooks'] = [progress_callback]
         
         try:
-            # حذف وابستگی کوکی: دانلود بدون کوکی انجام می‌شود
+            # دانلود با کوکی
             
             loop = asyncio.get_event_loop()
             success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)

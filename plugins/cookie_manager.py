@@ -174,11 +174,7 @@ def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
             'connect_timeout': timeout,
             'no_warnings': True,
             'no_check_certificate': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         def _do_extract():
             with YoutubeDL(opts) as ydl:

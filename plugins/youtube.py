@@ -270,11 +270,7 @@ async def show_video(client: Client, message: Message):
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
             'proxy': 'socks5h://127.0.0.1:1084',  # SOCKS5 proxy for all requests
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         
         if ffmpeg_path:

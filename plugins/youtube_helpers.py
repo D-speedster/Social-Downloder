@@ -26,11 +26,7 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'noplaylist': True,
             'extract_flat': False,
             'proxy': 'socks5h://127.0.0.1:1084',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         
         # Add progress hook if provided
@@ -141,11 +137,7 @@ async def get_direct_download_url(url, format_id):
             'noplaylist': True,
             'extract_flat': False,
             'proxy': 'socks5h://127.0.0.1:1084',
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios']
-                }
-            },
+            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         
         cookie_id_used = None

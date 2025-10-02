@@ -81,7 +81,7 @@ async def handle_youtube_url_new(client: Client, message: Message, url: str):
         step['thumbnail'] = quality_options['thumbnail']
         step['quality_options'] = quality_options
         step['url'] = url
-        # کوکی حذف شد؛ دانلود بدون کوکی انجام می‌شود
+        # دانلود با کوکی انجام می‌شود
         
         # Create quality selection interface
         info_text = quality_selector.format_video_info_text(quality_options)
