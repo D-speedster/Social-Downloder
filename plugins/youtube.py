@@ -15,7 +15,7 @@ import shutil
 import time
 import logging
 import sys
-from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
+from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
 
 # Configure logging for performance monitoring
 import os
@@ -251,6 +251,12 @@ async def show_video(client: Client, message: Message):
         
         youtube_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
         
+        # Helper: pick proxy from environment if available
+        def _get_env_proxy():
+            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+
+        env_proxy = _get_env_proxy()
+
         ydl_opts = {
             'quiet': True,
             'simulate': True,
@@ -269,15 +275,27 @@ async def show_video(client: Client, message: Message):
             'writeautomaticsub': False, # Skip auto subtitles
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
-            'proxy': 'socks5h://127.0.0.1:1084',  # SOCKS5 proxy for all requests
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
+        if env_proxy:
+            ydl_opts['proxy'] = env_proxy
         
         if ffmpeg_path:
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             
-        # در مسیر اولیه بدون کوکی و بدون پراکسی تلاش می‌کنیم
+        # همیشه ابتدا سعی کن از فایل کوکی استفاده کنی
         cookie_id_used = None
+        try:
+            cookiefile, cid = get_cookie_file_with_fallback(None)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                cookie_id_used = cid
+                if cid == -1:
+                    youtube_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای استخراج اطلاعات")
+                else:
+                    youtube_logger.info(f"استفاده از کوکی استخر برای استخراج اطلاعات: id={cid}")
+        except Exception:
+            pass
 
         # Run extraction in a background thread to avoid blocking the event loop
         extraction_start = time.time()
@@ -286,6 +304,8 @@ async def show_video(client: Client, message: Message):
         
         try:
             info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
+            if not info:
+                raise RuntimeError("اطلاعاتی از yt-dlp دریافت نشد")
             youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
             
             # اگر از کوکی استفاده شد و موفق بود، ثبت کن
@@ -304,14 +324,15 @@ async def show_video(client: Client, message: Message):
         performance_logger.info(f"[USER:{user_id}] yt-dlp extraction completed in: {extraction_time:.2f} seconds")
         youtube_logger.debug(f"استخراج اطلاعات تکمیل شد در {extraction_time:.2f} ثانیه")
         
-        with open("yt_dlp_info.json", "w", encoding="utf-8") as f:
-            json.dump(info, f, ensure_ascii=False, indent=4)
-        print("Extracted info written to yt_dlp_info.json")
-        step['link'] = info
-        step['title'] = info.get('title', 'Unknown Title')
-        step['duration'] = info.get('duration', 0)
-        step['thumbnail'] = info.get('thumbnail', None)
-        youtube_logger.debug(f"اطلاعات ویدیو ذخیره شد: {step['title']}")
+        if info:
+            with open("yt_dlp_info.json", "w", encoding="utf-8") as f:
+                json.dump(info, f, ensure_ascii=False, indent=4)
+            print("Extracted info written to yt_dlp_info.json")
+            step['link'] = info
+            step['title'] = info.get('title', 'Unknown Title')
+            step['duration'] = info.get('duration', 0)
+            step['thumbnail'] = info.get('thumbnail', None)
+            youtube_logger.debug(f"اطلاعات ویدیو ذخیره شد: {step['title']}")
 
         # Download and display cover with video info
         youtube_logger.debug("شروع نمایش اطلاعات ویدیو و کاور")
@@ -355,7 +376,9 @@ async def show_video(client: Client, message: Message):
                     if cookiefile:
                         opts = dict(ydl_opts)
                         opts['cookiefile'] = cookiefile
-                        opts['proxy'] = 'socks5h://127.0.0.1:1084'  # Ensure proxy is set
+                        # ست کردن پروکسی از محیط در صورت وجود
+                        if env_proxy:
+                            opts['proxy'] = env_proxy
                         performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
                         youtube_logger.debug("تلاش مجدد با کوکی")
                         info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
@@ -377,7 +400,9 @@ async def show_video(client: Client, message: Message):
                 if cookiefile:
                     opts = dict(ydl_opts)
                     opts['cookiefile'] = cookiefile
-                    opts['proxy'] = 'socks5h://127.0.0.1:1084'  # Ensure proxy is set
+                    # ست کردن پروکسی از محیط در صورت وجود
+                    if env_proxy:
+                        opts['proxy'] = env_proxy
                     performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
                     youtube_logger.debug("تلاش مجدد با کوکی")
                     info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))

@@ -67,9 +67,16 @@ class YouTubeAdvancedDownloader:
             'no_check_certificate': True,
             'socket_timeout': 15,
             'connect_timeout': 10,
-            'proxy': 'socks5h://127.0.0.1:1084',
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
+        # ست کردن پروکسی از متغیرهای محیطی در صورت وجود
+        try:
+            import os as _os
+            env_proxy = _os.environ.get('PROXY') or _os.environ.get('HTTP_PROXY') or _os.environ.get('HTTPS_PROXY')
+            if env_proxy:
+                ydl_opts['proxy'] = env_proxy
+        except Exception:
+            pass
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
             from .cookie_manager import get_cookie_file_with_fallback

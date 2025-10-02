@@ -19,15 +19,20 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         temp_dir = tempfile.mkdtemp()
         youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
         
-        # Configure yt-dlp options with proxy
+        # Configure yt-dlp options with proxy (from env if present)
+        def _get_env_proxy():
+            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+        env_proxy = _get_env_proxy()
+
         ydl_opts = {
             'format': format_id,
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
-            'proxy': 'socks5h://127.0.0.1:1084',
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
+        if env_proxy:
+            ydl_opts['proxy'] = env_proxy
         
         # Add progress hook if provided
         if progress_hook:
