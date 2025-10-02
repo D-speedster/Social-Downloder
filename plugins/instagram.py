@@ -19,6 +19,7 @@ import shutil
 import sys
 import requests
 import logging
+from plugins.proxy_config import get_requests_proxies
 
 # Configure Instagram logger
 instagram_logger = logging.getLogger('instagram_main')
@@ -135,47 +136,112 @@ instaregex = r"^((?:https?:)?\/\/)?((?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|r
 
 # Instagram API functions
 async def get_instagram_data_from_api(url):
-    """Get Instagram data using RapidAPI"""
-    try:
-        instagram_logger.debug(f"شروع درخواست API برای URL: {url}")
-        conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com")
-        
-        payload = json.dumps({"url": url})
-        
-        headers = {
-            'x-rapidapi-key': "d51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf",
-            'x-rapidapi-host': "social-download-all-in-one.p.rapidapi.com",
-            'Content-Type': "application/json"
-        }
-        
-        conn.request("POST", "/v1/social/autolink", payload, headers)
-        
-        res = conn.getresponse()
-        data = res.read()
-        
-        instagram_logger.debug(f"وضعیت پاسخ API: {res.status}")
-        print(f"Instagram API Response Status: {res.status}")
-        print(f"Instagram API Response Data: {data.decode('utf-8')[:500]}...")  # Log first 500 chars
-        
-        if res.status != 200:
-            instagram_logger.error(f"خطای API: وضعیت {res.status}, پاسخ: {data.decode('utf-8')}")
-            print(f"API Error: Status {res.status}, Response: {data.decode('utf-8')}")
-            return None
+    """Get Instagram data using RapidAPI with SSL error handling and retry mechanism"""
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            instagram_logger.debug(f"شروع درخواست API برای URL: {url} (تلاش {attempt + 1}/{max_retries})")
             
-        response_data = json.loads(data.decode("utf-8"))
-        
-        # Validate response structure
-        if not response_data or 'medias' not in response_data:
-            instagram_logger.error(f"ساختار پاسخ API نامعتبر: {response_data}")
-            print(f"Invalid API response structure: {response_data}")
-            return None
-        
-        instagram_logger.debug(f"دریافت موفق اطلاعات از API - تعداد رسانه: {len(response_data.get('medias', []))}")
-        return response_data
-        
+            payload = {"url": url}
+            
+            headers = {
+                'x-rapidapi-key': "d51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf",
+                'x-rapidapi-host': "social-download-all-in-one.p.rapidapi.com",
+                'Content-Type': "application/json"
+            }
+            
+            # Get proxy settings
+            proxies = get_requests_proxies()
+            
+            # Make request with SSL verification disabled and timeout
+            response = requests.post(
+                "https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink",
+                json=payload,
+                headers=headers,
+                proxies=proxies,
+                verify=False,  # Disable SSL verification to avoid SSL errors
+                timeout=30,
+                allow_redirects=True
+            )
+            
+            instagram_logger.debug(f"وضعیت پاسخ API: {response.status_code}")
+            print(f"Instagram API Response Status: {response.status_code}")
+            
+            if response.status_code != 200:
+                instagram_logger.error(f"خطای API: وضعیت {response.status_code}, پاسخ: {response.text[:500]}")
+                print(f"API Error: Status {response.status_code}, Response: {response.text[:500]}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                return None
+            
+            response_data = response.json()
+            print(f"Instagram API Response Data: {str(response_data)[:500]}...")  # Log first 500 chars
+            
+            # Validate response structure
+            if not response_data or 'medias' not in response_data:
+                instagram_logger.error(f"ساختار پاسخ API نامعتبر: {response_data}")
+                print(f"Invalid API response structure: {response_data}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return None
+            
+            instagram_logger.debug(f"دریافت موفق اطلاعات از API - تعداد رسانه: {len(response_data.get('medias', []))}")
+            return response_data
+            
+        except requests.exceptions.SSLError as e:
+            instagram_logger.error(f"خطای SSL در تلاش {attempt + 1}: {e}")
+            print(f"SSL Error on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+                continue
+        except requests.exceptions.RequestException as e:
+            instagram_logger.error(f"خطای درخواست در تلاش {attempt + 1}: {e}")
+            print(f"Request Error on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+                continue
+        except Exception as e:
+            instagram_logger.error(f"خطای عمومی API اینستاگرام در تلاش {attempt + 1}: {e}")
+            print(f"General Instagram API Error on attempt {attempt + 1}: {e}")
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+                continue
+    
+    instagram_logger.error(f"همه تلاش‌ها ناموفق بود برای URL: {url}")
+    print(f"All retry attempts failed for URL: {url}")
+    return None
+
+def _fetch_og_media_instagram(url: str):
+    """Fallback: fetch media via OpenGraph tags for Instagram pages (video/image)."""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
+        }
+        proxies = get_requests_proxies() if callable(get_requests_proxies) else None
+        resp = requests.get(url, headers=headers, timeout=12, proxies=proxies)
+        html = resp.text
+        # Try og:video first
+        vid = re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)
+        title_m = re.search(r'<meta[^>]*property=["\"]og:title["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)
+        if vid:
+            vurl = vid.group(1)
+            ext = 'mp4'
+            return { 'url': vurl, 'extension': ext, 'type': 'video', 'title': title_m.group(1) if title_m else None }
+        img = re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)
+        if img:
+            iurl = img.group(1)
+            ext = 'jpg'
+            if '.png' in iurl:
+                ext = 'png'
+            elif '.webp' in iurl:
+                ext = 'webp'
+            return { 'url': iurl, 'extension': ext, 'type': 'image', 'title': title_m.group(1) if title_m else None }
+        return None
     except Exception as e:
-        instagram_logger.error(f"خطای API اینستاگرام: {e}")
-        print(f"Instagram API Error: {e}")
+        instagram_logger.warning(f"OG fetch fallback failed for Instagram {url}: {e}")
         return None
 
 async def download_file_with_progress(url, file_path, status_msg, title, type_label):
@@ -280,19 +346,29 @@ async def download_instagram(_: Client, message: Message):
         # Get Instagram data from API
         instagram_logger.debug(f"شروع دریافت اطلاعات از API برای URL: {url}")
         api_data = await get_instagram_data_from_api(url)
-        
-        if not api_data or not api_data.get('medias'):
-            instagram_logger.error(f"دریافت اطلاعات از API ناموفق برای URL: {url}")
-            await status_msg.edit_text(
-                "❌ **خطا در دریافت اطلاعات**\n\n🔍 لینک اینستاگرام معتبر نیست یا در دسترس نمی‌باشد.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
-            )
-            return
-        
-        # Extract media information
-        title = api_data.get('title', 'Instagram Media')
-        medias = api_data.get('medias', [])
-        post_type = api_data.get('type', 'single')
+        title = None
+        medias = None
+        post_type = 'single'
+
+        if api_data and api_data.get('medias'):
+            # Extract media information from API
+            title = api_data.get('title', 'Instagram Media')
+            medias = api_data.get('medias', [])
+            post_type = api_data.get('type', 'single')
+        else:
+            # API failed or returned no medias: try OG fallback
+            instagram_logger.warning(f"API خالی یا ناموفق؛ تلاش fallback OG برای URL: {url}")
+            og = _fetch_og_media_instagram(url)
+            if og:
+                title = og.get('title') or 'Instagram Media'
+                medias = [ { 'url': og.get('url'), 'type': og.get('type') } ]
+            else:
+                instagram_logger.error(f"OG fallback ناموفق برای URL: {url}")
+                await status_msg.edit_text(
+                    "❌ **خطا در دریافت اطلاعات**\n\n🔍 لینک اینستاگرام معتبر نیست یا در دسترس نمی‌باشد.",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
+                )
+                return
         
         instagram_logger.debug(f"اطلاعات استخراج شد: عنوان={title}, تعداد رسانه={len(medias)}, نوع={post_type}")
         

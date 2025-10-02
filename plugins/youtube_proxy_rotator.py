@@ -16,6 +16,19 @@ PROXY_CONFIG = {
 # Fallback SOCKS5 ports (if HTTP proxy fails)
 SOCKS5_PORTS: List[int] = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088]
 
+# Allow disabling SOCKS rotation or overriding ports via environment
+# YOUTUBE_ENABLE_SOCKS: set to '0' or 'false' to disable SOCKS usage
+# YOUTUBE_SOCKS_PORTS: comma-separated list of ports (e.g., "1081,1082")
+# YOUTUBE_SINGLE_PROXY: set to specific proxy URL for testing (e.g., "socks5://127.0.0.1:1082")
+ENABLE_SOCKS = os.getenv('YOUTUBE_ENABLE_SOCKS', '1').lower() not in ('0', 'false')
+SINGLE_PROXY = os.getenv('YOUTUBE_SINGLE_PROXY')
+_socks_env = os.getenv('YOUTUBE_SOCKS_PORTS')
+if _socks_env:
+    try:
+        SOCKS5_PORTS = [int(p.strip()) for p in _socks_env.split(',') if p.strip()]
+    except Exception:
+        pass
+
 # Failure tracking and temporary disable store
 _failure_counts: Dict[str, int] = {'http_proxy': 0}
 _disabled_until: Dict[str, float] = {'http_proxy': 0.0}
@@ -110,30 +123,41 @@ def _get_all_available_proxies() -> List[Tuple[str, str]]:
     """Get all available proxies in sequential order. Returns list of (proxy_type, proxy_url)"""
     proxies = []
     
+    # If single proxy is specified, use only that
+    if SINGLE_PROXY:
+        proxies.append(('single_proxy', SINGLE_PROXY))
+        return proxies
+    
     # Try HTTP proxy first
     if _is_proxy_available('http_proxy'):
         proxies.append(('http_proxy', PROXY_CONFIG['http']))
     
-    # Then try SOCKS5 ports in sequential order
-    for port in SOCKS5_PORTS:
-        if _is_proxy_available(f'socks5_{port}'):
-            proxies.append((f'socks5_{port}', f'socks5h://127.0.0.1:{port}'))
+    # Then try SOCKS5 ports in sequential order (only if enabled)
+    if ENABLE_SOCKS:
+        for port in SOCKS5_PORTS:
+            if _is_proxy_available(f'socks5_{port}'):
+                proxies.append((f'socks5_{port}', f'socks5h://127.0.0.1:{port}'))
     
     return proxies
 
 
 def _choose_proxy() -> Optional[Tuple[str, str]]:
     """Choose an available proxy. Returns (proxy_type, proxy_url) or None"""
+    # If single proxy is specified, use only that
+    if SINGLE_PROXY:
+        return ('single_proxy', SINGLE_PROXY)
+    
     # Try HTTP proxy first
     if _is_proxy_available('http_proxy'):
         return ('http_proxy', PROXY_CONFIG['http'])
     
-    # Fallback to SOCKS5 ports (sequential order)
-    available_socks = [port for port in SOCKS5_PORTS if _is_proxy_available(f'socks5_{port}')]
-    if available_socks:
-        # Use first available port (sequential order) instead of random
-        port = available_socks[0]
-        return (f'socks5_{port}', f'socks5h://127.0.0.1:{port}')
+    # Fallback to SOCKS5 ports (sequential order) if enabled
+    if ENABLE_SOCKS:
+        available_socks = [port for port in SOCKS5_PORTS if _is_proxy_available(f'socks5_{port}')]
+        if available_socks:
+            # Use first available port (sequential order) instead of random
+            port = available_socks[0]
+            return (f'socks5_{port}', f'socks5h://127.0.0.1:{port}')
     
     return None
 
@@ -164,13 +188,8 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         opts['proxy'] = proxy_url
         opts['geo_bypass'] = True
 
-        # Rotate player client per attempt
-        client = _PLAYER_CLIENTS[(attempt - 1) % len(_PLAYER_CLIENTS)]
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': [client]
-            }
-        }
+        # Remove player client rotation to avoid proxy conflicts
+        # Using default client works better with proxies
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -185,7 +204,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         duration = _now() - start
         if error is None and isinstance(result, dict):
             _mark_proxy_result(proxy_type, True)
-            proxy_logger.info(f"OK url={url} proxy={proxy_type} client={client} time={duration:.2f}s")
+            proxy_logger.info(f"OK url={url} proxy={proxy_type} time={duration:.2f}s")
             return result
         else:
             _mark_proxy_result(proxy_type, False)
@@ -194,7 +213,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
             if '429' in msg or 'rate' in msg.lower():
                 proxy_logger.warning(f"Rate-limit detected on proxy={proxy_type}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR url={url} proxy={proxy_type} client={client} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR url={url} proxy={proxy_type} time={duration:.2f}s err={msg}")
             last_error = error or Exception('Invalid response from yt-dlp')
 
     # Final fallback: try without proxy
@@ -208,12 +227,7 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         # Remove any proxy setting
         opts.pop('proxy', None)
         
-        # Use ios client for no-proxy attempt
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': ['ios']
-            }
-        }
+        # Use default client for no-proxy attempt (better compatibility)
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -222,11 +236,11 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
         duration = _now() - start
         
         if isinstance(result, dict):
-            proxy_logger.info(f"OK url={url} proxy=none client=ios time={duration:.2f}s (fallback success)")
+            proxy_logger.info(f"OK url={url} proxy=none time={duration:.2f}s (fallback success)")
             return result
     except Exception as e:
         duration = _now() - start
-        proxy_logger.error(f"ERR url={url} proxy=none client=ios time={duration:.2f}s err={str(e)} (fallback failed)")
+        proxy_logger.error(f"ERR url={url} proxy=none time={duration:.2f}s err={str(e)} (fallback failed)")
         last_error = e
 
     if last_error:
@@ -255,13 +269,8 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
         opts['proxy'] = proxy_url
         opts['geo_bypass'] = True
 
-        # Rotate player client per attempt
-        client = _PLAYER_CLIENTS[(attempt - 1) % len(_PLAYER_CLIENTS)]
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': [client]
-            }
-        }
+        # Remove player client rotation to avoid proxy conflicts
+        # Using default client works better with proxies
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -276,7 +285,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
         duration = _now() - start
         if error is None:
             _mark_proxy_result(proxy_type, True)
-            proxy_logger.info(f"OK-DL url={url} proxy={proxy_type} client={client} time={duration:.2f}s")
+            proxy_logger.info(f"OK-DL url={url} proxy={proxy_type} time={duration:.2f}s")
             return
         else:
             _mark_proxy_result(proxy_type, False)
@@ -284,7 +293,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
             if '429' in msg or 'rate' in msg.lower():
                 proxy_logger.warning(f"Rate-limit detected on proxy={proxy_type}; slowing next attempt")
                 await asyncio.sleep(2.0)
-            proxy_logger.error(f"ERR-DL url={url} proxy={proxy_type} client={client} time={duration:.2f}s err={msg}")
+            proxy_logger.error(f"ERR-DL url={url} proxy={proxy_type} time={duration:.2f}s err={msg}")
             last_error = error
 
     # Final fallback: try without proxy
@@ -298,12 +307,7 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
         # Remove any proxy setting
         opts.pop('proxy', None)
         
-        # Use ios client for no-proxy attempt
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': ['ios']
-            }
-        }
+        # Use default client for no-proxy attempt (better compatibility)
         if cookiefile:
             opts['cookiefile'] = cookiefile
 
@@ -312,11 +316,11 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
             ydl.download([url])
         duration = _now() - start
         
-        proxy_logger.info(f"OK-DL url={url} proxy=none client=ios time={duration:.2f}s (fallback success)")
+        proxy_logger.info(f"OK-DL url={url} proxy=none time={duration:.2f}s (fallback success)")
         return
     except Exception as e:
         duration = _now() - start
-        proxy_logger.error(f"ERR-DL url={url} proxy=none client=ios time={duration:.2f}s err={str(e)} (fallback failed)")
+        proxy_logger.error(f"ERR-DL url={url} proxy=none time={duration:.2f}s err={str(e)} (fallback failed)")
         last_error = e
 
     if last_error:

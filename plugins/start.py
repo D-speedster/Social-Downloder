@@ -40,6 +40,18 @@ INSTA_REGEX = re.compile(r"^((?:https?:)?//)?(?:(?:www|m)\.)?((?:instagram\.com)
 SPOTIFY_REGEX = re.compile(r"^(?:https?://)?(?:open\.)?spotify\.com/", re.IGNORECASE)
 TIKTOK_REGEX = re.compile(r"^(?:https?://)?(?:www\.|vm\.|m\.)?tiktok\.com/", re.IGNORECASE)
 SOUNDCLOUD_REGEX = re.compile(r"^(?:https?://)?(?:www\.|m\.|on\.)?soundcloud\.com/", re.IGNORECASE)
+PINTEREST_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?pinterest\.com/", re.IGNORECASE)
+TWITTER_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:twitter\.com|x\.com)/", re.IGNORECASE)
+THREADS_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?threads\.net/", re.IGNORECASE)
+FACEBOOK_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:facebook\.com|fb\.watch)/", re.IGNORECASE)
+REDDIT_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?reddit\.com/", re.IGNORECASE)
+IMGUR_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?imgur\.com/", re.IGNORECASE)
+SNAPCHAT_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?snapchat\.com/", re.IGNORECASE)
+TUMBLR_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?tumblr\.com/", re.IGNORECASE)
+RUMBLE_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?rumble\.com/", re.IGNORECASE)
+IFUNNY_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?ifunny\.(?:co|com)/", re.IGNORECASE)
+DEEZER_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?deezer\.com/", re.IGNORECASE)
+RADIOJAVAN_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?radiojavan\.com/", re.IGNORECASE)
 PENDING_LINKS = {}
 
 
@@ -51,7 +63,11 @@ def _store_pending_link_if_any(message: Message):
             return
         if (YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text) or 
             SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
-            SOUNDCLOUD_REGEX.search(text)):
+            SOUNDCLOUD_REGEX.search(text) or PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or 
+            THREADS_REGEX.search(text) or FACEBOOK_REGEX.search(text) or REDDIT_REGEX.search(text) or 
+            IMGUR_REGEX.search(text) or SNAPCHAT_REGEX.search(text) or TUMBLR_REGEX.search(text) or 
+            RUMBLE_REGEX.search(text) or IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text) or 
+            RADIOJAVAN_REGEX.search(text)):
             PENDING_LINKS[uid] = {
                 'chat_id': message.chat.id,
                 'message_id': message.id,
@@ -365,11 +381,23 @@ async def help_menu_message(client: Client, message: Message):
         "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
         "🎵 **اسپاتیفای** - spotify.com\n"
         "🎬 **تیک‌تاک** - tiktok.com\n"
-        "🎧 **ساندکلود** - soundcloud.com\n\n"
+        "🎧 **ساندکلود** - soundcloud.com\n"
+        "🖼 **پینترست** - pinterest.com\n"
+        "🐦 **توییتر/X** - twitter.com, x.com\n"
+        "🧵 **تردز** - threads.net\n"
+        "🔵 **فیسبوک** - facebook.com, fb.watch\n"
+        "🔷 **ردیت** - reddit.com\n"
+        "🖼 **ایمگور** - imgur.com\n"
+        "👻 **اسنپ‌چت** - snapchat.com\n"
+        "📝 **تامبلر** - tumblr.com\n"
+        "📺 **رامبل** - rumble.com\n"
+        "😂 **آی‌فانی** - ifunny.co\n"
+        "📻 **رادیوجوان** - radiojavan.com\n"
+        "💽 **دیزر** - deezer.com\n\n"
         "💡 **نحوه استفاده:**\n"
         "- فقط لینک را ارسال کنید تا به‌طور خودکار پردازش شود\n"
         "- برای یوتیوب لیست کیفیت‌ها نمایش داده می‌شود\n"
-        "- سایر پلتفرم‌ها به‌طور مستقیم دانلود می‌شوند\n\n"
+        "- سایر پلتفرم‌ها به‌طور مستقیم دانلود می‌شوند (ویدیو/عکس/صوت)\n\n"
         "📊 از بخش حساب کاربری می‌توانید آمار خود را ببینید."
     )
     await message.reply_text(text, reply_markup=build_main_menu(message.from_user.id))
@@ -512,8 +540,13 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                         elif INSTA_REGEX.search(text):
                             from plugins.instagram import download_instagram
                             download_instagram(client, orig_msg)
-                        elif (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
-                              SOUNDCLOUD_REGEX.search(text)):
+                        elif (
+                              SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or SOUNDCLOUD_REGEX.search(text) or 
+                              PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or THREADS_REGEX.search(text) or 
+                              FACEBOOK_REGEX.search(text) or REDDIT_REGEX.search(text) or IMGUR_REGEX.search(text) or 
+                              SNAPCHAT_REGEX.search(text) or TUMBLR_REGEX.search(text) or RUMBLE_REGEX.search(text) or 
+                              IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text) or RADIOJAVAN_REGEX.search(text)
+                             ):
                             from plugins.universal_downloader import handle_universal_link
                             await handle_universal_link(client, orig_msg)
                         else:
@@ -552,10 +585,13 @@ async def handle_text_messages(client: Client, message: Message):
     try:
         text = message.text.strip()
         
-        # Only handle universal platforms (Spotify, TikTok, SoundCloud)
+        # Only handle universal platforms (expanded list)
         # YouTube and Instagram are handled by their dedicated handlers with join filters
-        if (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or 
-              SOUNDCLOUD_REGEX.search(text)):
+        if (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or SOUNDCLOUD_REGEX.search(text) or 
+            PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or THREADS_REGEX.search(text) or 
+            FACEBOOK_REGEX.search(text) or REDDIT_REGEX.search(text) or IMGUR_REGEX.search(text) or 
+            SNAPCHAT_REGEX.search(text) or TUMBLR_REGEX.search(text) or RUMBLE_REGEX.search(text) or 
+            IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text) or RADIOJAVAN_REGEX.search(text)):
             from plugins.universal_downloader import handle_universal_link
             await handle_universal_link(client, message)
         elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text):

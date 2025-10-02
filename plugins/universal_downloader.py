@@ -5,12 +5,19 @@ import os
 import re
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from plugins.start import SPOTIFY_REGEX, TIKTOK_REGEX, SOUNDCLOUD_REGEX
+from plugins.start import (
+    SPOTIFY_REGEX, TIKTOK_REGEX, SOUNDCLOUD_REGEX,
+    PINTEREST_REGEX, TWITTER_REGEX, THREADS_REGEX, FACEBOOK_REGEX,
+    REDDIT_REGEX, IMGUR_REGEX, SNAPCHAT_REGEX, TUMBLR_REGEX,
+    RUMBLE_REGEX, IFUNNY_REGEX, DEEZER_REGEX, RADIOJAVAN_REGEX,
+)
 from plugins.instagram import send_advertisement, download_file_with_progress
 from plugins.db_wrapper import DB
 from plugins import constant
 from datetime import datetime as _dt
 import logging
+import requests
+from plugins.proxy_config import get_requests_proxies
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -26,13 +33,37 @@ universal_logger.addHandler(universal_handler)
 txt = constant.TEXT
 
 def get_platform_name(url):
-    """Determine the platform based on URL"""
+    """Determine the platform based on URL (expanded)"""
     if SPOTIFY_REGEX.search(url):
         return "Spotify"
-    elif TIKTOK_REGEX.search(url):
+    if TIKTOK_REGEX.search(url):
         return "TikTok"
-    elif SOUNDCLOUD_REGEX.search(url):
+    if SOUNDCLOUD_REGEX.search(url):
         return "SoundCloud"
+    if PINTEREST_REGEX.search(url):
+        return "Pinterest"
+    if TWITTER_REGEX.search(url):
+        return "Twitter"
+    if THREADS_REGEX.search(url):
+        return "Threads"
+    if FACEBOOK_REGEX.search(url):
+        return "Facebook"
+    if REDDIT_REGEX.search(url):
+        return "Reddit"
+    if IMGUR_REGEX.search(url):
+        return "Imgur"
+    if SNAPCHAT_REGEX.search(url):
+        return "Snapchat"
+    if TUMBLR_REGEX.search(url):
+        return "Tumblr"
+    if RUMBLE_REGEX.search(url):
+        return "Rumble"
+    if IFUNNY_REGEX.search(url):
+        return "iFunny"
+    if DEEZER_REGEX.search(url):
+        return "Deezer"
+    if RADIOJAVAN_REGEX.search(url):
+        return "Radio Javan"
     return "Unknown"
 
 def get_universal_data_from_api(url):
@@ -60,6 +91,37 @@ def get_universal_data_from_api(url):
         return response_data
     except Exception as e:
         universal_logger.error(f"API Error for URL {url}: {e}")
+        return None
+
+def _fetch_og_media(url: str):
+    """Fallback: fetch media via OpenGraph tags for image/video-centric sites (Pinterest/Imgur/Tumblr)."""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
+        }
+        proxies = get_requests_proxies() if callable(get_requests_proxies) else None
+        resp = requests.get(url, headers=headers, timeout=12, proxies=proxies)
+        html = resp.text
+        # Try og:video first
+        import re as _re
+        vid = _re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+        if vid:
+            vurl = vid.group(1)
+            ext = 'mp4' if '.mp4' in vurl else 'mp4'
+            return { 'url': vurl, 'extension': ext, 'type': 'video', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
+        img = _re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+        if img:
+            iurl = img.group(1)
+            # Prefer original image if Pinterest provides srcset
+            ext = 'jpg'
+            if '.png' in iurl:
+                ext = 'png'
+            elif '.webp' in iurl:
+                ext = 'webp'
+            return { 'url': iurl, 'extension': ext, 'type': 'image', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
+        return None
+    except Exception as e:
+        universal_logger.warning(f"OG fetch fallback failed for {url}: {e}")
         return None
 
 async def handle_universal_link(client: Client, message: Message):
@@ -98,27 +160,37 @@ async def handle_universal_link(client: Client, message: Message):
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
         api_data = get_universal_data_from_api(url)
         
-        if not api_data or "medias" not in api_data:
-            await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید.")
-            return
-        
-        # Check for API errors
-        if api_data.get("error", False) or api_data.get("data", {}).get("error", False):
+        # Fallback for Pinterest/Imgur/Tumblr when API returns nothing
+        fallback_media = None
+        if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr"):
+            await status_msg.edit_text(f"📡 API چیزی برنگرداند؛ تلاش برای استخراج مستقیم {platform}...")
+            og = _fetch_og_media(url)
+            if og:
+                fallback_media = og
+            else:
+                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید.")
+                return
+
+        # Check for API errors (guard when api_data is None)
+        if api_data and (api_data.get("error", False) or api_data.get("data", {}).get("error", False)):
             error_message = api_data.get("message", "خطای نامشخص")
             await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
             return
         
         # Extract media information
-        title = api_data.get("title", "Unknown Title")
-        author = api_data.get("author", "Unknown Author")
-        duration = api_data.get("duration", "Unknown")
-        thumbnail = api_data.get("thumbnail", "")
+        title = api_data.get("title", "Unknown Title") if api_data else "Unknown Title"
+        author = api_data.get("author", "Unknown Author") if api_data else "Unknown Author"
+        duration_api = api_data.get("duration", 0) if api_data else 0
+        thumbnail = api_data.get("thumbnail", "") if api_data else ""
         
         # Find the best quality media
-        medias = api_data.get("medias", [])
+        medias = api_data.get("medias", []) if api_data else []
         if not medias:
-            await status_msg.edit_text(f"❌ هیچ فایل قابل دانلودی از {platform} یافت نشد.")
-            return
+            if fallback_media:
+                medias = [fallback_media]
+            else:
+                await status_msg.edit_text(f"❌ هیچ فایل قابل دانلودی از {platform} یافت نشد.")
+                return
         
         # Prefer video over audio, and highest quality
         selected_media = None
@@ -135,13 +207,20 @@ async def handle_universal_link(client: Client, message: Message):
         file_extension = selected_media.get("extension", "mp4")
         media_type = selected_media.get("type", "video")
         quality = selected_media.get("quality", "Unknown")
+        # Robust duration int
+        duration_value = selected_media.get("duration", duration_api)
+        try:
+            duration_sec = int(duration_value) if duration_value not in (None, "", "Unknown") else 0
+        except Exception:
+            duration_sec = 0
         
         if not download_url:
             await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
             return
         
         # Create filename
-        safe_title = re.sub(r'[<>:"/\\|?*]', '_', title[:50])
+        safe_title_src = title or selected_media.get('title') or platform
+        safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:50])
         filename = f"{safe_title}.{file_extension}"
         
         # Download file
@@ -161,7 +240,7 @@ async def handle_universal_link(client: Client, message: Message):
         # Prepare caption
         caption = f"🎵 **{title}**\n"
         caption += f"👤 **نویسنده:** {author}\n"
-        caption += f"⏱️ **مدت زمان:** {duration}\n"
+        caption += f"⏱️ **مدت زمان:** {duration_sec} ثانیه\n"
         caption += f"🔗 **پلتفرم:** {platform}\n"
         caption += f"📊 **کیفیت:** {quality}\n"
         caption += f"📁 **نوع:** {media_type.title()}"
@@ -187,15 +266,22 @@ async def handle_universal_link(client: Client, message: Message):
         await status_msg.edit_text(f"📤 در حال ارسال فایل {platform}...")
         
         try:
-            # Force video upload for TikTok and other video platforms
-            if (media_type == "video" or 
-                file_extension in ["mp4", "avi", "mov", "mkv", "webm"] or 
-                platform.lower() == "tiktok"):
+            # Decide upload method based on media type and extension
+            image_exts = ["jpg", "jpeg", "png", "webp"]
+            video_exts = ["mp4", "avi", "mov", "mkv", "webm"]
+
+            if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
+                await client.send_photo(
+                    chat_id=message.chat.id,
+                    photo=file_path,
+                    caption=caption,
+                )
+            elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
                 await client.send_video(
                     chat_id=message.chat.id,
                     video=file_path,
                     caption=caption,
-                    duration=int(duration) if duration.isdigit() else 0,
+                    duration=duration_sec,
                     supports_streaming=True
                 )
             else:
@@ -203,7 +289,7 @@ async def handle_universal_link(client: Client, message: Message):
                     chat_id=message.chat.id,
                     audio=file_path,
                     caption=caption,
-                    duration=int(duration) if duration.isdigit() else 0,
+                    duration=duration_sec,
                     title=title,
                     performer=author
                 )

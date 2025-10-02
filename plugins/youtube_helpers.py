@@ -40,6 +40,17 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         
         cookie_id_used = None
 
+        # Optional: always use cookies from rotation if enabled by environment
+        if os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
+            try:
+                cookiefile, cid = get_rotated_cookie_file(None)
+                if cookiefile:
+                    ydl_opts['cookiefile'] = cookiefile
+                    cookie_id_used = cid
+                    youtube_helpers_logger.debug(f"کوکی از ابتدا فعال شد: id={cid}, path={cookiefile}")
+            except Exception:
+                pass
+
         # Initial attempt: use proxy rotation if enabled
         try:
             if proxy_rotation_enabled():
@@ -142,6 +153,17 @@ async def get_direct_download_url(url, format_id):
         }
         
         cookie_id_used = None
+        
+        # Optional: always use cookies from rotation if enabled by environment
+        if os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
+            try:
+                cookiefile, cid = get_rotated_cookie_file(None)
+                if cookiefile:
+                    ydl_opts['cookiefile'] = cookiefile
+                    cookie_id_used = cid
+                    youtube_helpers_logger.debug(f"کوکی از ابتدا فعال شد: id={cid}, path={cookiefile}")
+            except Exception:
+                pass
         
         # Extract info in thread to avoid blocking
         def extract_sync():
