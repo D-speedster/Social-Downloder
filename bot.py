@@ -9,6 +9,30 @@ import signal
 import asyncio
 from dotenv import load_dotenv
 
+# وارد کردن سیستم تشخیص خطا
+try:
+    from error_detector import setup_crash_handler, quick_environment_check, get_error_detector
+    # تنظیم هندلر کرش سراسری
+    setup_crash_handler()
+    print("🔍 سیستم تشخیص خطا فعال شد")
+except ImportError as e:
+    print(f"⚠️ خطا در بارگذاری سیستم تشخیص خطا: {e}")
+    print("ربات بدون سیستم تشخیص خطا ادامه می‌یابد...")
+except Exception as e:
+    print(f"⚠️ خطای غیرمنتظره در سیستم تشخیص خطا: {e}")
+
+# بررسی سریع محیط قبل از شروع
+print("🔍 در حال بررسی محیط سیستم...")
+try:
+    if not quick_environment_check():
+        print("❌ مشکلات حیاتی در محیط شناسایی شد. لطفاً مشکلات را حل کنید.")
+        input("برای ادامه Enter را فشار دهید یا Ctrl+C برای خروج...")
+    else:
+        print("✅ بررسی محیط با موفقیت انجام شد")
+except Exception as e:
+    print(f"⚠️ خطا در بررسی محیط: {e}")
+    print("ربات بدون بررسی محیط ادامه می‌یابد...")
+
 # اجرای wizard تنظیمات اولیه در صورت عدم وجود .env
 if not os.path.exists('.env'):
     print("فایل .env یافت نشد. راه‌اندازی wizard تنظیمات اولیه...")
@@ -100,7 +124,9 @@ MAX_WORKERS = min(16, os.cpu_count() * 2) if os.cpu_count() else 8
 logger.info(f"Using {MAX_WORKERS} workers")
 
 async def main():
+    client = None
     try:
+        print("🚀 در حال راه‌اندازی کلاینت ربات...")
         client = Client(
             name="ytdownloader3_dev2",
             bot_token=BOT_TOKEN,
@@ -112,39 +138,80 @@ async def main():
         )
         
         logger.info("Starting bot client...")
+        print("🔗 در حال اتصال به تلگرام...")
         await client.start()
         logger.info("Bot started successfully")
+        print("✅ ربات با موفقیت راه‌اندازی شد!")
+        print("🔄 ربات در حال اجرا است... (Ctrl+C برای توقف)")
         
         # Keep the bot running reliably
         await idle()
         
     except KeyboardInterrupt:
+        print("\n⏹️ ربات توسط کاربر متوقف شد")
         logger.info("Bot stopped by user")
     except Exception as e:
+        print(f"\n❌ خطا در راه‌اندازی ربات: {e}")
         logger.error(f"Bot startup failed: {e}")
+        
+        # تولید گزارش تفصیلی خطا
+        try:
+            error_detector = get_error_detector()
+            print("\n📋 در حال تولید گزارش خطا...")
+            error_detector.log_crash(type(e), e, e.__traceback__)
+            print("📁 گزارش خطا در فایل logs/crash_report.log ذخیره شد")
+        except Exception as report_error:
+            print(f"⚠️ خطا در تولید گزارش: {report_error}")
+        
         raise
     finally:
         # Ensure client is stopped
         try:
-            if 'client' in locals():
+            if client is not None:
+                print("🔌 در حال قطع اتصال کلاینت...")
                 await client.stop()
                 logger.info("Bot client stopped")
+                print("✅ کلاینت با موفقیت متوقف شد")
         except Exception as e:
+            print(f"⚠️ خطا در توقف کلاینت: {e}")
             logger.error(f"Error stopping client: {e}")
         
         # Ensure database is closed
         try:
-            if 'db' in locals():
+            if 'db' in globals():
+                print("🗄️ در حال بستن اتصال پایگاه داده...")
                 db.close()
                 logger.info("Database connection closed")
+                print("✅ پایگاه داده با موفقیت بسته شد")
         except Exception as e:
+            print(f"⚠️ خطا در بستن پایگاه داده: {e}")
             logger.error(f"Error closing database in finally block: {e}")
 
 if __name__ == "__main__":
     try:
+        print("🎯 شروع اجرای ربات...")
         asyncio.run(main())
+        print("👋 ربات با موفقیت خاتمه یافت")
     except KeyboardInterrupt:
+        print("\n👋 ربات توسط کاربر متوقف شد")
         logger.info("Bot stopped by user")
     except Exception as e:
+        print(f"\n💥 کرش ربات: {e}")
         logger.error(f"Bot failed: {e}")
+        
+        # تولید گزارش نهایی خطا
+        try:
+            error_detector = get_error_detector()
+            print("\n📋 در حال تولید گزارش نهایی خطا...")
+            error_detector.log_crash(type(e), e, e.__traceback__)
+            print("📁 گزارش کامل خطا در فایل logs/crash_report.log ذخیره شد")
+            print("📄 گزارش تفصیلی در فایل logs/detailed_error_report.json موجود است")
+        except Exception as report_error:
+            print(f"⚠️ خطا در تولید گزارش نهایی: {report_error}")
+        
+        print("\n🔍 برای بررسی دقیق‌تر خطا، فایل‌های لاگ را مطالعه کنید:")
+        print("   - logs/crash_report.log")
+        print("   - logs/detailed_error_report.json")
+        print("   - logs/bot.log")
+        
         sys.exit(1)
