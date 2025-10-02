@@ -141,33 +141,33 @@ async def admin_menu_server(_: Client, message: Message):
 
 
 # --- بررسی پروکسی‌ها ---
-from .youtube_proxy_rotator import is_enabled as proxy_rotation_enabled, probe_ports_status
+import socket
 
+def check_proxy_port(host='127.0.0.1', port=1084):
+    """Check if proxy port is open"""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        return result == 0
+    except:
+        return False
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔌 بررسی پروکسی$'))
 async def admin_menu_proxy_check(_: Client, message: Message):
-    # If proxy rotation is disabled, inform admin
-    if not proxy_rotation_enabled():
-        await message.reply_text("🔴 پروکسی خاموش است. برای فعال‌سازی، متغیر محیطی YOUTUBE_PROXY_ROTATION را روی 1 بگذارید.", reply_markup=admin_reply_kb())
-        return
-
-    # Probe ports and build a status report
-    results = probe_ports_status()
-    lines = ["🔌 وضعیت پروکسی‌ها (SOCKS5H روی 127.0.0.1):\n"]
-    for r in results:
-        port = r['port']
-        local = '🟢 باز' if r['local_ok'] else '🔴 بسته'
-        ext = r['external_ok']
-        if ext is True:
-            ext_s = '🌐 OK'
-        elif ext is False:
-            ext_s = '🌐 خطا'
-        else:
-            ext_s = '🌐 (رد شد)'
-        lines.append(f"پورت {port}: {local} | {ext_s}")
-
-    lines.append("\n💡 اگر پورت‌ها باز هستند ولی خارجی خطا می‌دهد، سرویس پروکسی را بررسی کنید.")
-    await message.reply_text("\n".join(lines), reply_markup=admin_reply_kb())
+    # Check the fixed proxy port 1084
+    proxy_host = '127.0.0.1'
+    proxy_port = 1084
+    
+    is_open = check_proxy_port(proxy_host, proxy_port)
+    
+    if is_open:
+        status_text = f"🟢 پروکسی فعال است\n\n📍 آدرس: socks5h://{proxy_host}:{proxy_port}\n🔌 وضعیت پورت {proxy_port}: باز\n\n✅ ربات از این پروکسی برای دانلود استفاده می‌کند."
+    else:
+        status_text = f"🔴 پروکسی غیرفعال است\n\n📍 آدرس: socks5h://{proxy_host}:{proxy_port}\n🔌 وضعیت پورت {proxy_port}: بسته\n\n⚠️ لطفاً سرویس پروکسی را روشن کنید."
+    
+    await message.reply_text(status_text, reply_markup=admin_reply_kb())
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 ارسال همگانی$'))
