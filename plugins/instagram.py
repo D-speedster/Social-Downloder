@@ -155,7 +155,6 @@ async def get_instagram_data_from_api(url):
                 "https://social-download-all-in-one.p.rapidapi.com/v1/social/autolink",
                 json=payload,
                 headers=headers,
-                proxies=proxies,
                 verify=False,  # Disable SSL verification to avoid SSL errors
                 timeout=30,
                 allow_redirects=True
