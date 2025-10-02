@@ -74,14 +74,17 @@ class YouTubeAdvancedDownloader:
                 }
             },
         }
-        # Try rotated cookie for info extraction
+        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
-            from .cookie_manager import get_rotated_cookie_file
-            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            from .cookie_manager import get_cookie_file_with_fallback
+            cookiefile, cid = get_cookie_file_with_fallback(self._prev_cookie_id)
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 self._prev_cookie_id = cid
-                advanced_logger.info(f"Using rotated cookie for info: id={cid}")
+                if cid == -1:
+                    advanced_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای استخراج اطلاعات")
+                else:
+                    advanced_logger.info(f"استفاده از کوکی استخر برای استخراج اطلاعات: id={cid}")
         except Exception as _:
             pass
         
@@ -355,14 +358,17 @@ class YouTubeAdvancedDownloader:
                 }
             },
         }
-        # Attach rotated cookie
+        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
-            from .cookie_manager import get_rotated_cookie_file
-            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            from .cookie_manager import get_cookie_file_with_fallback
+            cookiefile, cid = get_cookie_file_with_fallback(self._prev_cookie_id)
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 self._prev_cookie_id = cid
-                advanced_logger.info(f"Using rotated cookie for combined download: id={cid}, path={cookiefile}")
+                if cid == -1:
+                    advanced_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای دانلود combined")
+                else:
+                    advanced_logger.info(f"استفاده از کوکی استخر برای دانلود combined: id={cid}, path={cookiefile}")
         except Exception:
             pass
         
@@ -385,7 +391,7 @@ class YouTubeAdvancedDownloader:
                 # Mark cookie success
                 try:
                     from .cookie_manager import mark_cookie_used
-                    if self._prev_cookie_id:
+                    if self._prev_cookie_id and self._prev_cookie_id != -1:
                         mark_cookie_used(self._prev_cookie_id, True)
                 except Exception:
                     pass
@@ -395,7 +401,7 @@ class YouTubeAdvancedDownloader:
                 # Mark cookie failure
                 try:
                     from .cookie_manager import mark_cookie_used
-                    if self._prev_cookie_id:
+                    if self._prev_cookie_id and self._prev_cookie_id != -1:
                         mark_cookie_used(self._prev_cookie_id, False)
                 except Exception:
                     pass
@@ -459,14 +465,17 @@ class YouTubeAdvancedDownloader:
                 }
             },
         }
-        # Attach rotated cookie
+        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
-            from .cookie_manager import get_rotated_cookie_file
-            cookiefile, cid = get_rotated_cookie_file(self._prev_cookie_id)
+            from .cookie_manager import get_cookie_file_with_fallback
+            cookiefile, cid = get_cookie_file_with_fallback(self._prev_cookie_id)
             if cookiefile:
                 ydl_opts['cookiefile'] = cookiefile
                 self._prev_cookie_id = cid
-                advanced_logger.info(f"Using rotated cookie for single format: id={cid}, path={cookiefile}")
+                if cid == -1:
+                    advanced_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای دانلود single format")
+                else:
+                    advanced_logger.info(f"استفاده از کوکی استخر برای دانلود single format: id={cid}, path={cookiefile}")
         except Exception:
             pass
         
@@ -482,7 +491,7 @@ class YouTubeAdvancedDownloader:
             if success and os.path.exists(output_path):
                 try:
                     from .cookie_manager import mark_cookie_used
-                    if self._prev_cookie_id:
+                    if self._prev_cookie_id and self._prev_cookie_id != -1:
                         mark_cookie_used(self._prev_cookie_id, True)
                 except Exception:
                     pass
@@ -490,7 +499,7 @@ class YouTubeAdvancedDownloader:
             else:
                 try:
                     from .cookie_manager import mark_cookie_used
-                    if self._prev_cookie_id:
+                    if self._prev_cookie_id and self._prev_cookie_id != -1:
                         mark_cookie_used(self._prev_cookie_id, False)
                 except Exception:
                     pass

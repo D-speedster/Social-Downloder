@@ -267,3 +267,47 @@ def validate_and_update_cookie_status(cookie_id: int) -> bool:
         return final_ok
     except Exception:
         return False
+
+
+def get_main_cookie_file() -> Optional[str]:
+    """
+    خواندن کوکی از فایل اصلی cookie_youtube.txt و ایجاد فایل موقت
+    """
+    try:
+        # مسیر فایل کوکی اصلی
+        main_cookie_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookie_youtube.txt')
+        
+        if not os.path.exists(main_cookie_path):
+            return None
+            
+        # خواندن محتوای فایل
+        with open(main_cookie_path, 'r', encoding='utf-8') as f:
+            cookie_content = f.read().strip()
+            
+        if not cookie_content:
+            return None
+            
+        # بررسی اعتبار کوکی
+        if not _sanity_check_youtube_cookie(cookie_content):
+            return None
+            
+        # ایجاد فایل موقت
+        temp_file_path = _write_temp_cookie_file(cookie_content)
+        return temp_file_path
+        
+    except Exception as e:
+        print(f"خطا در خواندن فایل کوکی اصلی: {e}")
+        return None
+
+
+def get_cookie_file_with_fallback(prev_cookie_id: Optional[int] = None) -> Tuple[Optional[str], Optional[int]]:
+    """
+    ابتدا سعی می‌کند کوکی از فایل اصلی بخواند، در صورت عدم موفقیت از استخر کوکی استفاده می‌کند
+    """
+    # ابتدا تلاش برای استفاده از فایل اصلی
+    main_cookie_path = get_main_cookie_file()
+    if main_cookie_path:
+        return main_cookie_path, -1  # -1 نشان‌دهنده کوکی اصلی است
+    
+    # در صورت عدم موفقیت، از استخر کوکی استفاده کن
+    return get_rotated_cookie_file(prev_cookie_id)

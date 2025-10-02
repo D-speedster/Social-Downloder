@@ -3,7 +3,7 @@ import asyncio
 import tempfile
 import yt_dlp
 from plugins.logger_config import get_logger
-from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used
+from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
@@ -39,16 +39,18 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         
         cookie_id_used = None
 
-        # Optional: always use cookies from rotation if enabled by environment
-        if os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
-            try:
-                cookiefile, cid = get_rotated_cookie_file(None)
-                if cookiefile:
-                    ydl_opts['cookiefile'] = cookiefile
-                    cookie_id_used = cid
-                    youtube_helpers_logger.debug(f"کوکی از ابتدا فعال شد: id={cid}, path={cookiefile}")
-            except Exception:
-                pass
+        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
+        try:
+            cookiefile, cid = get_cookie_file_with_fallback(None)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                cookie_id_used = cid
+                if cid == -1:
+                    youtube_helpers_logger.info("استفاده از کوکی اصلی cookie_youtube.txt")
+                else:
+                    youtube_helpers_logger.debug(f"استفاده از کوکی استخر: id={cid}, path={cookiefile}")
+        except Exception:
+            pass
 
         # Initial attempt: direct download
         try:
@@ -62,16 +64,25 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
             if needs_cookie:
                 try:
-                    cookiefile, cid = get_rotated_cookie_file(None)
+                    # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
+                    if not cookie_id_used:
+                        cookiefile, cid = get_cookie_file_with_fallback(None)
+                    else:
+                        # اگر قبلاً کوکی استفاده شده، از استخر کوکی دیگری بگیر
+                        cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
+                    
                     if cookiefile:
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
-                        youtube_helpers_logger.debug(f"تلاش مجدد دانلود با کوکی: id={cid}, path={cookiefile}")
+                        if cid == -1:
+                            youtube_helpers_logger.info("تلاش مجدد با کوکی اصلی cookie_youtube.txt")
+                        else:
+                            youtube_helpers_logger.debug(f"تلاش مجدد دانلود با کوکی: id={cid}, path={cookiefile}")
                         def download_sync_cookie():
                             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                                 ydl.download([url])
                         await asyncio.to_thread(download_sync_cookie)
-                        if cookie_id_used:
+                        if cookie_id_used and cookie_id_used != -1:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
                             except Exception:
@@ -139,16 +150,18 @@ async def get_direct_download_url(url, format_id):
         
         cookie_id_used = None
         
-        # Optional: always use cookies from rotation if enabled by environment
-        if os.getenv('YOUTUBE_ALWAYS_USE_COOKIES', '0') == '1':
-            try:
-                cookiefile, cid = get_rotated_cookie_file(None)
-                if cookiefile:
-                    ydl_opts['cookiefile'] = cookiefile
-                    cookie_id_used = cid
-                    youtube_helpers_logger.debug(f"کوکی از ابتدا فعال شد: id={cid}, path={cookiefile}")
-            except Exception:
-                pass
+        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
+        try:
+            cookiefile, cid = get_cookie_file_with_fallback(None)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                cookie_id_used = cid
+                if cid == -1:
+                    youtube_helpers_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای استخراج لینک")
+                else:
+                    youtube_helpers_logger.debug(f"استفاده از کوکی استخر برای استخراج لینک: id={cid}, path={cookiefile}")
+        except Exception:
+            pass
         
         # Extract info in thread to avoid blocking
         def extract_sync():
@@ -164,13 +177,22 @@ async def get_direct_download_url(url, format_id):
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
             if needs_cookie:
                 try:
-                    cookiefile, cid = get_rotated_cookie_file(None)
+                    # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
+                    if not cookie_id_used:
+                        cookiefile, cid = get_cookie_file_with_fallback(None)
+                    else:
+                        # اگر قبلاً کوکی استفاده شده، از استخر کوکی دیگری بگیر
+                        cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
+                    
                     if cookiefile:
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
-                        youtube_helpers_logger.debug(f"تلاش مجدد استخراج لینک با کوکی: id={cid}, path={cookiefile}")
+                        if cid == -1:
+                            youtube_helpers_logger.info("تلاش مجدد استخراج لینک با کوکی اصلی cookie_youtube.txt")
+                        else:
+                            youtube_helpers_logger.debug(f"تلاش مجدد استخراج لینک با کوکی: id={cid}, path={cookiefile}")
                         info = await asyncio.to_thread(extract_sync)
-                        if cookie_id_used:
+                        if cookie_id_used and cookie_id_used != -1:
                             try:
                                 mark_cookie_used(cookie_id_used, True)
                             except Exception:
