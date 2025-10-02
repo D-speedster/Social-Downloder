@@ -225,7 +225,30 @@ async def get_direct_download_url(url, format_id):
                             ydl_opts['proxy'] = proxy_url
                             youtube_helpers_logger.debug(f"تلاش استخراج لینک با پراکسی سیستم: {proxy_url}")
                             info = await asyncio.to_thread(extract_sync)
-        return info
+        # تبدیل info به URL مستقیم
+        direct_url = None
+        try:
+            if isinstance(info, dict):
+                # اولویت: url مستقیم در سطح info
+                direct_url = info.get('url')
+                # در صورت وجود requested_formats یا formats، تلاش برای یافتن فرمت مطابق
+                if not direct_url:
+                    rf = info.get('requested_formats') or []
+                    fmts = info.get('formats') or []
+                    # جستجو بر اساس format_id
+                    for entry in (rf if rf else fmts):
+                        if str(entry.get('format_id')) == str(format_id) and entry.get('url'):
+                            direct_url = entry['url']
+                            break
+                    # اگر هنوز چیزی پیدا نشد، اولین URL موجود را برمی‌داریم
+                    if not direct_url:
+                        for entry in (rf if rf else fmts):
+                            if entry.get('url'):
+                                direct_url = entry['url']
+                                break
+        except Exception:
+            direct_url = None
+        return direct_url
     except Exception as e:
         youtube_helpers_logger.error(f"خطا در دریافت لینک مستقیم: {e}")
         try:

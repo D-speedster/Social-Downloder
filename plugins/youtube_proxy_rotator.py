@@ -22,8 +22,10 @@ SOCKS5_PORTS: List[int] = [1081, 1082, 1083, 1084, 1085, 1086, 1087, 1088]
 # YOUTUBE_ENABLE_SOCKS: set to '0' or 'false' to disable SOCKS usage
 # YOUTUBE_SOCKS_PORTS: comma-separated list of ports (e.g., "1081,1082")
 # YOUTUBE_SINGLE_PROXY: set to specific proxy URL for testing (e.g., "socks5://127.0.0.1:1082")
+# YOUTUBE_PREFLIGHT_PORT_CHECK: set to '0' to skip local TCP check
 ENABLE_SOCKS = os.getenv('YOUTUBE_ENABLE_SOCKS', '1').lower() not in ('0', 'false')
 SINGLE_PROXY = os.getenv('YOUTUBE_SINGLE_PROXY')
+PREFLIGHT_PORT_CHECK = os.getenv('YOUTUBE_PREFLIGHT_PORT_CHECK', '1').lower() not in ('0', 'false')
 _socks_env = os.getenv('YOUTUBE_SOCKS_PORTS')
 if _socks_env:
     try:
@@ -115,6 +117,18 @@ def _iterate_socks_proxies() -> List[Tuple[str, str]]:
         # Skip temporarily disabled ports
         key = f'socks5_{port}'
         if _is_port_available(key):
+            # Optional local TCP preflight to skip closed ports early
+            if PREFLIGHT_PORT_CHECK:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                        s.settimeout(0.6)
+                        if s.connect_ex(('127.0.0.1', port)) != 0:
+                            # Port closed/refused; skip quietly
+                            proxy_logger.debug(f"Preflight skip: SOCKS5 port {port} not listening")
+                            continue
+                except Exception:
+                    # If preflight check itself failed, be conservative and try the port
+                    pass
             proxies.append((key, f'socks5h://127.0.0.1:{port}'))
     return proxies
 
@@ -269,7 +283,9 @@ async def extract_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile:
                             last_error = e2
 
     # Final failure: no direct connection allowed
-    proxy_logger.warning(f"SUMMARY-EX failed for {url}; attempts: {len(attempt_logs)}; last_err={str(last_error)[:120]}")
+    proxy_logger.warning(
+        f"SUMMARY-EX failed for {url}; proxies_tried={len(proxies)}; attempts={len(attempt_logs)}; last_err={str(last_error)[:120]}"
+    )
     raise last_error or RuntimeError('All SOCKS5 proxy attempts failed for extraction')
 
 
@@ -356,7 +372,9 @@ async def download_with_rotation(url: str, base_opts: Dict[str, Any], cookiefile
                             _mark_cookie_usage(cookie_id_used, False)
                             last_error = e2
 
-    proxy_logger.warning(f"SUMMARY-DL failed for {url}; attempts: {len(attempt_logs)}; last_err={str(last_error)[:120]}")
+    proxy_logger.warning(
+        f"SUMMARY-DL failed for {url}; proxies_tried={len(proxies)}; attempts={len(attempt_logs)}; last_err={str(last_error)[:120]}"
+    )
     raise last_error or RuntimeError('All SOCKS5 proxy attempts failed for download')
 
 
