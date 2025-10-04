@@ -349,6 +349,20 @@ async def download_instagram(_: Client, message: Message):
             title = api_data.get('title', 'Instagram Media')
             medias = api_data.get('medias', [])
             post_type = api_data.get('type', 'single')
+            # If API mislabels single posts or includes preview items, sanitize medias
+            try:
+                if post_type != 'multiple':
+                    # Prefer video for reels; otherwise keep first image
+                    videos = [m for m in medias if (m.get('type') == 'video') and m.get('url')]
+                    if videos:
+                        medias = [videos[0]]
+                    else:
+                        images = [m for m in medias if (m.get('type') in ('image','photo')) and m.get('url')]
+                        medias = [images[0]] if images else ([medias[0]] if medias else [])
+                    post_type = 'single'
+            except Exception:
+                # If sanitization fails, fall back to original medias
+                pass
         else:
             # API failed or returned no medias: try OG fallback
             instagram_logger.warning(f"API خالی یا ناموفق؛ تلاش fallback OG برای URL: {url}")
@@ -509,74 +523,80 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         final_path = downloaded_file_path
         try:
             if media_type == 'video':
-                instagram_logger.debug("شروع پردازش ویدیو و تولید thumbnail")
-                # Detect ffmpeg path (similar to youtube module)
-                ffmpeg_path = os.environ.get('FFMPEG_PATH')
-                try:
-                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
-                        ffmpeg_path = '/usr/bin/ffmpeg'
-                except Exception:
-                    pass
-                if not ffmpeg_path:
-                    from config import FFMPEG_PATH
-                    candidates = [
-                        FFMPEG_PATH,
-                        "ffmpeg",
-                        "/usr/local/bin/ffmpeg"
-                    ]
-                    for p in candidates:
-                        if shutil.which(p) or os.path.exists(p):
-                            ffmpeg_path = p
-                            break
-                
-                instagram_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
-                
-                # Prefer 1280x720 as primary
-                target_w, target_h = 1280, 720
-                # Re-encode
-                base_noext, _ = os.path.splitext(downloaded_file_path)
-                enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
-                try:
-                    instagram_logger.debug(f"شروع re-encode ویدیو به {target_w}x{target_h}")
-                    vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
-                    cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
-                           '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
-                           '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
-                           enforced_path]
-                    await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                    if os.path.exists(enforced_path):
-                        try:
-                            os.remove(downloaded_file_path)
-                        except Exception:
-                            pass
-                        final_path = enforced_path
-                        width_arg, height_arg = target_w, target_h
-                        instagram_logger.debug(f"re-encode موفق - فایل جدید: {enforced_path}")
-                except Exception as ee:
-                    instagram_logger.error(f"خطای FFmpeg re-encode: {ee}")
-                    print(f"FFmpeg re-encode (IG) failed: {ee}")
-                    final_path = downloaded_file_path
-                
-                # Thumbnail (<=320px, <=200KB)
-                thumb_path = f"{base_noext}_thumb.jpg"
-                try:
-                    instagram_logger.debug("شروع تولید thumbnail")
-                    def make_thumb(q):
-                        vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
-                        cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', str(q), thumb_path]
-                        subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    for q in [5,6,7,8,9,10]:
-                        try:
-                            await asyncio.to_thread(make_thumb, q)
-                            if os.path.exists(thumb_path) and os.path.getsize(thumb_path) <= 200*1024:
-                                instagram_logger.debug(f"thumbnail تولید شد با کیفیت {q}")
-                                break
-                        except Exception:
-                            continue
-                except Exception as te:
-                    instagram_logger.error(f"خطای تولید thumbnail: {te}")
-                    print(f"IG thumbnail error: {te}")
+                # Fast path: skip re-encode and thumbnail for small files to reduce latency
+                if 'total_bytes' in locals() and total_bytes and total_bytes <= 30 * 1024 * 1024:
+                    instagram_logger.debug("ویدیو کم‌حجم شناسایی شد؛ صرف‌نظر از re-encode و تولید thumbnail برای سرعت بیشتر")
                     thumb_path = None
+                    final_path = downloaded_file_path
+                else:
+                    instagram_logger.debug("شروع پردازش ویدیو و تولید thumbnail")
+                # Detect ffmpeg path (similar to youtube module)
+                    ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                    try:
+                        if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                            ffmpeg_path = '/usr/bin/ffmpeg'
+                    except Exception:
+                        pass
+                    if not ffmpeg_path:
+                        from config import FFMPEG_PATH
+                        candidates = [
+                            FFMPEG_PATH,
+                            "ffmpeg",
+                            "/usr/local/bin/ffmpeg"
+                        ]
+                        for p in candidates:
+                            if shutil.which(p) or os.path.exists(p):
+                                ffmpeg_path = p
+                                break
+                    
+                    instagram_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
+                    
+                    # Prefer 1280x720 as primary
+                    target_w, target_h = 1280, 720
+                    # Re-encode
+                    base_noext, _ = os.path.splitext(downloaded_file_path)
+                    enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
+                    try:
+                        instagram_logger.debug(f"شروع re-encode ویدیو به {target_w}x{target_h}")
+                        vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                        cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
+                               '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                               '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                               enforced_path]
+                        await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                        if os.path.exists(enforced_path):
+                            try:
+                                os.remove(downloaded_file_path)
+                            except Exception:
+                                pass
+                            final_path = enforced_path
+                            width_arg, height_arg = target_w, target_h
+                            instagram_logger.debug(f"re-encode موفق - فایل جدید: {enforced_path}")
+                    except Exception as ee:
+                        instagram_logger.error(f"خطای FFmpeg re-encode: {ee}")
+                        print(f"FFmpeg re-encode (IG) failed: {ee}")
+                        final_path = downloaded_file_path
+                    
+                    # Thumbnail (<=320px, <=200KB)
+                    thumb_path = f"{base_noext}_thumb.jpg"
+                    try:
+                        instagram_logger.debug("شروع تولید thumbnail")
+                        def make_thumb(q):
+                            vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
+                            cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', str(q), thumb_path]
+                            subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        for q in [5,6,7,8,9,10]:
+                            try:
+                                await asyncio.to_thread(make_thumb, q)
+                                if os.path.exists(thumb_path) and os.path.getsize(thumb_path) <= 200*1024:
+                                    instagram_logger.debug(f"thumbnail تولید شد با کیفیت {q}")
+                                    break
+                            except Exception:
+                                continue
+                    except Exception as te:
+                        instagram_logger.error(f"خطای تولید thumbnail: {te}")
+                        print(f"IG thumbnail error: {te}")
+                        thumb_path = None
             elif media_type == 'image' or media_type == 'photo':
                 instagram_logger.debug("شروع پردازش تصویر")
                 # Normalize images to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP/PNG)
