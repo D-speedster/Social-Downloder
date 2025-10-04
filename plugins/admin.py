@@ -1319,31 +1319,38 @@ async def handle_advertisement_content(client: Client, message: Message):
             ad_data['content'] = message.text
             ad_data['file_id'] = ''
             ad_data['caption'] = ''
+            # Store text content for later save
+            admin_step['ad_text'] = message.text
         elif message.photo:
             ad_data['content_type'] = 'photo'
             ad_data['file_id'] = message.photo.file_id
             ad_data['caption'] = message.caption or ''
             ad_data['content'] = 'photo_content'
+            admin_step['ad_text'] = ''
         elif message.video:
             ad_data['content_type'] = 'video'
             ad_data['file_id'] = message.video.file_id
             ad_data['caption'] = message.caption or ''
             ad_data['content'] = 'video_content'
+            admin_step['ad_text'] = ''
         elif message.animation:
             ad_data['content_type'] = 'gif'
             ad_data['file_id'] = message.animation.file_id
             ad_data['caption'] = message.caption or ''
             ad_data['content'] = 'gif_content'
+            admin_step['ad_text'] = ''
         elif message.sticker:
             ad_data['content_type'] = 'sticker'
             ad_data['file_id'] = message.sticker.file_id
             ad_data['caption'] = ''
             ad_data['content'] = 'sticker_content'
+            admin_step['ad_text'] = ''
         elif message.audio:
             ad_data['content_type'] = 'audio'
             ad_data['file_id'] = message.audio.file_id
             ad_data['caption'] = message.caption or ''
             ad_data['content'] = 'audio_content'
+            admin_step['ad_text'] = ''
         else:
             await message.reply_text("❌ نوع محتوای ارسالی پشتیبانی نمی‌شود.")
             admin_step['advertisement'] = 0
@@ -1383,3 +1390,101 @@ async def admin_text_handler(client: Client, message: Message):
     # not cookie inputs, as those are handled by the more specific handlers above.
     # Existing logic for other admin commands remains here.
     pass  # unchanged existing logic follows...
+
+# NEW: Activate advertisement content handler when in step 1
+ad_content_filter = filters.create(lambda _, __, m: admin_step.get('advertisement') == 1)
+
+@Client.on_message(ad_content_filter & filters.user(ADMIN), group=6)
+async def admin_ad_content_entry(client: Client, message: Message):
+    await handle_advertisement_content(client, message)
+
+# NEW: Handle advertisement position selection and persist settings
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^(🔝 بالای محتوا|🔻 پایین محتوا)$'), group=4)
+async def admin_ad_position_handler(_: Client, message: Message):
+    try:
+        pos = 'before' if 'بالا' in (message.text or '') else 'after'
+        ad_settings = {
+            'enabled': True,
+            'position': pos,
+            'content_type': admin_step.get('ad_content_type', 'text'),
+            'file_id': admin_step.get('ad_file_id', ''),
+            'caption': admin_step.get('ad_caption', ''),
+        }
+        if ad_settings['content_type'] == 'text':
+            ad_settings['content'] = admin_step.get('ad_text', '')
+        else:
+            ad_settings['content'] = ''
+
+        # Persist to database.json safely
+        try:
+            backup_path = PATH + '/database.json.bak'
+            if os.path.exists(PATH + '/database.json'):
+                shutil.copy2(PATH + '/database.json', backup_path)
+            data['advertisement'] = ad_settings
+            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+                json.dump(data, outfile, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"[ADMIN] Failed to save advertisement settings: {e}")
+            try:
+                if os.path.exists(backup_path):
+                    shutil.copy2(backup_path, PATH + '/database.json')
+            except Exception:
+                pass
+            await message.reply_text("❌ خطا در ذخیره تنظیمات تبلیغات.")
+            return
+
+        # Reset steps
+        admin_step['advertisement'] = 0
+        admin_step['ad_content_type'] = ''
+        admin_step['ad_file_id'] = ''
+        admin_step['ad_caption'] = ''
+        admin_step['ad_text'] = ''
+
+        await message.reply_text(
+            "✅ تبلیغات با موفقیت تنظیم شد!",
+            reply_markup=admin_reply_kb()
+        )
+    except Exception as e:
+        print(f"[ADMIN] Error in ad position handler: {e}")
+        await message.reply_text("❌ خطای غیرمنتظره در تنظیم تبلیغات.")
+def _server_status_text():
+    """Override: Build improved server status text without disk line, include network speed."""
+    try:
+        import time as _t
+        import platform as _pf
+        cpu_percent = psutil.cpu_percent(interval=1)
+        mem = psutil.virtual_memory()
+        # Approximate network throughput over 1s
+        net1 = psutil.net_io_counters()
+        _t.sleep(1)
+        net2 = psutil.net_io_counters()
+        up_bps = max(0, net2.bytes_sent - net1.bytes_sent)
+        down_bps = max(0, net2.bytes_recv - net1.bytes_recv)
+        up_speed = f"{format_bytes(up_bps)}/s"
+        down_speed = f"{format_bytes(down_bps)}/s"
+
+        # OS and uptime
+        os_line = f"🖥 سیستم‌عامل: {_pf.system()} {_pf.release()}"
+        try:
+            boot_ts = psutil.boot_time()
+            uptime_sec = int(_t.time() - boot_ts)
+            days = uptime_sec // 86400
+            hours = (uptime_sec % 86400) // 3600
+            minutes = (uptime_sec % 3600) // 60
+            uptime_line = f"⏱ زمان روشن بودن: {days}روز {hours}ساعت {minutes}دقیقه"
+        except Exception:
+            uptime_line = "⏱ زمان روشن بودن: نامشخص"
+
+        mem_line = f"🧠 استفاده از حافظه: {format_bytes(mem.used)}/{format_bytes(mem.total)} ({mem.percent}%)"
+        cpu_line = f"⚙️ مصرف CPU: {cpu_percent}%"
+        net_line = f"🌐 سرعت شبکه تقریبی: ↑ {up_speed} | ↓ {down_speed}"
+
+        return "\n".join([
+            cpu_line,
+            os_line,
+            uptime_line,
+            mem_line,
+            net_line
+        ])
+    except Exception as e:
+        return f"❌ خطا در دریافت وضعیت سرور: {e}"
