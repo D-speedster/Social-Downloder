@@ -60,6 +60,11 @@ coverage.xml
 *.log
 local_settings.py
 db.sqlite3
+plugins/bot_database.db
+plugins/database.json
+plugins/*.db
+plugins/*.sqlite
+logs/
 
 # Flask stuff:
 instance/

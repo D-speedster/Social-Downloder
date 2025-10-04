@@ -1450,6 +1450,18 @@ async def admin_ad_position_handler(_: Client, message: Message):
 def _server_status_text():
     """Override: Build improved server status text without disk line, include network speed."""
     try:
+        # Local helper to format bytes into human-readable units
+        def format_bytes(n):
+            try:
+                units = ['B', 'KB', 'MB', 'GB', 'TB']
+                n = int(n) if n is not None else 0
+                i = 0
+                while n >= 1024 and i < len(units) - 1:
+                    n /= 1024.0
+                    i += 1
+                return f"{n:.2f} {units[i]}"
+            except Exception:
+                return str(n)
         import time as _t
         import platform as _pf
         cpu_percent = psutil.cpu_percent(interval=1)

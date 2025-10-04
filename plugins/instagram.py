@@ -351,8 +351,15 @@ async def download_instagram(_: Client, message: Message):
             post_type = api_data.get('type', 'single')
             # If API mislabels single posts or includes preview items, sanitize medias
             try:
-                if post_type != 'multiple':
+                from urllib.parse import urlparse
+                path_lower = urlparse(url).path.lower()
+                is_reel_or_post = ('/reel/' in path_lower) or ('/p/' in path_lower)
+                # Force single for reel or post URLs, even if API says multiple
+                if is_reel_or_post or post_type != 'multiple':
                     # Prefer video for reels; otherwise keep first image
+                    # Deduplicate by URL
+                    seen = set()
+                    medias = [m for m in medias if m.get('url') and (m.get('url') not in seen and not seen.add(m.get('url')))]
                     videos = [m for m in medias if (m.get('type') == 'video') and m.get('url')]
                     if videos:
                         medias = [videos[0]]
