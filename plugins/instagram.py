@@ -556,8 +556,8 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         
         try:
             if media_type == 'video':
-                # Fast path: skip re-encode and thumbnail for files under 50MB to reduce latency
-                if total_bytes and total_bytes <= 50 * 1024 * 1024:
+                # Fast path: skip re-encode and thumbnail for files under 10MB to reduce latency
+                if total_bytes and total_bytes <= 10 * 1024 * 1024:
                     instagram_logger.debug("ویدیو کم‌حجم شناسایی شد؛ صرف‌نظر از re-encode و تولید thumbnail برای سرعت بیشتر")
                     thumb_path = None
                     final_path = downloaded_file_path
@@ -869,52 +869,67 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                 
                     # For videos in media group, enforce Telegram-friendly encoding
                     if media_type == 'video':
-                        try:
-                            instagram_logger.debug(f"شروع پردازش ویدیو برای رسانه {i+1}")
-                            ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                        # Fast path: skip re-encoding for small MP4 files under 10MB
+                        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                        base_noext, ext0 = os.path.splitext(file_path)
+                        ext_lower = ext0.lower()
+                        
+                        if ext_lower == '.mp4' and file_size <= 10 * 1024 * 1024:
+                            instagram_logger.debug(f"ویدیو MP4 کم‌حجم شناسایی شد برای رسانه {i+1}؛ صرف‌نظر از re-encode")
+                            # Keep the original file without processing
+                        else:
                             try:
-                                if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
-                                    ffmpeg_path = '/usr/bin/ffmpeg'
-                            except Exception:
-                                pass
-                            if not ffmpeg_path:
-                                from config import FFMPEG_PATH
-                                candidates = [
-                                    FFMPEG_PATH,
-                                    "ffmpeg",
-                                    "/usr/local/bin/ffmpeg"
-                                ]
-                                for p in candidates:
-                                    if shutil.which(p) or os.path.exists(p):
-                                        ffmpeg_path = p
-                                        break
-                            instagram_logger.debug(f"مسیر ffmpeg برای رسانه {i+1}: {ffmpeg_path}")
-                            base_noext, _ = os.path.splitext(file_path)
-                            enforced_path = f"{base_noext}_720p.mp4"
-                            vf = "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
-                            cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', file_path, '-vf', vf,
-                                   '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
-                                   '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
-                                   enforced_path]
-                            instagram_logger.debug(f"شروع re-encode ویدیو رسانه {i+1} به 720p")
-                            await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                            if os.path.exists(enforced_path) and os.path.getsize(enforced_path) > 0:
-                                instagram_logger.debug(f"re-encode ویدیو رسانه {i+1} موفق - فایل جدید: {enforced_path}")
+                                instagram_logger.debug(f"شروع پردازش ویدیو برای رسانه {i+1}")
+                                ffmpeg_path = os.environ.get('FFMPEG_PATH')
                                 try:
-                                    os.remove(file_path)
+                                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                                        ffmpeg_path = '/usr/bin/ffmpeg'
                                 except Exception:
                                     pass
-                                file_path = enforced_path
-                        except Exception as reenc_err:
-                            instagram_logger.error(f"خطای re-encode ویدیو رسانه {i+1}: {reenc_err}")
-                            print(f"Media group re-encode error for item {i+1}: {reenc_err}")
+                                if not ffmpeg_path:
+                                    from config import FFMPEG_PATH
+                                    candidates = [
+                                        FFMPEG_PATH,
+                                        "ffmpeg",
+                                        "/usr/local/bin/ffmpeg"
+                                    ]
+                                    for p in candidates:
+                                        if shutil.which(p) or os.path.exists(p):
+                                            ffmpeg_path = p
+                                            break
+                                instagram_logger.debug(f"مسیر ffmpeg برای رسانه {i+1}: {ffmpeg_path}")
+                                base_noext, _ = os.path.splitext(file_path)
+                                enforced_path = f"{base_noext}_720p.mp4"
+                                vf = "scale=w=1280:h=720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                                cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', file_path, '-vf', vf,
+                                       '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                                       '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                                       enforced_path]
+                                instagram_logger.debug(f"شروع re-encode ویدیو رسانه {i+1} به 720p")
+                                await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                                if os.path.exists(enforced_path) and os.path.getsize(enforced_path) > 0:
+                                    instagram_logger.debug(f"re-encode ویدیو رسانه {i+1} موفق - فایل جدید: {enforced_path}")
+                                    try:
+                                        os.remove(file_path)
+                                    except Exception:
+                                        pass
+                                    file_path = enforced_path
+                            except Exception as reenc_err:
+                                instagram_logger.error(f"خطای re-encode ویدیو رسانه {i+1}: {reenc_err}")
+                                print(f"Media group re-encode error for item {i+1}: {reenc_err}")
                 
                     # For photos, normalize format to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP)
                     if media_type == 'image' or media_type == 'photo':
                         try:
-                            instagram_logger.debug(f"شروع پردازش تصویر رسانه {i+1}")
                             base_noext, ext2 = os.path.splitext(file_path)
-                            if ext2.lower() not in ('.jpg', '.jpeg'):
+                            file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                            
+                            # Fast path: skip processing for JPG/JPEG files under 10MB
+                            if ext2.lower() in ('.jpg', '.jpeg') and file_size <= 10 * 1024 * 1024:
+                                instagram_logger.debug(f"تصویر JPG کم‌حجم شناسایی شد برای رسانه {i+1}؛ صرف‌نظر از پردازش")
+                                # Keep the original file without processing
+                            elif ext2.lower() not in ('.jpg', '.jpeg'):
+                                instagram_logger.debug(f"شروع پردازش تصویر رسانه {i+1}")
                                 instagram_logger.debug(f"تبدیل فرمت تصویر رسانه {i+1} از {ext2} به JPEG")
                                 ffmpeg_path = os.environ.get('FFMPEG_PATH')
                                 try:
