@@ -539,30 +539,43 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         total_mb_text = f"{(total_bytes/1024/1024):.2f}" if total_bytes else "نامشخص"
         instagram_logger.debug(f"دانلود کامل - حجم: {total_mb_text} MB")
         
-        # Update status for upload
-        await status_msg.edit_text(
-            _format_status_text(title, type_label, total_mb_text, "آماده‌سازی برای ارسال..."),
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("📤 در حال ارسال...", callback_data="ignore")]])
-        )
-        
         # Create safe caption
         safe_caption = create_safe_caption(title, 1)
         
-        # If video, enforce resolution & generate thumbnail
+        # If video, enforce resolution & generate thumbnail (optimized for speed)
         thumb_path = None
         width_arg = None
         height_arg = None
         final_path = downloaded_file_path
+        
+        # Update status for processing
+        await status_msg.edit_text(
+            _format_status_text(title, type_label, total_mb_text, "بررسی فایل..."),
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔍 در حال بررسی...", callback_data="ignore")]])
+        )
+        
         try:
             if media_type == 'video':
-                # Fast path: skip re-encode and thumbnail for small files to reduce latency
-                if 'total_bytes' in locals() and total_bytes and total_bytes <= 30 * 1024 * 1024:
+                # Fast path: skip re-encode and thumbnail for files under 50MB to reduce latency
+                if total_bytes and total_bytes <= 50 * 1024 * 1024:
                     instagram_logger.debug("ویدیو کم‌حجم شناسایی شد؛ صرف‌نظر از re-encode و تولید thumbnail برای سرعت بیشتر")
                     thumb_path = None
                     final_path = downloaded_file_path
+                    
+                    # Update status for direct upload
+                    await status_msg.edit_text(
+                        _format_status_text(title, type_label, total_mb_text, "آماده برای ارسال سریع..."),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⚡ ارسال سریع...", callback_data="ignore")]])
+                    )
                 else:
+                    # Update status for processing
+                    await status_msg.edit_text(
+                        _format_status_text(title, type_label, total_mb_text, "پردازش ویدیو..."),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⚙️ در حال پردازش...", callback_data="ignore")]])
+                    )
+                    
                     instagram_logger.debug("شروع پردازش ویدیو و تولید thumbnail")
-                # Detect ffmpeg path (similar to youtube module)
+                    # Detect ffmpeg path (similar to youtube module)
                     ffmpeg_path = os.environ.get('FFMPEG_PATH')
                     try:
                         if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
@@ -631,46 +644,68 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                         thumb_path = None
             elif media_type == 'image' or media_type == 'photo':
                 instagram_logger.debug("شروع پردازش تصویر")
-                # Normalize images to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP/PNG)
-                ffmpeg_path = os.environ.get('FFMPEG_PATH')
-                try:
-                    if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
-                        ffmpeg_path = '/usr/bin/ffmpeg'
-                except Exception:
-                    pass
-                if not ffmpeg_path:
-                    from config import FFMPEG_PATH
-                    candidates = [
-                        FFMPEG_PATH,
-                        "ffmpeg",
-                        "/usr/local/bin/ffmpeg"
-                    ]
-                    for p in candidates:
-                        if shutil.which(p) or os.path.exists(p):
-                            ffmpeg_path = p
-                            break
                 
-                instagram_logger.debug(f"مسیر ffmpeg برای تصویر: {ffmpeg_path}")
-                
+                # Check if image is already in a good format (JPG/JPEG) and reasonable size
                 base_noext, ext0 = os.path.splitext(downloaded_file_path)
-                normalized_path = f"{base_noext}_norm.jpg"
-                try:
-                    instagram_logger.debug("شروع normalize کردن تصویر")
-                    cmd_img = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path,
-                               '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease,setsar=1',
-                               '-q:v', '2', normalized_path]
-                    await asyncio.to_thread(lambda: subprocess.run(cmd_img, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                    if os.path.exists(normalized_path) and os.path.getsize(normalized_path) > 0:
-                        try:
-                            os.remove(downloaded_file_path)
-                        except Exception:
-                            pass
-                        final_path = normalized_path
-                        instagram_logger.debug(f"normalize تصویر موفق - فایل جدید: {normalized_path}")
-                except Exception as norm_e:
-                    instagram_logger.error(f"خطای normalize تصویر: {norm_e}")
-                    print(f"Single image normalization failed: {norm_e}")
+                ext_lower = ext0.lower()
+                file_size = os.path.getsize(downloaded_file_path) if os.path.exists(downloaded_file_path) else 0
+                
+                # Fast path: skip normalization for JPG/JPEG files under 10MB
+                if ext_lower in ['.jpg', '.jpeg'] and file_size <= 10 * 1024 * 1024:
+                    instagram_logger.debug("تصویر JPG کم‌حجم شناسایی شد؛ صرف‌نظر از normalize برای سرعت بیشتر")
                     final_path = downloaded_file_path
+                    
+                    # Update status for direct upload
+                    await status_msg.edit_text(
+                        _format_status_text(title, type_label, total_mb_text, "آماده برای ارسال سریع..."),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⚡ ارسال سریع...", callback_data="ignore")]])
+                    )
+                else:
+                    # Update status for processing
+                    await status_msg.edit_text(
+                        _format_status_text(title, type_label, total_mb_text, "پردازش تصویر..."),
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⚙️ در حال پردازش...", callback_data="ignore")]])
+                    )
+                    
+                    # Normalize images to JPEG to avoid IMAGE_PROCESS_FAILED (e.g., WEBP/PNG)
+                    ffmpeg_path = os.environ.get('FFMPEG_PATH')
+                    try:
+                        if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                            ffmpeg_path = '/usr/bin/ffmpeg'
+                    except Exception:
+                        pass
+                    if not ffmpeg_path:
+                        from config import FFMPEG_PATH
+                        candidates = [
+                            FFMPEG_PATH,
+                            "ffmpeg",
+                            "/usr/local/bin/ffmpeg"
+                        ]
+                        for p in candidates:
+                            if shutil.which(p) or os.path.exists(p):
+                                ffmpeg_path = p
+                                break
+                    
+                    instagram_logger.debug(f"مسیر ffmpeg برای تصویر: {ffmpeg_path}")
+                    
+                    normalized_path = f"{base_noext}_norm.jpg"
+                    try:
+                        instagram_logger.debug("شروع normalize کردن تصویر")
+                        cmd_img = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path,
+                                   '-vf', 'scale=1280:-2:force_original_aspect_ratio=decrease,setsar=1',
+                                   '-q:v', '2', normalized_path]
+                        await asyncio.to_thread(lambda: subprocess.run(cmd_img, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                        if os.path.exists(normalized_path) and os.path.getsize(normalized_path) > 0:
+                            try:
+                                os.remove(downloaded_file_path)
+                            except Exception:
+                                pass
+                            final_path = normalized_path
+                            instagram_logger.debug(f"normalize تصویر موفق - فایل جدید: {normalized_path}")
+                    except Exception as norm_e:
+                        instagram_logger.error(f"خطای normalize تصویر: {norm_e}")
+                        print(f"Single image normalization failed: {norm_e}")
+                        final_path = downloaded_file_path
         except Exception as ie:
             instagram_logger.error(f"خطای pipeline پردازش: {ie}")
             print(f"IG enforce pipeline error: {ie}")
@@ -735,9 +770,8 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                 caption=safe_caption
             )
         
-        instagram_logger.debug("ارسال فایل موفق - شروع انتظار و پاکسازی")
-        # Wait a moment to ensure upload is complete
-        await asyncio.sleep(2)
+        instagram_logger.debug("ارسال فایل موفق - شروع پاکسازی")
+        # No delay needed - proceed directly to cleanup for faster user experience
         
         # Clean up file
         try:

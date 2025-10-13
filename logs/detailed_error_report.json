@@ -1,36 +1,32 @@
 {
-  "timestamp": "2025-10-05T01:00:33.945547",
+  "timestamp": "2025-10-13T11:38:23.396731",
   "system_info": {
     "platform": "Windows-11-10.0.26100-SP0",
     "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
     "python_executable": "C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
     "working_directory": "C:\\Users\\speedster\\Desktop\\DownloaderYT-V1",
-    "timestamp": "2025-10-05T01:00:33.930815",
+    "timestamp": "2025-10-13T11:38:23.388583",
     "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.EXE"
   },
   "error_analysis": {
-    "timestamp": "2025-10-05T01:00:33.942574",
-    "error_type": "ConnectionError",
-    "error_message": "",
+    "timestamp": "2025-10-13T11:38:23.394643",
+    "error_type": "OperationalError",
+    "error_message": "database is locked",
     "traceback": [
       "Traceback (most recent call last):\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 193, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\base_events.py\", line 719, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n",
       "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 142, in main\n    await client.start()\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 58, in start\n    is_authorized = await self.connect()\n                    ^^^^^^^^^^^^^^^^^^^^\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\connect.py\", line 40, in connect\n    await self.load_session()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 637, in load_session\n    await Auth(\n    ...<2 lines>...\n    ).create()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\session\\auth.py\", line 274, in create\n    raise e\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\session\\auth.py\", line 84, in create\n    await self.connection.connect()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\connection\\connection.py\", line 62, in connect\n    raise ConnectionError\n",
-      "ConnectionError\n"
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 616, in load_session\n    await self.storage.open()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 63, in open\n    self.update()\n    ~~~~~~~~~~~^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 52, in update\n    self.version(version)\n    ~~~~~~~~~~~~^^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\sqlite_storage.py\", line 219, in version\n    self.conn.execute(\n    ~~~~~~~~~~~~~~~~~^\n        \"UPDATE version SET number = ?\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        (value,)\n        ^^^^^^^^\n    )\n    ^\n",
+      "sqlite3.OperationalError: database is locked\n"
     ],
     "suggestions": [
-      "خطای غیرمنتظره رخ داده است",
-      "لاگ‌های کامل را بررسی کنید",
-      "کد مربوطه را دیباگ کنید"
+      "مشکل در اتصال یا عملیات پایگاه داده",
+      "فایل پایگاه داده را بررسی کنید",
+      "دسترسی نوشتن در دایرکتوری را چک کنید"
     ]
   },
   "environment_issues": [
