@@ -19,10 +19,11 @@ import shutil
 import sys
 import requests
 import logging
+from plugins.universal_downloader import handle_universal_link
 
 # Configure Instagram logger
 instagram_logger = logging.getLogger('instagram_main')
-instagram_logger.setLevel(logging.DEBUG)
+instagram_logger.setLevel(logging.WARNING)  # Changed from DEBUG to WARNING for better performance
 
 # Create logs directory if it doesn't exist
 os.makedirs('./logs', exist_ok=True)
@@ -174,10 +175,29 @@ async def get_instagram_data_from_api(url):
             response_data = response.json()
             print(f"Instagram API Response Data: {str(response_data)[:500]}...")  # Log first 500 chars
             
-            # Validate response structure
-            if not response_data or 'medias' not in response_data:
-                instagram_logger.error(f"ساختار پاسخ API نامعتبر: {response_data}")
-                print(f"Invalid API response structure: {response_data}")
+            # Validate response structure and check for errors
+            if not response_data:
+                instagram_logger.error(f"پاسخ API خالی: {response_data}")
+                print(f"Empty API response: {response_data}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return None
+            
+            # Check if API returned an error
+            if response_data.get('error', False):
+                error_msg = response_data.get('message', 'Unknown API error')
+                instagram_logger.error(f"API خطا برگرداند: {error_msg}")
+                print(f"API returned error: {error_msg}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return None
+            
+            # Check if medias field exists and is not empty
+            if 'medias' not in response_data or not response_data.get('medias'):
+                instagram_logger.error(f"فیلد medias یافت نشد یا خالی است: {response_data}")
+                print(f"Medias field not found or empty: {response_data}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(2 ** attempt)
                     continue
@@ -238,70 +258,32 @@ def _fetch_og_media_instagram(url: str):
         instagram_logger.warning(f"OG fetch fallback failed for Instagram {url}: {e}")
         return None
 
-async def download_file_with_progress(url, file_path, status_msg, title, type_label):
-    """Download file with progress updates"""
+def _format_status_text(title, type_label, size_info, status):
+    """Format status text for Instagram downloads"""
+    # Truncate title if too long
+    display_title = title[:30] + "..." if len(title) > 30 else title
+    return f"📱 اینستاگرام | {type_label}\n📝 {display_title}\n📊 {size_info} MB\n⏳ {status}"
+
+async def download_file_simple(url, file_path):
+    """Simple file download without progress updates for better performance"""
     try:
-        instagram_logger.debug(f"شروع دانلود فایل از URL: {url}")
-        import asyncio
-        
-        # Get file size first
-        req = urllib.request.Request(url)
-        with urllib.request.urlopen(req) as response:
-            total_size = int(response.headers.get('Content-Length', 0))
-            instagram_logger.debug(f"حجم کل فایل: {total_size} bytes")
-            
-        # Download with progress
-        downloaded = 0
-        chunk_size = 8192
-        last_update = 0
-        
+        # Simple download using urllib without progress updates
         with urllib.request.urlopen(url) as response:
+            total_size = int(response.headers.get('Content-Length', 0))
             with open(file_path, 'wb') as f:
-                while True:
-                    chunk = response.read(chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    
-                    # Update progress every 1MB or 10%
-                    if downloaded - last_update > 1024*1024 or (total_size > 0 and downloaded - last_update > total_size * 0.1):
-                        last_update = downloaded
-                        if total_size > 0:
-                            percent = int(downloaded * 100 / total_size)
-                            size_mb = f"{(int(total_size)/1024/1024):.2f}"
-                        else:
-                            percent = 0
-                            size_mb = "نامشخص"
-                        
-                        instagram_logger.debug(f"پیشرفت دانلود: {percent}% - {downloaded}/{total_size} bytes")
-                        text = _format_status_text(title, type_label, size_mb, "در حال دانلود ...")
-                        kb = InlineKeyboardMarkup([[InlineKeyboardButton(f"🚀 پیشرفت: {percent}٪", callback_data="ignore")]])
-                        
-                        try:
-                            await status_msg.edit_text(text, reply_markup=kb)
-                        except Exception:
-                            pass
+                shutil.copyfileobj(response, f)
         
-        instagram_logger.debug(f"دانلود کامل - فایل ذخیره شد در: {file_path}")
         return file_path, total_size
         
     except Exception as e:
-        instagram_logger.error(f"خطای دانلود فایل: {e}")
         print(f"Download error: {e}")
         raise e
 
-def _format_status_text(title, type_label, size_mb, status):
-    """Format status text for progress updates"""
-    return f"""📥 **دانلود از اینستاگرام**
 
-📝 **عنوان:** {title[:50]}{'...' if len(title) > 50 else ''}
-📊 **نوع:** {type_label}
-📏 **حجم:** {size_mb} مگابایت
-⏳ **وضعیت:** {status}"""
 
 @Client.on_message(filters.regex(instaregex) & filters.private & join)
 async def download_instagram(_: Client, message: Message):
+    return await handle_universal_link(_, message)
     user_id = message.from_user.id
     url = message.text.strip()
     
@@ -344,7 +326,7 @@ async def download_instagram(_: Client, message: Message):
         medias = None
         post_type = 'single'
 
-        if api_data and api_data.get('medias'):
+        if api_data and api_data.get('medias') and not api_data.get('error', False):
             # Extract media information from API
             title = api_data.get('title', 'Instagram Media')
             medias = api_data.get('medias', [])
@@ -396,16 +378,29 @@ async def download_instagram(_: Client, message: Message):
                 # If sanitization fails, fall back to original medias
                 pass
         else:
-            # API failed or returned no medias: try OG fallback
-            instagram_logger.warning(f"API خالی یا ناموفق؛ تلاش fallback OG برای URL: {url}")
-            og = _fetch_og_media_instagram(url)
-            if og:
-                title = og.get('title') or 'Instagram Media'
-                medias = [ { 'url': og.get('url'), 'type': og.get('type') } ]
+            # API failed or returned no medias: check if it's an error response
+            error_message = "❌ **خطا در دریافت اطلاعات**\n\n"
+            
+            if api_data and api_data.get('error', False):
+                # API returned an error
+                api_error_msg = api_data.get('message', 'خطای ناشناخته API')
+                error_message += f"🔍 خطای API: {api_error_msg}\n\n"
+                error_message += "💡 ممکن است لینک معتبر نباشد یا محتوا در دسترس نباشد."
+                instagram_logger.error(f"API خطا برگرداند: {api_error_msg} برای URL: {url}")
             else:
-                instagram_logger.error(f"OG fallback ناموفق برای URL: {url}")
+                # API failed completely: try OG fallback
+                instagram_logger.warning(f"API خالی یا ناموفق؛ تلاش fallback OG برای URL: {url}")
+                og = _fetch_og_media_instagram(url)
+                if og:
+                    title = og.get('title') or 'Instagram Media'
+                    medias = [ { 'url': og.get('url'), 'type': og.get('type') } ]
+                else:
+                    instagram_logger.error(f"OG fallback ناموفق برای URL: {url}")
+                    error_message += "🔍 لینک اینستاگرام معتبر نیست یا در دسترس نمی‌باشد."
+            
+            if not medias:  # If still no medias after all attempts
                 await status_msg.edit_text(
-                    "❌ **خطا در دریافت اطلاعات**\n\n🔍 لینک اینستاگرام معتبر نیست یا در دسترس نمی‌باشد.",
+                    error_message,
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔄 تلاش مجدد", callback_data="start")]])
                 )
                 return
@@ -530,7 +525,7 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
         
         # Download file
         instagram_logger.debug(f"شروع دانلود از URL: {download_url}")
-        downloaded_file_path, total_bytes = await download_file_with_progress(download_url, file_path, status_msg, title, type_label)
+        downloaded_file_path, total_bytes = await download_file_simple(download_url, file_path)
 
         if not os.path.exists(downloaded_file_path):
             instagram_logger.error(f"فایل دانلود شده یافت نشد: {downloaded_file_path}")
@@ -596,48 +591,50 @@ async def handle_single_media(client, message, status_msg, media, title, user_id
                     
                     instagram_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
                     
-                    # Prefer 1280x720 as primary
-                    target_w, target_h = 1280, 720
-                    # Re-encode
-                    base_noext, _ = os.path.splitext(downloaded_file_path)
-                    enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
-                    try:
-                        instagram_logger.debug(f"شروع re-encode ویدیو به {target_w}x{target_h}")
-                        vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
-                        cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
-                               '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
-                               '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
-                               enforced_path]
-                        await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
-                        if os.path.exists(enforced_path):
-                            try:
-                                os.remove(downloaded_file_path)
-                            except Exception:
-                                pass
-                            final_path = enforced_path
-                            width_arg, height_arg = target_w, target_h
-                            instagram_logger.debug(f"re-encode موفق - فایل جدید: {enforced_path}")
-                    except Exception as ee:
-                        instagram_logger.error(f"خطای FFmpeg re-encode: {ee}")
-                        print(f"FFmpeg re-encode (IG) failed: {ee}")
-                        final_path = downloaded_file_path
+                    # Check file size - skip re-encode for files under 10MB for better performance
+                    file_size = os.path.getsize(downloaded_file_path) if os.path.exists(downloaded_file_path) else 0
                     
-                    # Thumbnail (<=320px, <=200KB)
+                    if file_size <= 10 * 1024 * 1024:  # 10MB
+                        instagram_logger.debug("ویدیو کم‌حجم شناسایی شد؛ صرف‌نظر از re-encode برای سرعت بیشتر")
+                        final_path = downloaded_file_path
+                    else:
+                        # Prefer 1280x720 as primary
+                        target_w, target_h = 1280, 720
+                        # Re-encode for large files only
+                        base_noext, _ = os.path.splitext(downloaded_file_path)
+                        enforced_path = f"{base_noext}_{target_w}x{target_h}.mp4"
+                        try:
+                            instagram_logger.debug(f"شروع re-encode ویدیو بزرگ به {target_w}x{target_h}")
+                            vf = f"scale=w={target_w}:h={target_h}:force_original_aspect_ratio=decrease,pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
+                            cmd = [ffmpeg_path or 'ffmpeg', '-y', '-i', downloaded_file_path, '-vf', vf,
+                                   '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22',
+                                   '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart',
+                                   enforced_path]
+                            await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                            if os.path.exists(enforced_path):
+                                try:
+                                    os.remove(downloaded_file_path)
+                                except Exception:
+                                    pass
+                                final_path = enforced_path
+                                width_arg, height_arg = target_w, target_h
+                                instagram_logger.debug(f"re-encode موفق - فایل جدید: {enforced_path}")
+                        except Exception as ee:
+                            instagram_logger.error(f"خطای FFmpeg re-encode: {ee}")
+                            print(f"FFmpeg re-encode (IG) failed: {ee}")
+                            final_path = downloaded_file_path
+                    
+                    # Thumbnail (<=320px) - simplified single quality generation
                     thumb_path = f"{base_noext}_thumb.jpg"
                     try:
-                        instagram_logger.debug("شروع تولید thumbnail")
-                        def make_thumb(q):
-                            vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
-                            cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', str(q), thumb_path]
-                            subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        for q in [5,6,7,8,9,10]:
-                            try:
-                                await asyncio.to_thread(make_thumb, q)
-                                if os.path.exists(thumb_path) and os.path.getsize(thumb_path) <= 200*1024:
-                                    instagram_logger.debug(f"thumbnail تولید شد با کیفیت {q}")
-                                    break
-                            except Exception:
-                                continue
+                        instagram_logger.debug("شروع تولید thumbnail ساده")
+                        vf_thumb = 'scale=320:-2:force_original_aspect_ratio=decrease'
+                        cmd_t = [ffmpeg_path or 'ffmpeg', '-y', '-ss', '2', '-i', final_path, '-frames:v', '1', '-vf', vf_thumb, '-q:v', '7', thumb_path]
+                        await asyncio.to_thread(lambda: subprocess.run(cmd_t, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                        if os.path.exists(thumb_path):
+                            instagram_logger.debug("thumbnail تولید شد با کیفیت ثابت")
+                        else:
+                            thumb_path = None
                     except Exception as te:
                         instagram_logger.error(f"خطای تولید thumbnail: {te}")
                         print(f"IG thumbnail error: {te}")
@@ -838,7 +835,7 @@ async def handle_multiple_media(client, message, status_msg, medias, title, user
                 # Download file with proper error handling
                 try:
                     instagram_logger.debug(f"شروع دانلود رسانه {i+1} از URL: {download_url}")
-                    download_result = await download_file_with_progress(download_url, file_path, status_msg, f"⬇️ دانلود فایل {i+1}/{len(medias)}", "Instagram")
+                    download_result = await download_file_simple(download_url, file_path)
                     
                     # Extract file_path from tuple (file_path, total_size)
                     if isinstance(download_result, tuple):

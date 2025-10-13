@@ -10,8 +10,9 @@ from plugins.start import (
     PINTEREST_REGEX, TWITTER_REGEX, THREADS_REGEX, FACEBOOK_REGEX,
     REDDIT_REGEX, IMGUR_REGEX, SNAPCHAT_REGEX, TUMBLR_REGEX,
     RUMBLE_REGEX, IFUNNY_REGEX, DEEZER_REGEX, RADIOJAVAN_REGEX,
+    INSTA_REGEX,
 )
-from plugins.instagram import send_advertisement, download_file_with_progress
+from plugins.media_utils import send_advertisement, download_file_simple
 from plugins.db_wrapper import DB
 from plugins import constant
 from datetime import datetime as _dt
@@ -33,6 +34,8 @@ txt = constant.TEXT
 
 def get_platform_name(url):
     """Determine the platform based on URL (expanded)"""
+    if INSTA_REGEX.search(url):
+        return "Instagram"
     if SPOTIFY_REGEX.search(url):
         return "Spotify"
     if TIKTOK_REGEX.search(url):
@@ -223,7 +226,7 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Download file
         await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
-        download_result = await download_file_with_progress(download_url, filename, status_msg, f"⬇️ دانلود {platform}", platform)
+        download_result = await download_file_simple(download_url, filename)
         
         # Extract file_path from tuple (file_path, total_size)
         if isinstance(download_result, tuple):
