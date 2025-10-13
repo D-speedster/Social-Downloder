@@ -32,6 +32,16 @@ universal_logger.addHandler(universal_handler)
 # Use the same database system as Instagram handler
 txt = constant.TEXT
 
+# Ensure captions stay within Telegram limits
+def _safe_caption(text: str, max_len: int = 950):
+    try:
+        t = str(text) if text else ""
+        if len(t) <= max_len:
+            return t
+        return t[:max_len-1] + "…"
+    except Exception:
+        return (str(text) or "")[:max_len-1] + "…"
+
 def get_platform_name(url):
     """Determine the platform based on URL (expanded)"""
     if INSTA_REGEX.search(url):
@@ -249,13 +259,14 @@ async def handle_universal_link(client: Client, message: Message):
             await status_msg.edit_text(f"❌ خطا در دانلود فایل از {platform}.")
             return
         
-        # Prepare caption
+        # Prepare caption (trim to safe length)
         caption = f"🎵 **{title}**\n"
         caption += f"👤 **نویسنده:** {author}\n"
         caption += f"⏱️ **مدت زمان:** {duration_sec} ثانیه\n"
         caption += f"🔗 **پلتفرم:** {platform}\n"
         caption += f"📊 **کیفیت:** {quality}\n"
         caption += f"📁 **نوع:** {media_type.title()}"
+        caption = _safe_caption(caption, max_len=950)
         
         # Check advertisement settings once
         ad_enabled = False
@@ -310,7 +321,7 @@ async def handle_universal_link(client: Client, message: Message):
             await client.send_document(
                 chat_id=message.chat.id,
                 document=file_path,
-                caption=caption
+                caption=_safe_caption(caption, max_len=950)
             )
         
         # Delete status message

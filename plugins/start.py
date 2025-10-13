@@ -539,7 +539,8 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                             await show_video(client, orig_msg)
                         elif INSTA_REGEX.search(text):
                             from plugins.instagram import download_instagram
-                            download_instagram(client, orig_msg)
+                            from plugins.universal_downloader import handle_universal_link
+                            await handle_universal_link(client, orig_msg)
                         elif (
                               SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or SOUNDCLOUD_REGEX.search(text) or 
                               PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or THREADS_REGEX.search(text) or 
