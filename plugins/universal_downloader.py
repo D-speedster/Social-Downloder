@@ -160,10 +160,27 @@ async def handle_universal_link(client: Client, message: Message):
         # Get data from API
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
         api_data = get_universal_data_from_api(url)
-        
-        # Fallback for Pinterest/Imgur/Tumblr when API returns nothing
+
+        # Fallback holder
         fallback_media = None
-        if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr"):
+
+        # If API errors, try OG fallback for Instagram before failing
+        if api_data and (api_data.get("error", False) or api_data.get("data", {}).get("error", False)):
+            error_message = api_data.get("message", "خطای نامشخص")
+            if platform == "Instagram":
+                await status_msg.edit_text("📡 API خطا داد؛ تلاش برای استخراج مستقیم Instagram...")
+                og = _fetch_og_media(url)
+                if og:
+                    fallback_media = og
+                else:
+                    await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
+                    return
+            else:
+                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
+                return
+
+        # If API returned nothing, expand fallback to include Instagram
+        if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr", "Instagram"):
             await status_msg.edit_text(f"📡 API چیزی برنگرداند؛ تلاش برای استخراج مستقیم {platform}...")
             og = _fetch_og_media(url)
             if og:
@@ -171,12 +188,6 @@ async def handle_universal_link(client: Client, message: Message):
             else:
                 await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید.")
                 return
-
-        # Check for API errors (guard when api_data is None)
-        if api_data and (api_data.get("error", False) or api_data.get("data", {}).get("error", False)):
-            error_message = api_data.get("message", "خطای نامشخص")
-            await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
-            return
         
         # Extract media information
         title = api_data.get("title", "Unknown Title") if api_data else "Unknown Title"
