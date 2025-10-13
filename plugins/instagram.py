@@ -359,18 +359,38 @@ async def download_instagram(_: Client, message: Message):
                 seen = set()
                 medias = [m for m in medias if m.get('url') and (m.get('url') not in seen and not seen.add(m.get('url')))]
 
-                # Detect actual type: keep multiple when API says so or there are >1 medias and it's not a reel
-                is_multiple = (post_type == 'multiple') or (len(medias) > 1 and not is_reel)
-                if is_multiple:
-                    post_type = 'multiple'
-                else:
-                    # Prefer video for reels; otherwise keep first image
-                    videos = [m for m in medias if (m.get('type') == 'video') and m.get('url')]
+                # Smart detection for single content posts (reels, posts with video+audio)
+                # Check if this is a single content post with video+audio combination
+                videos = [m for m in medias if (m.get('type') == 'video') and m.get('url')]
+                audios = [m for m in medias if (m.get('type') == 'audio') and m.get('url')]
+                images = [m for m in medias if (m.get('type') in ('image','photo')) and m.get('url')]
+                
+                # If we have exactly 1 video + 1 audio (common for reels/single posts), treat as single
+                # Or if it's a reel with video+audio, treat as single
+                is_single_with_audio = (len(videos) == 1 and len(audios) == 1 and len(images) == 0)
+                is_reel_with_media = is_reel and len(videos) >= 1
+                
+                if is_single_with_audio or is_reel_with_media:
+                    # For single content posts, only keep the video (ignore separate audio files)
                     if videos:
                         medias = [videos[0]]
+                        post_type = 'single'
+                        instagram_logger.debug(f"تشخیص پست تک‌محتوا: ویدیو انتخاب شد، فایل‌های صوتی نادیده گرفته شدند")
                     else:
-                        images = [m for m in medias if (m.get('type') in ('image','photo')) and m.get('url')]
-                        medias = [images[0]] if images else ([medias[0]] if medias else [])
+                        # Fallback to first available media
+                        medias = [medias[0]] if medias else []
+                        post_type = 'single'
+                elif len(medias) > 1 and not is_reel:
+                    # True multiple media (carousel/gallery)
+                    post_type = 'multiple'
+                else:
+                    # Single media (image or video)
+                    if videos:
+                        medias = [videos[0]]
+                    elif images:
+                        medias = [images[0]]
+                    else:
+                        medias = [medias[0]] if medias else []
                     post_type = 'single'
             except Exception:
                 # If sanitization fails, fall back to original medias

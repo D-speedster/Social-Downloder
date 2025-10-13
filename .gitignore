@@ -60,11 +60,31 @@ coverage.xml
 *.log
 local_settings.py
 db.sqlite3
+
+# Database files (CRITICAL - Contains user data)
 plugins/bot_database.db
+plugins/bot_database.db-shm
+plugins/bot_database.db-wal
 plugins/database.json
 plugins/*.db
 plugins/*.sqlite
+plugins/*.db-*
 logs/
+
+# User data and cookies (CRITICAL - Contains sensitive user information)
+data/
+data/cookies_tmp/
+*.cookie
+*.cookies
+cookie_*.txt
+yt_cookie_*.txt
+youtube_cookies.txt
+cookie_youtube.txt
+
+# Sample/test data files that may contain user data
+*_instagram.json
+*_youtube.json
+*_test.json
 
 # Flask stuff:
 instance/
