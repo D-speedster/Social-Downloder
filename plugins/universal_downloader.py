@@ -4,7 +4,7 @@ import json
 import os
 import re
 from pyrogram import Client
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
 from plugins.start import (
     SPOTIFY_REGEX, TIKTOK_REGEX, SOUNDCLOUD_REGEX,
     PINTEREST_REGEX, TWITTER_REGEX, THREADS_REGEX, FACEBOOK_REGEX,
@@ -18,6 +18,7 @@ from plugins import constant
 from datetime import datetime as _dt
 import logging
 import requests
+import time
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -31,6 +32,17 @@ universal_logger.addHandler(universal_handler)
 
 # Use the same database system as Instagram handler
 txt = constant.TEXT
+
+# Simple helper to log to file and console
+def _log(msg: str):
+    try:
+        universal_logger.debug(msg)
+    except Exception:
+        pass
+    try:
+        print(msg)
+    except Exception:
+        pass
 
 # Ensure captions stay within Telegram limits
 def _safe_caption(text: str, max_len: int = 950):
@@ -138,6 +150,8 @@ def _fetch_og_media(url: str):
 async def handle_universal_link(client: Client, message: Message):
     """Handle downloads for Spotify, TikTok, and SoundCloud links"""
     try:
+        t0 = time.perf_counter()
+        _log("[UNIV] Start processing message")
         user_id = message.from_user.id
         
         # Check if user is in database
@@ -161,6 +175,7 @@ async def handle_universal_link(client: Client, message: Message):
         
         url = message.text.strip()
         platform = get_platform_name(url)
+        _log(f"[UNIV] Platform detected: {platform}")
         
         # Send initial status message
         status_msg = await message.reply_text(f"🔄 در حال پردازش لینک {platform}...")
@@ -169,7 +184,10 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Get data from API
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
+        t_api_start = time.perf_counter()
         api_data = get_universal_data_from_api(url)
+        t_api_end = time.perf_counter()
+        _log(f"[UNIV] API fetch took {(t_api_end - t_api_start):.2f}s")
 
         # Fallback holder
         fallback_media = None
@@ -189,8 +207,18 @@ async def handle_universal_link(client: Client, message: Message):
                 await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
                 return
 
+        # Debug logging for API response
+        _log(f"[UNIV] API data check: api_data exists={api_data is not None}")
+        if api_data:
+            _log(f"[UNIV] API data keys: {list(api_data.keys())}")
+            _log(f"[UNIV] Has medias key: {'medias' in api_data}")
+            if 'medias' in api_data:
+                _log(f"[UNIV] Medias count: {len(api_data.get('medias', []))}")
+                _log(f"[UNIV] Medias content: {api_data.get('medias', [])}")
+
         # If API returned nothing, expand fallback to include Instagram
         if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr", "Instagram"):
+            _log(f"[UNIV] Entering fallback mode for {platform}")
             await status_msg.edit_text(f"📡 API چیزی برنگرداند؛ تلاش برای استخراج مستقیم {platform}...")
             og = _fetch_og_media(url)
             if og:
@@ -207,57 +235,122 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Find the best quality media
         medias = api_data.get("medias", []) if api_data else []
+        is_instagram = (platform == "Instagram")
+        
+        # For Instagram, check if it's truly an album (multiple different posts) vs single post with multiple formats
+        is_album = False
+        if is_instagram and len(medias) > 1:
+            # Check if we have different media types that suggest it's a single post with video+audio
+            video_count = sum(1 for m in medias if m.get("type") == "video")
+            audio_count = sum(1 for m in medias if m.get("type") == "audio")
+            
+            # If we have exactly 1 video and 1 audio, it's likely a single post with separate streams
+            if video_count == 1 and audio_count == 1:
+                is_album = False
+            else:
+                # Multiple videos or photos = real album
+                is_album = True
+        
+        _log(f"[UNIV] Medias count: {len(medias)} | album={is_album}")
+        _log(f"[UNIV] Medias list: {medias}")
         if not medias:
+            _log(f"[UNIV] No medias found, checking fallback_media: {fallback_media}")
             if fallback_media:
                 medias = [fallback_media]
+                _log(f"[UNIV] Using fallback media: {medias}")
             else:
+                _log(f"[UNIV] No fallback media available, returning error")
                 await status_msg.edit_text(f"❌ هیچ فایل قابل دانلودی از {platform} یافت نشد.")
                 return
         
         # Prefer video over audio, and highest quality
         selected_media = None
-        for media in medias:
-            if media.get("type") == "video":
-                selected_media = media
-                break
+        if not is_album:
+            for media in medias:
+                if media.get("type") == "video":
+                    selected_media = media
+                    break
+            if not selected_media:
+                # If no video found, take the first available media
+                selected_media = medias[0]
         
-        if not selected_media:
-            # If no video found, take the first available media
-            selected_media = medias[0]
-        
-        download_url = selected_media.get("url")
-        file_extension = selected_media.get("extension", "mp4")
-        media_type = selected_media.get("type", "video")
-        quality = selected_media.get("quality", "Unknown")
-        # Robust duration int
-        duration_value = selected_media.get("duration", duration_api)
-        try:
-            duration_sec = int(duration_value) if duration_value not in (None, "", "Unknown") else 0
-        except Exception:
-            duration_sec = 0
-        
-        if not download_url:
-            await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
-            return
-        
-        # Create filename
-        safe_title_src = title or selected_media.get('title') or platform
-        safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:50])
-        filename = f"{safe_title}.{file_extension}"
-        
-        # Download file
-        await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
-        download_result = await download_file_simple(download_url, filename)
-        
-        # Extract file_path from tuple (file_path, total_size)
-        if isinstance(download_result, tuple):
-            file_path, total_size = download_result
+        if not is_album:
+            download_url = selected_media.get("url")
+            file_extension = selected_media.get("extension", "mp4")
+            media_type = selected_media.get("type", "video")
+            quality = selected_media.get("quality", "Unknown")
+            # Robust duration int
+            duration_value = selected_media.get("duration", duration_api)
+            try:
+                duration_sec = int(duration_value) if duration_value not in (None, "", "Unknown") else 0
+            except Exception:
+                duration_sec = 0
+
+            if not download_url:
+                await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
+                return
+
+            # Create filename
+            safe_title_src = title or selected_media.get('title') or platform
+            safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:50])
+            filename = f"{safe_title}.{file_extension}"
+
+            # Download file
+            await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
+            t_dl_start = time.perf_counter()
+            download_result = await download_file_simple(download_url, filename)
+            t_dl_end = time.perf_counter()
+            _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
+
+            # Extract file_path from tuple (file_path, total_size)
+            if isinstance(download_result, tuple):
+                file_path, total_size = download_result
+            else:
+                file_path = download_result
+
+            if not file_path or not os.path.exists(file_path):
+                await status_msg.edit_text(f"❌ خطا در دانلود فایل از {platform}.")
+                return
         else:
-            file_path = download_result
-        
-        if not file_path or not os.path.exists(file_path):
-            await status_msg.edit_text(f"❌ خطا در دانلود فایل از {platform}.")
-            return
+            # Album download for Instagram: download all supported medias
+            await status_msg.edit_text(f"⬇️ در حال دانلود {len(medias)} آیتم از {platform}...")
+            album_files = []
+            t_dl_all_start = time.perf_counter()
+            for idx, media in enumerate(medias, start=1):
+                mtype = media.get("type")
+                if mtype not in ("image", "photo", "video"):
+                    continue
+                murl = media.get("url")
+                if not murl:
+                    continue
+                mext = media.get("extension", "mp4" if mtype == "video" else "jpg")
+                safe_title_src = title or platform
+                safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:40])
+                mfilename = f"{safe_title}_{idx}.{mext}"
+                try:
+                    t_dl_start_i = time.perf_counter()
+                    dl_res = await download_file_simple(murl, mfilename)
+                    t_dl_end_i = time.perf_counter()
+                    _log(f"[UNIV] Item {idx} download took {(t_dl_end_i - t_dl_start_i):.2f}s | type={mtype}")
+                    if isinstance(dl_res, tuple):
+                        mp, _ = dl_res
+                    else:
+                        mp = dl_res
+                    if mp and os.path.exists(mp) and os.path.getsize(mp) > 0:
+                        album_files.append((mtype, mp))
+                except Exception as e:
+                    _log(f"[UNIV] Failed downloading item {idx}: {e}")
+                    continue
+            t_dl_all_end = time.perf_counter()
+            _log(f"[UNIV] All album downloads took {(t_dl_all_end - t_dl_all_start):.2f}s | files={len(album_files)}")
+            if not album_files:
+                await status_msg.edit_text(f"❌ هیچ فایل قابل ارسال از {platform} یافت نشد.")
+                return
+
+            # Ensure caption fields exist for album branch
+            media_type = "album"
+            quality = "Unknown"
+            duration_sec = 0
         
         # Prepare caption (trim to safe length)
         caption = f"🎵 **{title}**\n"
@@ -285,47 +378,74 @@ async def handle_universal_link(client: Client, message: Message):
             await send_advertisement(client, message.chat.id)
             await asyncio.sleep(1)  # Wait 1 second after advertisement
         
-        # Upload file based on type
-        await status_msg.edit_text(f"📤 در حال ارسال فایل {platform}...")
+        # Upload file(s) based on type
+        await status_msg.edit_text(f"📤 در حال ارسال {'آلبوم' if is_album else 'فایل'} {platform}...")
         
         try:
+            t_up_start = time.perf_counter()
             # Decide upload method based on media type and extension
             image_exts = ["jpg", "jpeg", "png", "webp"]
             video_exts = ["mp4", "avi", "mov", "mkv", "webm"]
 
-            if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
-                await client.send_photo(
-                    chat_id=message.chat.id,
-                    photo=file_path,
-                    caption=caption,
-                )
-            elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
-                await client.send_video(
-                    chat_id=message.chat.id,
-                    video=file_path,
-                    caption=caption,
-                    duration=duration_sec,
-                    supports_streaming=True
-                )
+            if is_album:
+                media_group = []
+                for idx, (mtype, mp) in enumerate(album_files, start=1):
+                    if mtype in ("image", "photo"):
+                        if idx == 1:
+                            media_group.append(InputMediaPhoto(media=mp, caption=caption))
+                        else:
+                            media_group.append(InputMediaPhoto(media=mp))
+                    elif mtype == "video":
+                        if idx == 1:
+                            media_group.append(InputMediaVideo(media=mp, caption=caption))
+                        else:
+                            media_group.append(InputMediaVideo(media=mp))
+                await client.send_media_group(chat_id=message.chat.id, media=media_group)
             else:
-                await client.send_audio(
-                    chat_id=message.chat.id,
-                    audio=file_path,
-                    caption=caption,
-                    duration=duration_sec,
-                    title=title,
-                    performer=author
-                )
+                if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
+                    await client.send_photo(
+                        chat_id=message.chat.id,
+                        photo=file_path,
+                        caption=caption,
+                    )
+                elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
+                    await client.send_video(
+                        chat_id=message.chat.id,
+                        video=file_path,
+                        caption=caption,
+                        duration=duration_sec,
+                        supports_streaming=True
+                    )
+                else:
+                    await client.send_audio(
+                        chat_id=message.chat.id,
+                        audio=file_path,
+                        caption=caption,
+                        duration=duration_sec,
+                        title=title,
+                        performer=author
+                    )
+            t_up_end = time.perf_counter()
+            _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
         except Exception as upload_error:
             print(f"Upload error: {upload_error}")
-            await client.send_document(
-                chat_id=message.chat.id,
-                document=file_path,
-                caption=_safe_caption(caption, max_len=950)
-            )
+            try:
+                await client.send_document(
+                    chat_id=message.chat.id,
+                    document=file_path if not is_album else album_files[0][1],
+                    caption=_safe_caption(caption, max_len=950)
+                )
+            except Exception as fallback_error:
+                print(f"Fallback upload error: {fallback_error}")
+                await message.reply_text(f"❌ خطا در ارسال فایل از {platform}: {str(upload_error)}")
+                return
         
-        # Delete status message
-        await status_msg.delete()
+        # Delete status message safely
+        try:
+            await status_msg.delete()
+            status_msg = None  # Mark as deleted
+        except Exception:
+            pass
         
         # Send advertisement after content if enabled and position is 'after'
         if ad_enabled and ad_position == 'after':
@@ -336,15 +456,33 @@ async def handle_universal_link(client: Client, message: Message):
         now_str = _dt.now().isoformat(timespec='seconds')
         db.increment_request(user_id, now_str)
         
-        # Clean up downloaded file
+        # Clean up downloaded file(s)
         try:
-            os.remove(file_path)
-        except:
+            if not is_album:
+                os.remove(file_path)
+            else:
+                for _, fp in album_files:
+                    try:
+                        os.remove(fp)
+                    except Exception:
+                        pass
+        except Exception:
             pass
+
+        t_end = time.perf_counter()
+        _log(f"[UNIV] Total processing time: {(t_end - t0):.2f}s")
             
     except Exception as e:
         error_msg = str(e)
         print(f"Universal download error: {error_msg}")
+        
+        # Clean up status message if it still exists
+        try:
+            if 'status_msg' in locals() and status_msg is not None:
+                await status_msg.delete()
+        except Exception:
+            pass
+        
         try:
             if "API Error" in error_msg:
                 await message.reply_text(f"❌ خطا در ارتباط با سرور {platform}. لطفاً بعداً تلاش کنید.")
