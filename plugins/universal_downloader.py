@@ -495,8 +495,7 @@ async def handle_universal_link(client: Client, message: Message):
                             ))
                 await client.send_media_group(
                     chat_id=message.chat.id, 
-                    media=media_group,
-                    progress=_progress_callback
+                    media=media_group
                 )
             else:
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):

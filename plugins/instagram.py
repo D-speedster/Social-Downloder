@@ -286,7 +286,6 @@ async def download_file_simple(url, file_path):
 
 @Client.on_message(filters.regex(instaregex) & filters.private & join)
 async def download_instagram(_: Client, message: Message):
-    return await handle_universal_link(_, message)
     user_id = message.from_user.id
     url = message.text.strip()
     
