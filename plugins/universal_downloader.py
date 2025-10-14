@@ -19,6 +19,8 @@ from datetime import datetime as _dt
 import logging
 import requests
 import time
+from PIL import Image
+import subprocess
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -116,6 +118,79 @@ def get_universal_data_from_api(url):
     except Exception as e:
         universal_logger.error(f"API Error for URL {url}: {e}")
         return None
+
+def _extract_video_metadata(video_path: str):
+    """Extract video metadata including dimensions and conditionally generate thumbnail"""
+    try:
+        # Try to get video info using ffprobe (if available)
+        try:
+            cmd = [
+                'ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', video_path
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                data = json.loads(result.stdout)
+                video_stream = None
+                for stream in data.get('streams', []):
+                    if stream.get('codec_type') == 'video':
+                        video_stream = stream
+                        break
+                
+                if video_stream:
+                    width = int(video_stream.get('width', 0))
+                    height = int(video_stream.get('height', 0))
+                    duration = float(video_stream.get('duration', 0))
+                    
+                    # Only generate thumbnail for larger files (>10MB) to improve performance
+                    file_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+                    thumbnail_path = None
+                    
+                    if file_size > 10 * 1024 * 1024:  # 10MB threshold
+                        thumbnail_path = video_path.rsplit('.', 1)[0] + '_thumb.jpg'
+                        thumb_cmd = [
+                            'ffmpeg', '-i', video_path, '-ss', '00:00:01', '-vframes', '1', 
+                            '-y', thumbnail_path
+                        ]
+                        thumb_result = subprocess.run(thumb_cmd, capture_output=True, timeout=10)
+                        
+                        if thumb_result.returncode != 0 or not os.path.exists(thumbnail_path):
+                            thumbnail_path = None
+                    
+                    return {
+                        'width': width,
+                        'height': height,
+                        'duration': int(duration),
+                        'thumbnail': thumbnail_path
+                    }
+        except Exception:
+            pass
+        
+        # Fallback: try to get basic info from file
+        return {
+            'width': 0,
+            'height': 0,
+            'duration': 0,
+            'thumbnail': None
+        }
+    except Exception:
+        return {
+            'width': 0,
+            'height': 0,
+            'duration': 0,
+            'thumbnail': None
+        }
+
+def _progress_callback(current, total):
+    """Optimized progress callback for upload tracking"""
+    try:
+        # Only log at specific thresholds to reduce overhead
+        if current == total:  # 100% completion
+            univ_logger.info(f"Upload completed: {current} bytes")
+        elif current > 0 and (current * 10) % total == 0:  # Every 10% without float division
+            percentage = (current * 100) // total
+            univ_logger.info(f"Upload progress: {percentage}% ({current}/{total} bytes)")
+    except Exception:
+        pass
 
 def _fetch_og_media(url: str):
     """Fallback: fetch media via OpenGraph tags for image/video-centric sites (Pinterest/Imgur/Tumblr)."""
@@ -396,25 +471,51 @@ async def handle_universal_link(client: Client, message: Message):
                         else:
                             media_group.append(InputMediaPhoto(media=mp))
                     elif mtype == "video":
+                        # Extract video metadata for better upload performance
+                        video_meta = _extract_video_metadata(mp)
                         if idx == 1:
-                            media_group.append(InputMediaVideo(media=mp, caption=caption))
+                            media_group.append(InputMediaVideo(
+                                media=mp, 
+                                caption=caption,
+                                width=video_meta.get('width', 0) or None,
+                                height=video_meta.get('height', 0) or None,
+                                duration=video_meta.get('duration', 0) or None,
+                                thumb=video_meta.get('thumbnail')
+                            ))
                         else:
-                            media_group.append(InputMediaVideo(media=mp))
-                await client.send_media_group(chat_id=message.chat.id, media=media_group)
+                            media_group.append(InputMediaVideo(
+                                media=mp,
+                                width=video_meta.get('width', 0) or None,
+                                height=video_meta.get('height', 0) or None,
+                                duration=video_meta.get('duration', 0) or None,
+                                thumb=video_meta.get('thumbnail')
+                            ))
+                await client.send_media_group(
+                    chat_id=message.chat.id, 
+                    media=media_group,
+                    progress=_progress_callback
+                )
             else:
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
                     await client.send_photo(
                         chat_id=message.chat.id,
                         photo=file_path,
                         caption=caption,
+                        progress=_progress_callback
                     )
                 elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
+                    # Extract video metadata for better upload performance
+                    video_meta = _extract_video_metadata(file_path)
                     await client.send_video(
                         chat_id=message.chat.id,
                         video=file_path,
                         caption=caption,
-                        duration=duration_sec,
-                        supports_streaming=True
+                        duration=video_meta.get('duration', duration_sec) or duration_sec,
+                        width=video_meta.get('width', 0) or None,
+                        height=video_meta.get('height', 0) or None,
+                        thumb=video_meta.get('thumbnail'),
+                        supports_streaming=True,
+                        progress=_progress_callback
                     )
                 else:
                     await client.send_audio(
@@ -423,7 +524,8 @@ async def handle_universal_link(client: Client, message: Message):
                         caption=caption,
                         duration=duration_sec,
                         title=title,
-                        performer=author
+                        performer=author,
+                        progress=_progress_callback
                     )
             t_up_end = time.perf_counter()
             _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
@@ -456,14 +558,22 @@ async def handle_universal_link(client: Client, message: Message):
         now_str = _dt.now().isoformat(timespec='seconds')
         db.increment_request(user_id, now_str)
         
-        # Clean up downloaded file(s)
+        # Clean up downloaded file(s) and thumbnails
         try:
             if not is_album:
                 os.remove(file_path)
+                # Clean up thumbnail if exists
+                thumb_path = file_path.rsplit('.', 1)[0] + '_thumb.jpg'
+                if os.path.exists(thumb_path):
+                    os.remove(thumb_path)
             else:
                 for _, fp in album_files:
                     try:
                         os.remove(fp)
+                        # Clean up thumbnail if exists
+                        thumb_path = fp.rsplit('.', 1)[0] + '_thumb.jpg'
+                        if os.path.exists(thumb_path):
+                            os.remove(thumb_path)
                     except Exception:
                         pass
         except Exception:
