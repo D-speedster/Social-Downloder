@@ -540,19 +540,22 @@ async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
         
         # Save changes to database
         try:
-            # Create backup before writing
-            backup_path = PATH + '/database.json.bak'
-            if os.path.exists(PATH + '/database.json'):
-                shutil.copy2(PATH + '/database.json', backup_path)
+            from .db_path_manager import db_path_manager
+            json_db_path = db_path_manager.get_json_db_path()
             
-            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+            # Create backup before writing
+            backup_path = json_db_path + '.bak'
+            if os.path.exists(json_db_path):
+                shutil.copy2(json_db_path, backup_path)
+            
+            with open(json_db_path, 'w', encoding='utf-8') as outfile:
                 json.dump(data, outfile, indent=4, ensure_ascii=False)
         except Exception as e:
             print(f"Failed to write status change: {e}")
             # Try to restore backup if write failed
             try:
                 if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, PATH + '/database.json')
+                    shutil.copy2(backup_path, json_db_path)
             except Exception:
                 pass
             await callback_query.answer("❌ خطا در ذخیره تغییرات!", show_alert=True)
@@ -1138,9 +1141,12 @@ async def set_sp(_: Client, message: Message):
          return
 
      data['sponser'] = val
-     with open(PATH + '/database.json', "w", encoding='utf-8') as outfile:
+     from .db_path_manager import db_path_manager
+     json_db_path = db_path_manager.get_json_db_path()
+     
+     with open(json_db_path, "w", encoding='utf-8') as outfile:
          json.dump(data, outfile, indent=4, ensure_ascii=False)
-         await message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
+     await message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
      admin_step['sp'] = 0
 
 
@@ -1417,17 +1423,20 @@ async def admin_ad_position_handler(_: Client, message: Message):
 
         # Persist to database.json safely
         try:
-            backup_path = PATH + '/database.json.bak'
-            if os.path.exists(PATH + '/database.json'):
-                shutil.copy2(PATH + '/database.json', backup_path)
+            from .db_path_manager import db_path_manager
+            json_db_path = db_path_manager.get_json_db_path()
+            
+            backup_path = json_db_path + '.bak'
+            if os.path.exists(json_db_path):
+                shutil.copy2(json_db_path, backup_path)
             data['advertisement'] = ad_settings
-            with open(PATH + '/database.json', 'w', encoding='utf-8') as outfile:
+            with open(json_db_path, 'w', encoding='utf-8') as outfile:
                 json.dump(data, outfile, indent=4, ensure_ascii=False)
         except Exception as e:
             print(f"[ADMIN] Failed to save advertisement settings: {e}")
             try:
                 if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, PATH + '/database.json')
+                    shutil.copy2(backup_path, json_db_path)
             except Exception:
                 pass
             await message.reply_text("❌ خطا در ذخیره تنظیمات تبلیغات.")

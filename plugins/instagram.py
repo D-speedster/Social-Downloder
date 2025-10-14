@@ -38,7 +38,10 @@ async def send_advertisement(client: Client, user_id: int):
     """Send advertisement to user based on database settings"""
     try:
         # Load advertisement settings from database
-        with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
+        from .db_path_manager import db_path_manager
+        json_db_path = db_path_manager.get_json_db_path()
+        
+        with open(json_db_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
         ad_settings = data.get('advertisement', {})
@@ -419,7 +422,10 @@ async def download_instagram(_: Client, message: Message):
         
         # Check advertisement settings for position
         try:
-            with open(PATH + '/database.json', 'r', encoding='utf-8') as f:
+            from .db_path_manager import db_path_manager
+            json_db_path = db_path_manager.get_json_db_path()
+            
+            with open(json_db_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             ad_settings = data.get('advertisement', {})
             ad_enabled = ad_settings.get('enabled', False)

@@ -440,7 +440,10 @@ async def handle_universal_link(client: Client, message: Message):
         ad_enabled = False
         ad_position = 'after'  # default
         try:
-            with open('plugins/database.json', 'r', encoding='utf-8') as f:
+            from .db_path_manager import db_path_manager
+            json_db_path = db_path_manager.get_json_db_path()
+            
+            with open(json_db_path, 'r', encoding='utf-8') as f:
                 db_data = json.load(f)
             ad_settings = db_data.get('advertisement', {})
             ad_enabled = ad_settings.get('enabled', False)

@@ -41,13 +41,14 @@ class DB:
                 print(f"MySQL connection failed: {error}")
                 print("Falling back to SQLite database...")
                 
-        # Fallback to SQLite with better security
-        db_path = os.path.join(os.path.dirname(__file__), 'bot_database.db')
+        # Fallback to SQLite with better security using external path
+        from .db_path_manager import db_path_manager
         
-        # Security: Ensure database directory exists and has proper permissions
-        db_dir = os.path.dirname(db_path)
-        if not os.path.exists(db_dir):
-            os.makedirs(db_dir, mode=0o750)  # Restrict directory permissions
+        # Ensure database directory exists and migrate if needed
+        db_path_manager.ensure_database_directory()
+        db_path_manager.migrate_existing_database()
+        
+        db_path = db_path_manager.get_sqlite_db_path()
             
         self.mydb = sqlite3.connect(
             db_path, 

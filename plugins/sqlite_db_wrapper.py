@@ -2,14 +2,20 @@ import sqlite3
 import os
 from datetime import datetime, date
 from datetime import datetime as _dt, timedelta as _td
+from .db_path_manager import db_path_manager
 
 
 class DB:
     def __init__(self):
-        # Create database file in the plugins directory
-        db_path = os.path.join(os.path.dirname(__file__), 'bot_database.db')
+        # Use external database path based on OS
+        db_path_manager.ensure_database_directory()
+        db_path_manager.migrate_existing_database()
+        
+        db_path = db_path_manager.get_sqlite_db_path()
         self.mydb = sqlite3.connect(db_path, check_same_thread=False)
         self.cursor = self.mydb.cursor()
+        
+        print(f"SQLite database connected at: {db_path}")
 
     def setup(self) -> None:
         try:
