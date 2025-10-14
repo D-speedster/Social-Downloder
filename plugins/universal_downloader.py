@@ -140,32 +140,51 @@ def get_platform_name(url):
         return "Radio Javan"
     return "Unknown"
 
-def get_universal_data_from_api(url):
-    """Get media data from the universal API for Spotify, TikTok, and SoundCloud"""
+async def get_universal_data_from_api(url):
+    """Get media data from the universal API for Spotify, TikTok, and SoundCloud with timeout"""
     try:
-        conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com")
-        
-        payload = json.dumps({"url": url})
-        
-        headers = {
-            'x-rapidapi-key': "d51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf",
-            'x-rapidapi-host': "social-download-all-in-one.p.rapidapi.com",
-            'Content-Type': "application/json"
-        }
-        
-        conn.request("POST", "/v1/social/autolink", payload, headers)
-        res = conn.getresponse()
-        data = res.read()
-        
-        conn.close()
-        
-        response_data = json.loads(data.decode("utf-8"))
-        universal_logger.info(f"API Response received for URL: {url}")
-        universal_logger.debug(f"API Response data: {response_data}")
-        return response_data
+        # Use asyncio.wait_for with 3 second timeout
+        return await asyncio.wait_for(_api_request_sync(url), timeout=3.0)
+    except asyncio.TimeoutError:
+        universal_logger.warning(f"API timeout for URL: {url}")
+        return None
     except Exception as e:
         universal_logger.error(f"API Error for URL {url}: {e}")
         return None
+
+def _api_request_sync(url):
+    """Synchronous API request wrapped for async execution"""
+    import concurrent.futures
+    
+    def _make_request():
+        try:
+            conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com", timeout=2.5)
+            
+            payload = json.dumps({"url": url})
+            
+            headers = {
+                'x-rapidapi-key': "d51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf",
+                'x-rapidapi-host': "social-download-all-in-one.p.rapidapi.com",
+                'Content-Type': "application/json"
+            }
+            
+            conn.request("POST", "/v1/social/autolink", payload, headers)
+            res = conn.getresponse()
+            data = res.read()
+            
+            conn.close()
+            
+            response_data = json.loads(data.decode("utf-8"))
+            universal_logger.info(f"API Response received for URL: {url}")
+            return response_data
+        except Exception as e:
+            universal_logger.error(f"API request failed for URL {url}: {e}")
+            return None
+    
+    # Run in thread pool to avoid blocking
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        return loop.run_in_executor(executor, _make_request)
 
 def _extract_video_metadata(video_path: str):
     """Fast stub: avoid ffmpeg/ffprobe calls and thumbnail generation.
@@ -197,35 +216,55 @@ def _progress_callback(current, total):
     except Exception:
         pass
 
-def _fetch_og_media(url: str):
-    """Fallback: fetch media via OpenGraph tags for image/video-centric sites (Pinterest/Imgur/Tumblr)."""
+async def _fetch_og_media(url: str):
+    """Fallback: fetch media via OpenGraph tags with timeout"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
-        }
-        resp = requests.get(url, headers=headers, timeout=12)
-        html = resp.text
-        # Try og:video first
-        import re as _re
-        vid = _re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
-        if vid:
-            vurl = vid.group(1)
-            ext = 'mp4' if '.mp4' in vurl else 'mp4'
-            return { 'url': vurl, 'extension': ext, 'type': 'video', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
-        img = _re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
-        if img:
-            iurl = img.group(1)
-            # Prefer original image if Pinterest provides srcset
-            ext = 'jpg'
-            if '.png' in iurl:
-                ext = 'png'
-            elif '.webp' in iurl:
-                ext = 'webp'
-            return { 'url': iurl, 'extension': ext, 'type': 'image', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
+        # Use asyncio.wait_for with 2.5 second timeout
+        return await asyncio.wait_for(_og_request_sync(url), timeout=2.5)
+    except asyncio.TimeoutError:
+        universal_logger.warning(f"OG fallback timeout for URL: {url}")
         return None
     except Exception as e:
         universal_logger.warning(f"OG fetch fallback failed for {url}: {e}")
         return None
+
+def _og_request_sync(url: str):
+    """Synchronous OG request wrapped for async execution"""
+    import concurrent.futures
+    
+    def _make_og_request():
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
+            }
+            resp = requests.get(url, headers=headers, timeout=2.0)
+            html = resp.text
+            # Try og:video first
+            import re as _re
+            vid = _re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+            if vid:
+                vurl = vid.group(1)
+                ext = 'mp4' if '.mp4' in vurl else 'mp4'
+                return { 'url': vurl, 'extension': ext, 'type': 'video', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
+            img = _re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+            if img:
+                iurl = img.group(1)
+                # Prefer original image if Pinterest provides srcset
+                ext = 'jpg'
+                if '.png' in iurl:
+                    ext = 'png'
+                elif '.webp' in iurl:
+                    ext = 'webp'
+                return { 'url': iurl, 'extension': ext, 'type': 'image', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
+            return None
+        except Exception as e:
+            universal_logger.warning(f"OG request failed: {e}")
+            return None
+    
+    # Run in thread pool to avoid blocking
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        return loop.run_in_executor(executor, _make_og_request)
 
 async def handle_universal_link(client: Client, message: Message):
     """Handle downloads for Spotify, TikTok, and SoundCloud links"""
@@ -262,43 +301,71 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Advertisement will be handled later in the process
         
-        # Get data from API with retry
+        # Get data from API with optimized parallel approach
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
         api_data = None
-        last_api_error_message = None
-        for attempt in range(2):
-            t_api_start = time.perf_counter()
-            tmp_data = get_universal_data_from_api(url)
-            t_api_end = time.perf_counter()
-            _log(f"[UNIV] API fetch attempt {attempt+1}/2 took {(t_api_end - t_api_start):.2f}s")
-            invalid = (not tmp_data or tmp_data.get("error", False) or tmp_data.get("data", {}).get("error", False) or not tmp_data.get("medias"))
-            if not invalid:
-                api_data = tmp_data
-                break
-            else:
-                api_data = tmp_data  # keep last for message context
-                last_api_error_message = (tmp_data.get("message") if tmp_data else "No response") or "Not found data"
-                _log(f"[UNIV] API invalid on attempt {attempt+1}/2: {last_api_error_message}")
-                if attempt < 1:
-                    await asyncio.sleep(1.2)
-
-        # Fallback holder
         fallback_media = None
-
-        # If API still invalid after retries, try OG fallback for Instagram before failing
-        if api_data and (api_data.get("error", False) or api_data.get("data", {}).get("error", False)):
-            error_message = api_data.get("message", last_api_error_message or "خطای نامشخص")
-            if platform == "Instagram":
-                await status_msg.edit_text("📡 API خطا داد؛ تلاش برای استخراج مستقیم Instagram...")
-                og = _fetch_og_media(url)
-                if og:
-                    fallback_media = og
-                else:
-                    await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
-                    return
-            else:
-                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {error_message}")
-                return
+        
+        # Create tasks for API and fallback (if Instagram)
+        tasks = []
+        api_task = asyncio.create_task(get_universal_data_from_api(url))
+        tasks.append(("api", api_task))
+        
+        # Only add fallback for Instagram
+        if platform == "Instagram":
+            fallback_task = asyncio.create_task(_fetch_og_media(url))
+            tasks.append(("fallback", fallback_task))
+        
+        # Wait for first successful result
+        completed_tasks = []
+        try:
+            for task_name, task in tasks:
+                try:
+                    result = await task
+                    completed_tasks.append((task_name, result))
+                    
+                    # Check if API result is valid
+                    if task_name == "api" and result:
+                        invalid = (result.get("error", False) or 
+                                 result.get("data", {}).get("error", False) or 
+                                 not result.get("medias"))
+                        if not invalid:
+                            api_data = result
+                            # Cancel remaining tasks
+                            for remaining_name, remaining_task in tasks:
+                                if remaining_name != task_name and not remaining_task.done():
+                                    remaining_task.cancel()
+                            break
+                    
+                    # Check if fallback result is valid
+                    elif task_name == "fallback" and result:
+                        fallback_media = result
+                        # If API hasn't succeeded yet, use fallback
+                        if not api_data:
+                            # Cancel API task if still running
+                            for remaining_name, remaining_task in tasks:
+                                if remaining_name == "api" and not remaining_task.done():
+                                    remaining_task.cancel()
+                            break
+                            
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    _log(f"[UNIV] {task_name} task failed: {e}")
+                    
+        except Exception as e:
+            _log(f"[UNIV] Error in parallel API/fallback: {e}")
+        
+        # Check results
+        if not api_data and not fallback_media:
+            error_msg = "خطا در دریافت اطلاعات"
+            if completed_tasks:
+                for task_name, result in completed_tasks:
+                    if result and isinstance(result, dict):
+                        error_msg = result.get("message", error_msg)
+                        break
+            await status_msg.edit_text(f"❌ {error_msg} از {platform}")
+            return
 
         # Debug logging for API response
         _log(f"[UNIV] API data check: api_data exists={api_data is not None}")
@@ -388,10 +455,10 @@ async def handle_universal_link(client: Client, message: Message):
             safe_title_src = title or selected_media.get('title') or platform
             filename = _safe_filename(safe_title_src, file_extension)
 
-            # Download file
-            await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
+            # Download file - single status message, no updates during retry
+            await status_msg.edit_text(f"📥 در حال دانلود از {platform}...")
             t_dl_start = time.perf_counter()
-            # Retry download up to 3 times
+            # Retry download up to 3 times (silent retries)
             download_result = None
             last_error = None
             for attempt in range(3):
@@ -401,7 +468,8 @@ async def handle_universal_link(client: Client, message: Message):
                 except Exception as e:
                     last_error = e
                     _log(f"[UNIV] Download attempt {attempt+1}/3 failed: {e}")
-                    await asyncio.sleep(1.0)
+                    if attempt < 2:  # Only sleep if not last attempt
+                        await asyncio.sleep(1.0)
             t_dl_end = time.perf_counter()
             _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
 
@@ -419,7 +487,7 @@ async def handle_universal_link(client: Client, message: Message):
                 return
         else:
             # Album download for Instagram: download all supported medias
-            await status_msg.edit_text(f"⬇️ در حال دانلود {len(medias)} آیتم از {platform}...")
+            await status_msg.edit_text(f"📥 در حال دانلود {len(medias)} آیتم از {platform}...")
             album_files = []
             t_dl_all_start = time.perf_counter()
             for idx, media in enumerate(medias, start=1):
@@ -434,7 +502,7 @@ async def handle_universal_link(client: Client, message: Message):
                 mfilename = _safe_filename_with_index(safe_title_src, mext, idx)
                 try:
                     t_dl_start_i = time.perf_counter()
-                    # Retry per-item download up to 3 times
+                    # Retry per-item download up to 3 times (silent retries)
                     dl_res = None
                     per_item_error = None
                     for attempt in range(3):
@@ -444,7 +512,8 @@ async def handle_universal_link(client: Client, message: Message):
                         except Exception as e:
                             per_item_error = e
                             _log(f"[UNIV] Item {idx} attempt {attempt+1}/3 failed: {e}")
-                            await asyncio.sleep(0.8)
+                            if attempt < 2:  # Only sleep if not last attempt
+                                await asyncio.sleep(0.8)
                     t_dl_end_i = time.perf_counter()
                     _log(f"[UNIV] Item {idx} download took {(t_dl_end_i - t_dl_start_i):.2f}s | type={mtype}")
                     if isinstance(dl_res, tuple):
@@ -470,13 +539,10 @@ async def handle_universal_link(client: Client, message: Message):
             quality = "Unknown"
             duration_sec = 0
         
-        # Prepare caption (trim to safe length)
-        caption = f"🎵 **{title}**\n"
-        caption += f"👤 **نویسنده:** {author}\n"
-        caption += f"⏱️ **مدت زمان:** {duration_sec} ثانیه\n"
-        caption += f"🔗 **پلتفرم:** {platform}\n"
-        caption += f"📊 **کیفیت:** {quality}\n"
-        caption += f"📁 **نوع:** {media_type.title()}"
+        # Prepare simplified caption (only 3 essential lines)
+        caption = f"📸 پیج دانلود شده: {author}\n"
+        caption += f"⏱ زمان ویدیو: {duration_sec} ثانیه\n"
+        caption += f"🎞 کیفیت: {quality}"
         caption = _safe_caption(caption, max_len=950)
         
         # Check advertisement settings once
@@ -509,6 +575,8 @@ async def handle_universal_link(client: Client, message: Message):
 
             if is_album:
                 media_group = []
+                # Extract metadata only for first video file to reduce CPU load
+                first_video_meta = None
                 for idx, (mtype, mp) in enumerate(album_files, start=1):
                     if mtype in ("image", "photo"):
                         if idx == 1:
@@ -516,24 +584,27 @@ async def handle_universal_link(client: Client, message: Message):
                         else:
                             media_group.append(InputMediaPhoto(media=mp))
                     elif mtype == "video":
-                        # Extract video metadata for better upload performance
-                        video_meta = _extract_video_metadata(mp)
+                        # Extract metadata only for first video, reuse for others
+                        if first_video_meta is None:
+                            first_video_meta = _extract_video_metadata(mp)
+                        
                         if idx == 1:
                             media_group.append(InputMediaVideo(
                                 media=mp, 
                                 caption=caption,
-                                width=video_meta.get('width', 0) or None,
-                                height=video_meta.get('height', 0) or None,
-                                duration=video_meta.get('duration', 0) or None,
-                                thumb=video_meta.get('thumbnail')
+                                width=first_video_meta.get('width', 0) or None,
+                                height=first_video_meta.get('height', 0) or None,
+                                duration=first_video_meta.get('duration', 0) or None,
+                                thumb=first_video_meta.get('thumbnail')
                             ))
                         else:
+                            # Reuse metadata from first video for performance
                             media_group.append(InputMediaVideo(
                                 media=mp,
-                                width=video_meta.get('width', 0) or None,
-                                height=video_meta.get('height', 0) or None,
-                                duration=video_meta.get('duration', 0) or None,
-                                thumb=video_meta.get('thumbnail')
+                                width=first_video_meta.get('width', 0) or None,
+                                height=first_video_meta.get('height', 0) or None,
+                                duration=first_video_meta.get('duration', 0) or None,
+                                thumb=first_video_meta.get('thumbnail')
                             ))
                 # Measure only the network upload time
                 t_up_start = time.perf_counter()
@@ -575,8 +646,25 @@ async def handle_universal_link(client: Client, message: Message):
                         raise last_upload_error
                     t_up_end = time.perf_counter()
                 elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
-                    # Extract video metadata for better upload performance
-                    video_meta = _extract_video_metadata(file_path)
+                    # Use API metadata if available, otherwise extract from file
+                    video_width = None
+                    video_height = None
+                    video_duration = duration_sec
+                    video_thumb = None
+                    
+                    # Check if we have width/height from API response
+                    if hasattr(data, 'get') and data.get('width') and data.get('height'):
+                        video_width = data.get('width')
+                        video_height = data.get('height')
+                        _log(f"[UNIV] Using API metadata: {video_width}x{video_height}")
+                    else:
+                        # Fallback to ffprobe only if API doesn't provide dimensions
+                        video_meta = _extract_video_metadata(file_path)
+                        video_width = video_meta.get('width', 0) or None
+                        video_height = video_meta.get('height', 0) or None
+                        video_thumb = video_meta.get('thumbnail')
+                        _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
+                    
                     t_up_start = time.perf_counter()
                     last_upload_error = None
                     for attempt in range(3):
@@ -585,10 +673,10 @@ async def handle_universal_link(client: Client, message: Message):
                                 chat_id=message.chat.id,
                                 video=file_path,
                                 caption=caption,
-                                duration=video_meta.get('duration', duration_sec) or duration_sec,
-                                width=video_meta.get('width', 0) or None,
-                                height=video_meta.get('height', 0) or None,
-                                thumb=video_meta.get('thumbnail'),
+                                duration=video_duration,
+                                width=video_width,
+                                height=video_height,
+                                thumb=video_thumb,
                                 supports_streaming=True
                             )
                             last_upload_error = None
@@ -648,33 +736,40 @@ async def handle_universal_link(client: Client, message: Message):
             await asyncio.sleep(1)  # Wait 1 second after upload
             await send_advertisement(client, message.chat.id)
         
-        # Increment download count
-        now_str = _dt.now().isoformat(timespec='seconds')
-        db.increment_request(user_id, now_str)
+        # Run cleanup and stats in background to avoid blocking user
+        async def cleanup_and_stats():
+            try:
+                # Increment download count
+                now_str = _dt.now().isoformat(timespec='seconds')
+                db.increment_request(user_id, now_str)
+                
+                # Clean up downloaded file(s) and thumbnails
+                if not is_album:
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                    # Clean up thumbnail if exists
+                    thumb_path = file_path.rsplit('.', 1)[0] + '_thumb.jpg'
+                    if os.path.exists(thumb_path):
+                        os.remove(thumb_path)
+                else:
+                    for _, fp in album_files:
+                        try:
+                            if os.path.exists(fp):
+                                os.remove(fp)
+                            # Clean up thumbnail if exists
+                            thumb_path = fp.rsplit('.', 1)[0] + '_thumb.jpg'
+                            if os.path.exists(thumb_path):
+                                os.remove(thumb_path)
+                        except Exception:
+                            pass
+                
+                t_end = time.perf_counter()
+                _log(f"[UNIV] Total processing time: {(t_end - t0):.2f}s")
+            except Exception as cleanup_error:
+                _log(f"[UNIV] Cleanup error: {cleanup_error}")
         
-        # Clean up downloaded file(s) and thumbnails
-        try:
-            if not is_album:
-                os.remove(file_path)
-                # Clean up thumbnail if exists
-                thumb_path = file_path.rsplit('.', 1)[0] + '_thumb.jpg'
-                if os.path.exists(thumb_path):
-                    os.remove(thumb_path)
-            else:
-                for _, fp in album_files:
-                    try:
-                        os.remove(fp)
-                        # Clean up thumbnail if exists
-                        thumb_path = fp.rsplit('.', 1)[0] + '_thumb.jpg'
-                        if os.path.exists(thumb_path):
-                            os.remove(thumb_path)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-
-        t_end = time.perf_counter()
-        _log(f"[UNIV] Total processing time: {(t_end - t0):.2f}s")
+        # Start cleanup in background without waiting
+        asyncio.create_task(cleanup_and_stats())
             
     except Exception as e:
         error_msg = str(e)
