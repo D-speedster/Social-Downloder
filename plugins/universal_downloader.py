@@ -56,6 +56,32 @@ def _safe_caption(text: str, max_len: int = 950):
     except Exception:
         return (str(text) or "")[:max_len-1] + "…"
 
+# Generate Windows-safe filenames from titles
+def _safe_filename(name: str, ext: str, max_base_len: int = 80) -> str:
+    try:
+        base = str(name) if name else "file"
+        # Remove control characters (including newlines/tabs)
+        base = re.sub(r"[\x00-\x1F]", " ", base)
+        # Replace invalid Windows filename chars
+        base = re.sub(r"[<>:\"/\\|?*]", "_", base)
+        # Collapse whitespace
+        base = re.sub(r"\s+", " ", base).strip()
+        # Trim trailing spaces/dots
+        base = base.rstrip(" .")
+        # Limit length and avoid empty
+        if not base:
+            base = "file"
+        base = base[:max_base_len]
+        # Avoid reserved device names
+        reserved = {"CON","PRN","AUX","NUL","COM1","COM2","COM3","COM4","COM5","COM6","COM7","COM8","COM9","LPT1","LPT2","LPT3","LPT4","LPT5","LPT6","LPT7","LPT8","LPT9"}
+        if base.upper() in reserved:
+            base = base + "_"
+        # Sanitize extension
+        ext = (ext or "mp4").strip(" .") or "mp4"
+        return f"{base}.{ext}"
+    except Exception:
+        return f"file.{ext or 'mp4'}"
+
 def get_platform_name(url):
     """Determine the platform based on URL (expanded)"""
     if INSTA_REGEX.search(url):
@@ -365,15 +391,24 @@ async def handle_universal_link(client: Client, message: Message):
                 await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
                 return
 
-            # Create filename
+            # Create filename (Windows-safe)
             safe_title_src = title or selected_media.get('title') or platform
-            safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:50])
-            filename = f"{safe_title}.{file_extension}"
+            filename = _safe_filename(safe_title_src, file_extension)
 
             # Download file
             await status_msg.edit_text(f"⬇️ در حال دانلود از {platform}...")
             t_dl_start = time.perf_counter()
-            download_result = await download_file_simple(download_url, filename)
+            # Retry download up to 3 times
+            download_result = None
+            last_error = None
+            for attempt in range(3):
+                try:
+                    download_result = await download_file_simple(download_url, filename)
+                    break
+                except Exception as e:
+                    last_error = e
+                    _log(f"[UNIV] Download attempt {attempt+1}/3 failed: {e}")
+                    await asyncio.sleep(1.0)
             t_dl_end = time.perf_counter()
             _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
 
@@ -384,7 +419,10 @@ async def handle_universal_link(client: Client, message: Message):
                 file_path = download_result
 
             if not file_path or not os.path.exists(file_path):
-                await status_msg.edit_text(f"❌ خطا در دانلود فایل از {platform}.")
+                err_txt = f"❌ خطا در دانلود فایل از {platform}."
+                if last_error:
+                    err_txt += f"\nجزئیات: {last_error}"
+                await status_msg.edit_text(err_txt)
                 return
         else:
             # Album download for Instagram: download all supported medias
@@ -400,11 +438,20 @@ async def handle_universal_link(client: Client, message: Message):
                     continue
                 mext = media.get("extension", "mp4" if mtype == "video" else "jpg")
                 safe_title_src = title or platform
-                safe_title = re.sub(r'[<>:"/\\|?*]', '_', str(safe_title_src)[:40])
-                mfilename = f"{safe_title}_{idx}.{mext}"
+                mfilename = _safe_filename(f"{safe_title_src} {idx}", mext)
                 try:
                     t_dl_start_i = time.perf_counter()
-                    dl_res = await download_file_simple(murl, mfilename)
+                    # Retry per-item download up to 3 times
+                    dl_res = None
+                    per_item_error = None
+                    for attempt in range(3):
+                        try:
+                            dl_res = await download_file_simple(murl, mfilename)
+                            break
+                        except Exception as e:
+                            per_item_error = e
+                            _log(f"[UNIV] Item {idx} attempt {attempt+1}/3 failed: {e}")
+                            await asyncio.sleep(0.8)
                     t_dl_end_i = time.perf_counter()
                     _log(f"[UNIV] Item {idx} download took {(t_dl_end_i - t_dl_start_i):.2f}s | type={mtype}")
                     if isinstance(dl_res, tuple):
@@ -413,6 +460,9 @@ async def handle_universal_link(client: Client, message: Message):
                         mp = dl_res
                     if mp and os.path.exists(mp) and os.path.getsize(mp) > 0:
                         album_files.append((mtype, mp))
+                    else:
+                        if per_item_error:
+                            _log(f"[UNIV] Item {idx} failed after retries: {per_item_error}")
                 except Exception as e:
                     _log(f"[UNIV] Failed downloading item {idx}: {e}")
                     continue
@@ -499,36 +549,67 @@ async def handle_universal_link(client: Client, message: Message):
                 )
             else:
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
-                    await client.send_photo(
-                        chat_id=message.chat.id,
-                        photo=file_path,
-                        caption=caption,
-                        progress=_progress_callback
-                    )
+                    # Retry photo upload up to 3 times
+                    last_upload_error = None
+                    for attempt in range(3):
+                        try:
+                            await client.send_photo(
+                                chat_id=message.chat.id,
+                                photo=file_path,
+                                caption=caption
+                            )
+                            last_upload_error = None
+                            break
+                        except Exception as e:
+                            last_upload_error = e
+                            _log(f"[UNIV] send_photo attempt {attempt+1}/3 failed: {e}")
+                            await asyncio.sleep(0.8)
+                    if last_upload_error:
+                        raise last_upload_error
                 elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
                     # Extract video metadata for better upload performance
                     video_meta = _extract_video_metadata(file_path)
-                    await client.send_video(
-                        chat_id=message.chat.id,
-                        video=file_path,
-                        caption=caption,
-                        duration=video_meta.get('duration', duration_sec) or duration_sec,
-                        width=video_meta.get('width', 0) or None,
-                        height=video_meta.get('height', 0) or None,
-                        thumb=video_meta.get('thumbnail'),
-                        supports_streaming=True,
-                        progress=_progress_callback
-                    )
+                    last_upload_error = None
+                    for attempt in range(3):
+                        try:
+                            await client.send_video(
+                                chat_id=message.chat.id,
+                                video=file_path,
+                                caption=caption,
+                                duration=video_meta.get('duration', duration_sec) or duration_sec,
+                                width=video_meta.get('width', 0) or None,
+                                height=video_meta.get('height', 0) or None,
+                                thumb=video_meta.get('thumbnail'),
+                                supports_streaming=True
+                            )
+                            last_upload_error = None
+                            break
+                        except Exception as e:
+                            last_upload_error = e
+                            _log(f"[UNIV] send_video attempt {attempt+1}/3 failed: {e}")
+                            await asyncio.sleep(0.8)
+                    if last_upload_error:
+                        raise last_upload_error
                 else:
-                    await client.send_audio(
-                        chat_id=message.chat.id,
-                        audio=file_path,
-                        caption=caption,
-                        duration=duration_sec,
-                        title=title,
-                        performer=author,
-                        progress=_progress_callback
-                    )
+                    last_upload_error = None
+                    for attempt in range(3):
+                        try:
+                            await client.send_audio(
+                                chat_id=message.chat.id,
+                                audio=file_path,
+                                caption=caption,
+                                duration=duration_sec,
+                                title=title,
+                                performer=author
+                            )
+                            last_upload_error = None
+                            break
+                        except Exception as e:
+                            last_upload_error = e
+                            _log(f"[UNIV] send_audio attempt {attempt+1}/3 failed: {e}")
+                            await asyncio.sleep(0.8)
+                    if last_upload_error:
+                        raise last_upload_error
             t_up_end = time.perf_counter()
             _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
         except Exception as upload_error:
