@@ -82,6 +82,28 @@ def _safe_filename(name: str, ext: str, max_base_len: int = 80) -> str:
     except Exception:
         return f"file.{ext or 'mp4'}"
 
+# Generate Windows-safe filenames with index suffix preserved
+def _safe_filename_with_index(name: str, ext: str, idx: int, max_base_len: int = 80) -> str:
+    try:
+        suffix = f"_{idx}"
+        base = str(name) if name else "file"
+        base = re.sub(r"[\x00-\x1F]", " ", base)
+        base = re.sub(r"[<>:\"/\\|?*]", "_", base)
+        base = re.sub(r"\s+", " ", base).strip()
+        base = base.rstrip(" .")
+        if not base:
+            base = "file"
+        # Ensure we keep room for suffix
+        room = max(1, max_base_len - len(suffix))
+        base = base[:room]
+        reserved = {"CON","PRN","AUX","NUL","COM1","COM2","COM3","COM4","COM5","COM6","COM7","COM8","COM9","LPT1","LPT2","LPT3","LPT4","LPT5","LPT6","LPT7","LPT8","LPT9"}
+        if base.upper() in reserved:
+            base = base + "_"
+        ext = (ext or "mp4").strip(" .") or "mp4"
+        return f"{base}{suffix}.{ext}"
+    except Exception:
+        return f"file_{idx}.{ext or 'mp4'}"
+
 def get_platform_name(url):
     """Determine the platform based on URL (expanded)"""
     if INSTA_REGEX.search(url):
@@ -283,19 +305,32 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Advertisement will be handled later in the process
         
-        # Get data from API
+        # Get data from API with retry
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
-        t_api_start = time.perf_counter()
-        api_data = get_universal_data_from_api(url)
-        t_api_end = time.perf_counter()
-        _log(f"[UNIV] API fetch took {(t_api_end - t_api_start):.2f}s")
+        api_data = None
+        last_api_error_message = None
+        for attempt in range(2):
+            t_api_start = time.perf_counter()
+            tmp_data = get_universal_data_from_api(url)
+            t_api_end = time.perf_counter()
+            _log(f"[UNIV] API fetch attempt {attempt+1}/2 took {(t_api_end - t_api_start):.2f}s")
+            invalid = (not tmp_data or tmp_data.get("error", False) or tmp_data.get("data", {}).get("error", False) or not tmp_data.get("medias"))
+            if not invalid:
+                api_data = tmp_data
+                break
+            else:
+                api_data = tmp_data  # keep last for message context
+                last_api_error_message = (tmp_data.get("message") if tmp_data else "No response") or "Not found data"
+                _log(f"[UNIV] API invalid on attempt {attempt+1}/2: {last_api_error_message}")
+                if attempt < 1:
+                    await asyncio.sleep(1.2)
 
         # Fallback holder
         fallback_media = None
 
-        # If API errors, try OG fallback for Instagram before failing
+        # If API still invalid after retries, try OG fallback for Instagram before failing
         if api_data and (api_data.get("error", False) or api_data.get("data", {}).get("error", False)):
-            error_message = api_data.get("message", "خطای نامشخص")
+            error_message = api_data.get("message", last_api_error_message or "خطای نامشخص")
             if platform == "Instagram":
                 await status_msg.edit_text("📡 API خطا داد؛ تلاش برای استخراج مستقیم Instagram...")
                 og = _fetch_og_media(url)
@@ -317,7 +352,7 @@ async def handle_universal_link(client: Client, message: Message):
                 _log(f"[UNIV] Medias count: {len(api_data.get('medias', []))}")
                 _log(f"[UNIV] Medias content: {api_data.get('medias', [])}")
 
-        # If API returned nothing, expand fallback to include Instagram
+        # If API returned nothing after retries, expand fallback to include Instagram
         if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr", "Instagram"):
             _log(f"[UNIV] Entering fallback mode for {platform}")
             await status_msg.edit_text(f"📡 API چیزی برنگرداند؛ تلاش برای استخراج مستقیم {platform}...")
@@ -325,7 +360,8 @@ async def handle_universal_link(client: Client, message: Message):
             if og:
                 fallback_media = og
             else:
-                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید.")
+                err_msg = last_api_error_message or "لطفاً لینک را بررسی کنید."
+                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {err_msg}")
                 return
         
         # Extract media information
@@ -438,7 +474,7 @@ async def handle_universal_link(client: Client, message: Message):
                     continue
                 mext = media.get("extension", "mp4" if mtype == "video" else "jpg")
                 safe_title_src = title or platform
-                mfilename = _safe_filename(f"{safe_title_src} {idx}", mext)
+                mfilename = _safe_filename_with_index(safe_title_src, mext, idx)
                 try:
                     t_dl_start_i = time.perf_counter()
                     # Retry per-item download up to 3 times
@@ -543,10 +579,21 @@ async def handle_universal_link(client: Client, message: Message):
                                 duration=video_meta.get('duration', 0) or None,
                                 thumb=video_meta.get('thumbnail')
                             ))
-                await client.send_media_group(
-                    chat_id=message.chat.id, 
-                    media=media_group
-                )
+                last_group_error = None
+                for attempt in range(3):
+                    try:
+                        await client.send_media_group(
+                            chat_id=message.chat.id,
+                            media=media_group
+                        )
+                        last_group_error = None
+                        break
+                    except Exception as e:
+                        last_group_error = e
+                        _log(f"[UNIV] send_media_group attempt {attempt+1}/3 failed: {e}")
+                        await asyncio.sleep(0.8)
+                if last_group_error:
+                    raise last_group_error
             else:
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
                     # Retry photo upload up to 3 times
