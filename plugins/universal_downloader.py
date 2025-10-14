@@ -168,52 +168,9 @@ def get_universal_data_from_api(url):
         return None
 
 def _extract_video_metadata(video_path: str):
-    """Extract video metadata including dimensions and conditionally generate thumbnail"""
+    """Fast stub: avoid ffmpeg/ffprobe calls and thumbnail generation.
+    Returns placeholder metadata to minimize pre-upload overhead."""
     try:
-        # Try to get video info using ffprobe (if available)
-        try:
-            cmd = [
-                'ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', video_path
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                data = json.loads(result.stdout)
-                video_stream = None
-                for stream in data.get('streams', []):
-                    if stream.get('codec_type') == 'video':
-                        video_stream = stream
-                        break
-                
-                if video_stream:
-                    width = int(video_stream.get('width', 0))
-                    height = int(video_stream.get('height', 0))
-                    duration = float(video_stream.get('duration', 0))
-                    
-                    # Only generate thumbnail for larger files (>10MB) to improve performance
-                    file_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
-                    thumbnail_path = None
-                    
-                    if file_size > 10 * 1024 * 1024:  # 10MB threshold
-                        thumbnail_path = video_path.rsplit('.', 1)[0] + '_thumb.jpg'
-                        thumb_cmd = [
-                            'ffmpeg', '-i', video_path, '-ss', '00:00:01', '-vframes', '1', 
-                            '-y', thumbnail_path
-                        ]
-                        thumb_result = subprocess.run(thumb_cmd, capture_output=True, timeout=10)
-                        
-                        if thumb_result.returncode != 0 or not os.path.exists(thumbnail_path):
-                            thumbnail_path = None
-                    
-                    return {
-                        'width': width,
-                        'height': height,
-                        'duration': int(duration),
-                        'thumbnail': thumbnail_path
-                    }
-        except Exception:
-            pass
-        
-        # Fallback: try to get basic info from file
         return {
             'width': 0,
             'height': 0,
@@ -546,7 +503,6 @@ async def handle_universal_link(client: Client, message: Message):
         await status_msg.edit_text(f"📤 در حال ارسال {'آلبوم' if is_album else 'فایل'} {platform}...")
         
         try:
-            t_up_start = time.perf_counter()
             # Decide upload method based on media type and extension
             image_exts = ["jpg", "jpeg", "png", "webp"]
             video_exts = ["mp4", "avi", "mov", "mkv", "webm"]
@@ -579,6 +535,8 @@ async def handle_universal_link(client: Client, message: Message):
                                 duration=video_meta.get('duration', 0) or None,
                                 thumb=video_meta.get('thumbnail')
                             ))
+                # Measure only the network upload time
+                t_up_start = time.perf_counter()
                 last_group_error = None
                 for attempt in range(3):
                     try:
@@ -594,9 +552,11 @@ async def handle_universal_link(client: Client, message: Message):
                         await asyncio.sleep(0.8)
                 if last_group_error:
                     raise last_group_error
+                t_up_end = time.perf_counter()
             else:
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
                     # Retry photo upload up to 3 times
+                    t_up_start = time.perf_counter()
                     last_upload_error = None
                     for attempt in range(3):
                         try:
@@ -613,9 +573,11 @@ async def handle_universal_link(client: Client, message: Message):
                             await asyncio.sleep(0.8)
                     if last_upload_error:
                         raise last_upload_error
+                    t_up_end = time.perf_counter()
                 elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
                     # Extract video metadata for better upload performance
                     video_meta = _extract_video_metadata(file_path)
+                    t_up_start = time.perf_counter()
                     last_upload_error = None
                     for attempt in range(3):
                         try:
@@ -637,7 +599,9 @@ async def handle_universal_link(client: Client, message: Message):
                             await asyncio.sleep(0.8)
                     if last_upload_error:
                         raise last_upload_error
+                    t_up_end = time.perf_counter()
                 else:
+                    t_up_start = time.perf_counter()
                     last_upload_error = None
                     for attempt in range(3):
                         try:
@@ -657,7 +621,7 @@ async def handle_universal_link(client: Client, message: Message):
                             await asyncio.sleep(0.8)
                     if last_upload_error:
                         raise last_upload_error
-            t_up_end = time.perf_counter()
+                    t_up_end = time.perf_counter()
             _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
         except Exception as upload_error:
             print(f"Upload error: {upload_error}")
