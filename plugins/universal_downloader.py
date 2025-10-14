@@ -305,6 +305,7 @@ async def handle_universal_link(client: Client, message: Message):
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
         api_data = None
         fallback_media = None
+        last_api_error_message = None
         
         # Create tasks for API and fallback (if Instagram)
         tasks = []
@@ -336,6 +337,10 @@ async def handle_universal_link(client: Client, message: Message):
                                 if remaining_name != task_name and not remaining_task.done():
                                     remaining_task.cancel()
                             break
+                        else:
+                            # Store error message for later use
+                            if result.get("message"):
+                                last_api_error_message = result.get("message")
                     
                     # Check if fallback result is valid
                     elif task_name == "fallback" and result:
@@ -352,13 +357,15 @@ async def handle_universal_link(client: Client, message: Message):
                     pass
                 except Exception as e:
                     _log(f"[UNIV] {task_name} task failed: {e}")
+                    if task_name == "api":
+                        last_api_error_message = str(e)
                     
         except Exception as e:
             _log(f"[UNIV] Error in parallel API/fallback: {e}")
         
         # Check results
         if not api_data and not fallback_media:
-            error_msg = "خطا در دریافت اطلاعات"
+            error_msg = last_api_error_message or "خطا در دریافت اطلاعات"
             if completed_tasks:
                 for task_name, result in completed_tasks:
                     if result and isinstance(result, dict):
@@ -376,14 +383,24 @@ async def handle_universal_link(client: Client, message: Message):
                 _log(f"[UNIV] Medias count: {len(api_data.get('medias', []))}")
                 _log(f"[UNIV] Medias content: {api_data.get('medias', [])}")
 
-        # If API returned nothing after retries, expand fallback to include Instagram
+        # If API returned nothing after retries, try fallback for supported platforms
         if (not api_data or "medias" not in api_data or not api_data.get("medias")) and platform in ("Pinterest", "Imgur", "Tumblr", "Instagram"):
             _log(f"[UNIV] Entering fallback mode for {platform}")
             await status_msg.edit_text(f"📡 API چیزی برنگرداند؛ تلاش برای استخراج مستقیم {platform}...")
-            og = _fetch_og_media(url)
-            if og:
-                fallback_media = og
-            else:
+            
+            # Try fallback if not already tried
+            if not fallback_media:
+                try:
+                    og = await _fetch_og_media(url)
+                    if og:
+                        fallback_media = og
+                        _log(f"[UNIV] Fallback successful for {platform}")
+                    else:
+                        _log(f"[UNIV] Fallback failed for {platform}")
+                except Exception as e:
+                    _log(f"[UNIV] Fallback error for {platform}: {e}")
+            
+            if not fallback_media:
                 err_msg = last_api_error_message or "لطفاً لینک را بررسی کنید."
                 await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {err_msg}")
                 return
@@ -458,18 +475,18 @@ async def handle_universal_link(client: Client, message: Message):
             # Download file - single status message, no updates during retry
             await status_msg.edit_text(f"📥 در حال دانلود از {platform}...")
             t_dl_start = time.perf_counter()
-            # Retry download up to 3 times (silent retries)
+            # Retry download up to 2 times for faster processing
             download_result = None
             last_error = None
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
                     download_result = await download_file_simple(download_url, filename)
                     break
                 except Exception as e:
                     last_error = e
-                    _log(f"[UNIV] Download attempt {attempt+1}/3 failed: {e}")
-                    if attempt < 2:  # Only sleep if not last attempt
-                        await asyncio.sleep(1.0)
+                    _log(f"[UNIV] Download attempt {attempt+1}/2 failed: {e}")
+                    if attempt < 1:  # Only sleep if not last attempt
+                        await asyncio.sleep(0.5)  # Shorter wait time
             t_dl_end = time.perf_counter()
             _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
 
@@ -653,21 +670,40 @@ async def handle_universal_link(client: Client, message: Message):
                     video_thumb = None
                     
                     # Check if we have width/height from API response
-                    if hasattr(data, 'get') and data.get('width') and data.get('height'):
-                        video_width = data.get('width')
-                        video_height = data.get('height')
+                    if hasattr(selected_media, 'get') and selected_media.get('width') and selected_media.get('height'):
+                        video_width = selected_media.get('width')
+                        video_height = selected_media.get('height')
                         _log(f"[UNIV] Using API metadata: {video_width}x{video_height}")
                     else:
-                        # Fallback to ffprobe only if API doesn't provide dimensions
-                        video_meta = _extract_video_metadata(file_path)
-                        video_width = video_meta.get('width', 0) or None
-                        video_height = video_meta.get('height', 0) or None
-                        video_thumb = video_meta.get('thumbnail')
-                        _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
+                        # Skip ffprobe for large files to save time - let Telegram handle it
+                        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                        file_size_mb = file_size / (1024 * 1024)
+                        
+                        if file_size_mb > 30:
+                            # For large files, skip metadata extraction to save time
+                            video_width = None
+                            video_height = None
+                            video_thumb = None
+                            _log(f"[UNIV] Skipping metadata extraction for large file ({file_size_mb:.1f}MB)")
+                        else:
+                            # Fallback to ffprobe only for smaller files
+                            video_meta = _extract_video_metadata(file_path)
+                            video_width = video_meta.get('width', 0) or None
+                            video_height = video_meta.get('height', 0) or None
+                            video_thumb = video_meta.get('thumbnail')
+                            _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
                     
                     t_up_start = time.perf_counter()
                     last_upload_error = None
-                    for attempt in range(3):
+                    
+                    # Check file size for optimization
+                    file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                    file_size_mb = file_size / (1024 * 1024)
+                    
+                    # Reduce retry attempts for large files to save time
+                    max_attempts = 2 if file_size_mb > 20 else 3
+                    
+                    for attempt in range(max_attempts):
                         try:
                             await client.send_video(
                                 chat_id=message.chat.id,
@@ -683,8 +719,9 @@ async def handle_universal_link(client: Client, message: Message):
                             break
                         except Exception as e:
                             last_upload_error = e
-                            _log(f"[UNIV] send_video attempt {attempt+1}/3 failed: {e}")
-                            await asyncio.sleep(0.8)
+                            _log(f"[UNIV] send_video attempt {attempt+1}/{max_attempts} failed: {e}")
+                            # Shorter wait for large files
+                            await asyncio.sleep(0.5 if file_size_mb > 20 else 0.8)
                     if last_upload_error:
                         raise last_upload_error
                     t_up_end = time.perf_counter()
@@ -713,16 +750,42 @@ async def handle_universal_link(client: Client, message: Message):
             _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
         except Exception as upload_error:
             print(f"Upload error: {upload_error}")
-            try:
-                await client.send_document(
-                    chat_id=message.chat.id,
-                    document=file_path if not is_album else album_files[0][1],
-                    caption=_safe_caption(caption, max_len=950)
-                )
-            except Exception as fallback_error:
-                print(f"Fallback upload error: {fallback_error}")
-                await message.reply_text(f"❌ خطا در ارسال فایل از {platform}: {str(upload_error)}")
-                return
+            
+            # Check file size before fallback to document
+            file_to_check = file_path if not is_album else album_files[0][1]
+            file_size = os.path.getsize(file_to_check) if os.path.exists(file_to_check) else 0
+            file_size_mb = file_size / (1024 * 1024)
+            
+            # For video files larger than 50MB, don't fallback to document
+            # Instead, try to send as video with streaming support
+            if (media_type == "video" or file_extension.lower() in video_exts) and file_size_mb > 50:
+                try:
+                    # Force video upload with streaming for large files
+                    await client.send_video(
+                        chat_id=message.chat.id,
+                        video=file_to_check,
+                        caption=_safe_caption(caption, max_len=950),
+                        supports_streaming=True,
+                        width=video_width if 'video_width' in locals() else None,
+                        height=video_height if 'video_height' in locals() else None,
+                        duration=video_duration if 'video_duration' in locals() else None
+                    )
+                except Exception as video_fallback_error:
+                    print(f"Video fallback error: {video_fallback_error}")
+                    await message.reply_text(f"❌ فایل ویدیو بیش از حد بزرگ است ({file_size_mb:.1f}MB). لطفاً فایل کوچکتری انتخاب کنید.")
+                    return
+            else:
+                # For smaller files or non-video files, use document fallback
+                try:
+                    await client.send_document(
+                        chat_id=message.chat.id,
+                        document=file_to_check,
+                        caption=_safe_caption(caption, max_len=950)
+                    )
+                except Exception as fallback_error:
+                    print(f"Fallback upload error: {fallback_error}")
+                    await message.reply_text(f"❌ خطا در ارسال فایل از {platform}: {str(upload_error)}")
+                    return
         
         # Delete status message safely
         try:
