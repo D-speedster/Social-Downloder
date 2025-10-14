@@ -605,24 +605,23 @@ async def handle_universal_link(client: Client, message: Message):
                         if first_video_meta is None:
                             first_video_meta = _extract_video_metadata(mp)
                         
+                        # Prepare video parameters safely
+                        video_params = {
+                            'media': mp,
+                            'width': first_video_meta.get('width', 0) or None,
+                            'height': first_video_meta.get('height', 0) or None,
+                            'duration': first_video_meta.get('duration', 0) or None,
+                            'thumb': first_video_meta.get('thumbnail')
+                        }
+                        
+                        # Only add caption for first item
                         if idx == 1:
-                            media_group.append(InputMediaVideo(
-                                media=mp, 
-                                caption=caption,
-                                width=first_video_meta.get('width', 0) or None,
-                                height=first_video_meta.get('height', 0) or None,
-                                duration=first_video_meta.get('duration', 0) or None,
-                                thumb=first_video_meta.get('thumbnail')
-                            ))
-                        else:
-                            # Reuse metadata from first video for performance
-                            media_group.append(InputMediaVideo(
-                                media=mp,
-                                width=first_video_meta.get('width', 0) or None,
-                                height=first_video_meta.get('height', 0) or None,
-                                duration=first_video_meta.get('duration', 0) or None,
-                                thumb=first_video_meta.get('thumbnail')
-                            ))
+                            video_params['caption'] = caption
+                        
+                        # Filter out None values to prevent errors
+                        video_params = {k: v for k, v in video_params.items() if v is not None}
+                        
+                        media_group.append(InputMediaVideo(**video_params))
                 # Measure only the network upload time
                 t_up_start = time.perf_counter()
                 last_group_error = None
@@ -664,6 +663,7 @@ async def handle_universal_link(client: Client, message: Message):
                     t_up_end = time.perf_counter()
                 elif (media_type == "video" or file_extension.lower() in video_exts or platform.lower() == "tiktok"):
                     # Use API metadata if available, otherwise extract from file
+                    # Initialize video metadata variables for use in fallback
                     video_width = None
                     video_height = None
                     video_duration = duration_sec
@@ -705,16 +705,30 @@ async def handle_universal_link(client: Client, message: Message):
                     
                     for attempt in range(max_attempts):
                         try:
-                            await client.send_video(
-                                chat_id=message.chat.id,
-                                video=file_path,
-                                caption=caption,
-                                duration=video_duration,
-                                width=video_width,
-                                height=video_height,
-                                thumb=video_thumb,
-                                supports_streaming=True
-                            )
+                            # Prepare video parameters safely
+                            video_params = {
+                                'chat_id': message.chat.id,
+                                'video': file_path,
+                                'caption': caption,
+                                'supports_streaming': True
+                            }
+                            
+                            # Only add duration if available
+                            if video_duration is not None:
+                                video_params['duration'] = video_duration
+                            
+                            # Only add width/height if available and valid
+                            if video_width is not None and video_width > 0:
+                                video_params['width'] = video_width
+                            
+                            if video_height is not None and video_height > 0:
+                                video_params['height'] = video_height
+                            
+                            # Only add thumbnail if available
+                            if video_thumb is not None:
+                                video_params['thumb'] = video_thumb
+                            
+                            await client.send_video(**video_params)
                             last_upload_error = None
                             break
                         except Exception as e:
@@ -760,16 +774,27 @@ async def handle_universal_link(client: Client, message: Message):
             # Instead, try to send as video with streaming support
             if (media_type == "video" or file_extension.lower() in video_exts) and file_size_mb > 50:
                 try:
+                    # Prepare video parameters safely
+                    video_params = {
+                        'chat_id': message.chat.id,
+                        'video': file_to_check,
+                        'caption': _safe_caption(caption, max_len=950),
+                        'supports_streaming': True
+                    }
+                    
+                    # Only add duration if available
+                    if video_duration is not None:
+                        video_params['duration'] = video_duration
+                    
+                    # Only add width/height if available and valid
+                    if video_width is not None and video_width > 0:
+                        video_params['width'] = video_width
+                    
+                    if video_height is not None and video_height > 0:
+                        video_params['height'] = video_height
+                    
                     # Force video upload with streaming for large files
-                    await client.send_video(
-                        chat_id=message.chat.id,
-                        video=file_to_check,
-                        caption=_safe_caption(caption, max_len=950),
-                        supports_streaming=True,
-                        width=video_width if 'video_width' in locals() else None,
-                        height=video_height if 'video_height' in locals() else None,
-                        duration=video_duration if 'video_duration' in locals() else None
-                    )
+                    await client.send_video(**video_params)
                 except Exception as video_fallback_error:
                     print(f"Video fallback error: {video_fallback_error}")
                     await message.reply_text(f"❌ فایل ویدیو بیش از حد بزرگ است ({file_size_mb:.1f}MB). لطفاً فایل کوچکتری انتخاب کنید.")
