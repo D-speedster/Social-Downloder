@@ -4,6 +4,8 @@ import time
 import shutil
 import urllib.request
 import requests
+import aiohttp
+import asyncio
 from plugins import constant
 
 PATH = constant.PATH
@@ -77,4 +79,29 @@ async def download_file_simple(url, file_path):
         return file_path, total_size
     except Exception as e:
         print(f"Download error: {e}")
+        raise e
+
+async def download_stream_to_file(url, out_path, chunk_size=64*1024):
+    """
+    Async file download using aiohttp for better performance and non-blocking I/O.
+    Returns (file_path, total_size) for compatibility with download_file_simple.
+    """
+    try:
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                
+                # Get content length
+                total_size = int(response.headers.get('Content-Length', 0))
+                
+                # Stream download to file
+                with open(out_path, 'wb') as f:
+                    async for chunk in response.content.iter_chunked(chunk_size):
+                        f.write(chunk)
+                
+                return out_path, total_size
+                
+    except Exception as e:
+        print(f"Async download error: {e}")
         raise e

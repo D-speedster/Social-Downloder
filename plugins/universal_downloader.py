@@ -12,7 +12,8 @@ from plugins.start import (
     RUMBLE_REGEX, IFUNNY_REGEX, DEEZER_REGEX, RADIOJAVAN_REGEX,
     INSTA_REGEX,
 )
-from plugins.media_utils import send_advertisement, download_file_simple
+from plugins.media_utils import send_advertisement, download_file_simple, download_stream_to_file
+from plugins.stream_utils import download_to_memory_stream, smart_upload_strategy, optimize_chunk_size
 from plugins.db_wrapper import DB
 from plugins import constant
 from datetime import datetime as _dt
@@ -301,67 +302,96 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Advertisement will be handled later in the process
         
-        # Get data from API with optimized parallel approach
+        # Get data from API with optimized parallel approach using FIRST_COMPLETED
+        t_api_start = time.perf_counter()
         await status_msg.edit_text(f"📡 در حال دریافت اطلاعات از {platform}...")
         api_data = None
         fallback_media = None
         last_api_error_message = None
         
         # Create tasks for API and fallback (if Instagram)
-        tasks = []
-        api_task = asyncio.create_task(get_universal_data_from_api(url))
-        tasks.append(("api", api_task))
+        tasks = [("api", asyncio.create_task(get_universal_data_from_api(url)))]
         
         # Only add fallback for Instagram
         if platform == "Instagram":
-            fallback_task = asyncio.create_task(_fetch_og_media(url))
-            tasks.append(("fallback", fallback_task))
+            tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
         
-        # Wait for first successful result
-        completed_tasks = []
+        # Use asyncio.wait with FIRST_COMPLETED for immediate response
+        pending = {t for _, t in tasks}
         try:
-            for task_name, task in tasks:
-                try:
-                    result = await task
-                    completed_tasks.append((task_name, result))
-                    
-                    # Check if API result is valid
-                    if task_name == "api" and result:
-                        invalid = (result.get("error", False) or 
-                                 result.get("data", {}).get("error", False) or 
-                                 not result.get("medias"))
-                        if not invalid:
-                            api_data = result
-                            # Cancel remaining tasks
-                            for remaining_name, remaining_task in tasks:
-                                if remaining_name != task_name and not remaining_task.done():
-                                    remaining_task.cancel()
-                            break
-                        else:
-                            # Store error message for later use
-                            if result.get("message"):
-                                last_api_error_message = result.get("message")
-                    
-                    # Check if fallback result is valid
-                    elif task_name == "fallback" and result:
-                        fallback_media = result
-                        # If API hasn't succeeded yet, use fallback
-                        if not api_data:
-                            # Cancel API task if still running
-                            for remaining_name, remaining_task in tasks:
-                                if remaining_name == "api" and not remaining_task.done():
-                                    remaining_task.cancel()
-                            break
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=5)
+            
+            # Process completed tasks
+            for completed_task in done:
+                # Find which task completed
+                for task_name, task in tasks:
+                    if task is completed_task:
+                        try:
+                            result = completed_task.result()
+                            _log(f"[UNIV] {task_name} completed first with result: {bool(result)}")
                             
-                except asyncio.CancelledError:
-                    pass
-                except Exception as e:
-                    _log(f"[UNIV] {task_name} task failed: {e}")
-                    if task_name == "api":
-                        last_api_error_message = str(e)
-                    
+                            # Check if API result is valid
+                            if task_name == "api" and result:
+                                invalid = (result.get("error", False) or 
+                                         result.get("data", {}).get("error", False) or 
+                                         not result.get("medias"))
+                                if not invalid:
+                                    api_data = result
+                                    _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s")
+                                    break
+                                else:
+                                    # Store error message for later use
+                                    if result.get("message"):
+                                        last_api_error_message = result.get("message")
+                            
+                            # Check if fallback result is valid
+                            elif task_name == "fallback" and result:
+                                fallback_media = result
+                                _log(f"[UNIV] Fallback success in {time.perf_counter() - t_api_start:.2f}s")
+                                break
+                                
+                        except Exception as e:
+                            _log(f"[UNIV] {task_name} task failed: {e}")
+                            if task_name == "api":
+                                last_api_error_message = str(e)
+                        break
+            
+            # If we got a valid result, cancel remaining tasks
+            if api_data or fallback_media:
+                for remaining_task in pending:
+                    remaining_task.cancel()
+            else:
+                # If first task failed, wait for remaining tasks
+                if pending:
+                    try:
+                        done, pending = await asyncio.wait(pending, timeout=3)
+                        for completed_task in done:
+                            for task_name, task in tasks:
+                                if task is completed_task:
+                                    try:
+                                        result = completed_task.result()
+                                        if task_name == "api" and result and not (result.get("error") or result.get("data", {}).get("error") or not result.get("medias")):
+                                            api_data = result
+                                        elif task_name == "fallback" and result:
+                                            fallback_media = result
+                                    except Exception as e:
+                                        _log(f"[UNIV] {task_name} secondary task failed: {e}")
+                                    break
+                    finally:
+                        # Cancel any remaining tasks
+                        for remaining_task in pending:
+                            remaining_task.cancel()
+                            
+        except asyncio.TimeoutError:
+            _log(f"[UNIV] All tasks timed out after 5 seconds")
+            last_api_error_message = "Timeout: درخواست بیش از حد طول کشید"
         except Exception as e:
             _log(f"[UNIV] Error in parallel API/fallback: {e}")
+        finally:
+            # Ensure all tasks are cancelled
+            for _, task in tasks:
+                if not task.done():
+                    task.cancel()
         
         # Check results
         if not api_data and not fallback_media:
@@ -475,33 +505,54 @@ async def handle_universal_link(client: Client, message: Message):
             # Download file - single status message, no updates during retry
             await status_msg.edit_text(f"📥 در حال دانلود از {platform}...")
             t_dl_start = time.perf_counter()
-            # Retry download up to 2 times for faster processing
-            download_result = None
-            last_error = None
-            for attempt in range(2):
-                try:
-                    download_result = await download_file_simple(download_url, filename)
-                    break
-                except Exception as e:
-                    last_error = e
-                    _log(f"[UNIV] Download attempt {attempt+1}/2 failed: {e}")
-                    if attempt < 1:  # Only sleep if not last attempt
-                        await asyncio.sleep(0.5)  # Shorter wait time
-            t_dl_end = time.perf_counter()
-            _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
-
-            # Extract file_path from tuple (file_path, total_size)
-            if isinstance(download_result, tuple):
-                file_path, total_size = download_result
+            
+            # Try memory streaming for small files first (optimization A)
+            memory_stream = await download_to_memory_stream(download_url, max_size_mb=10)
+            
+            if memory_stream:
+                # Use memory stream for direct upload
+                file_path = filename  # Keep filename for metadata
+                total_size = memory_stream.tell()
+                t_dl_end = time.perf_counter()
+                _log(f"[UNIV] Memory download took {(t_dl_end - t_dl_start):.2f}s | size={total_size}")
+                
+                # Store memory stream for later use
+                memory_buffer = memory_stream
             else:
-                file_path = download_result
+                # Fallback to file download for larger files with optimized retry
+                download_result = None
+                last_error = None
+                max_attempts = 3
+                base_delay = 0.5
+                
+                for attempt in range(max_attempts):
+                    try:
+                        download_result = await download_stream_to_file(download_url, filename)
+                        break
+                    except Exception as e:
+                        last_error = e
+                        _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} failed: {e}")
+                        if attempt < max_attempts - 1:  # Only sleep if not last attempt
+                            # Exponential backoff with jitter
+                            delay = base_delay * (2 ** attempt)
+                            await asyncio.sleep(delay)
+                t_dl_end = time.perf_counter()
+                _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
 
-            if not file_path or not os.path.exists(file_path):
-                err_txt = f"❌ خطا در دانلود فایل از {platform}."
-                if last_error:
-                    err_txt += f"\nجزئیات: {last_error}"
-                await status_msg.edit_text(err_txt)
-                return
+                # Extract file_path from tuple (file_path, total_size)
+                if isinstance(download_result, tuple):
+                    file_path, total_size = download_result
+                else:
+                    file_path = download_result
+
+                if not file_path or not os.path.exists(file_path):
+                    err_txt = f"❌ خطا در دانلود فایل از {platform}."
+                    if last_error:
+                        err_txt += f"\nجزئیات: {last_error}"
+                    await status_msg.edit_text(err_txt)
+                    return
+                
+                memory_buffer = None  # No memory buffer for file downloads
         else:
             # Album download for Instagram: download all supported medias
             await status_msg.edit_text(f"📥 در حال دانلود {len(medias)} آیتم از {platform}...")
@@ -524,7 +575,7 @@ async def handle_universal_link(client: Client, message: Message):
                     per_item_error = None
                     for attempt in range(3):
                         try:
-                            dl_res = await download_file_simple(murl, mfilename)
+                            dl_res = await download_stream_to_file(murl, mfilename)
                             break
                         except Exception as e:
                             per_item_error = e
@@ -641,17 +692,29 @@ async def handle_universal_link(client: Client, message: Message):
                     raise last_group_error
                 t_up_end = time.perf_counter()
             else:
+                # Use smart upload strategy for optimized I/O
+                t_up_start = time.perf_counter()
+                
                 if media_type in ("image", "photo") or file_extension.lower() in image_exts or platform.lower() in ("pinterest", "imgur"):
-                    # Retry photo upload up to 3 times
-                    t_up_start = time.perf_counter()
+                    # Use memory buffer if available, otherwise file path
+                    upload_source = memory_buffer if memory_buffer else file_path
+                    
+                    # Smart upload with retry logic
                     last_upload_error = None
                     for attempt in range(3):
                         try:
-                            await client.send_photo(
-                                chat_id=message.chat.id,
-                                photo=file_path,
-                                caption=caption
-                            )
+                            if memory_buffer:
+                                await client.send_photo(
+                                    chat_id=message.chat.id,
+                                    photo=memory_buffer,
+                                    caption=caption
+                                )
+                            else:
+                                success = await smart_upload_strategy(
+                                    client, message.chat.id, file_path, "photo", caption=caption
+                                )
+                                if not success:
+                                    raise Exception("Smart upload failed")
                             last_upload_error = None
                             break
                         except Exception as e:
@@ -693,71 +756,88 @@ async def handle_universal_link(client: Client, message: Message):
                             video_thumb = video_meta.get('thumbnail')
                             _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
                     
-                    t_up_start = time.perf_counter()
                     last_upload_error = None
                     
                     # Check file size for optimization
                     file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
                     file_size_mb = file_size / (1024 * 1024)
                     
-                    # Reduce retry attempts for large files to save time
-                    max_attempts = 2 if file_size_mb > 20 else 3
+                    # Use smart upload strategy for video
+                    if memory_buffer:
+                        # Use memory buffer for small videos
+                        max_attempts = 3
+                        for attempt in range(max_attempts):
+                            try:
+                                video_params = {
+                                    'chat_id': message.chat.id,
+                                    'video': memory_buffer,
+                                    'caption': caption,
+                                    'supports_streaming': True
+                                }
+                                
+                                # Add metadata if available
+                                if video_duration is not None:
+                                    video_params['duration'] = video_duration
+                                if video_width is not None and video_width > 0:
+                                    video_params['width'] = video_width
+                                if video_height is not None and video_height > 0:
+                                    video_params['height'] = video_height
+                                if video_thumb is not None:
+                                    video_params['thumb'] = video_thumb
+                                
+                                await client.send_video(**video_params)
+                                last_upload_error = None
+                                break
+                            except Exception as e:
+                                last_upload_error = e
+                                _log(f"[UNIV] send_video (memory) attempt {attempt+1}/{max_attempts} failed: {e}")
+                                await asyncio.sleep(0.8)
+                    else:
+                        # Use smart upload strategy for file-based upload
+                        success = await smart_upload_strategy(
+                            client, message.chat.id, file_path, "video",
+                            caption=caption, duration=video_duration,
+                            width=video_width, height=video_height,
+                            thumb=video_thumb, supports_streaming=True
+                        )
+                        if not success:
+                            last_upload_error = Exception("Smart upload strategy failed")
                     
-                    for attempt in range(max_attempts):
-                        try:
-                            # Prepare video parameters safely
-                            video_params = {
-                                'chat_id': message.chat.id,
-                                'video': file_path,
-                                'caption': caption,
-                                'supports_streaming': True
-                            }
-                            
-                            # Only add duration if available
-                            if video_duration is not None:
-                                video_params['duration'] = video_duration
-                            
-                            # Only add width/height if available and valid
-                            if video_width is not None and video_width > 0:
-                                video_params['width'] = video_width
-                            
-                            if video_height is not None and video_height > 0:
-                                video_params['height'] = video_height
-                            
-                            # Only add thumbnail if available
-                            if video_thumb is not None:
-                                video_params['thumb'] = video_thumb
-                            
-                            await client.send_video(**video_params)
-                            last_upload_error = None
-                            break
-                        except Exception as e:
-                            last_upload_error = e
-                            _log(f"[UNIV] send_video attempt {attempt+1}/{max_attempts} failed: {e}")
-                            # Shorter wait for large files
-                            await asyncio.sleep(0.5 if file_size_mb > 20 else 0.8)
                     if last_upload_error:
                         raise last_upload_error
                     t_up_end = time.perf_counter()
                 else:
-                    t_up_start = time.perf_counter()
+                    # Audio upload with smart strategy
                     last_upload_error = None
-                    for attempt in range(3):
-                        try:
-                            await client.send_audio(
-                                chat_id=message.chat.id,
-                                audio=file_path,
-                                caption=caption,
-                                duration=duration_sec,
-                                title=title,
-                                performer=author
-                            )
-                            last_upload_error = None
-                            break
-                        except Exception as e:
-                            last_upload_error = e
-                            _log(f"[UNIV] send_audio attempt {attempt+1}/3 failed: {e}")
-                            await asyncio.sleep(0.8)
+                    
+                    if memory_buffer:
+                        # Use memory buffer for small audio files
+                        for attempt in range(3):
+                            try:
+                                await client.send_audio(
+                                    chat_id=message.chat.id,
+                                    audio=memory_buffer,
+                                    caption=caption,
+                                    duration=duration_sec,
+                                    title=title,
+                                    performer=author
+                                )
+                                last_upload_error = None
+                                break
+                            except Exception as e:
+                                last_upload_error = e
+                                _log(f"[UNIV] send_audio (memory) attempt {attempt+1}/3 failed: {e}")
+                                await asyncio.sleep(0.8)
+                    else:
+                        # Use smart upload strategy for file-based upload
+                        success = await smart_upload_strategy(
+                            client, message.chat.id, file_path, "audio",
+                            caption=caption, duration=duration_sec,
+                            title=title, performer=author
+                        )
+                        if not success:
+                            last_upload_error = Exception("Smart upload strategy failed")
+                    
                     if last_upload_error:
                         raise last_upload_error
                     t_up_end = time.perf_counter()
@@ -771,30 +851,22 @@ async def handle_universal_link(client: Client, message: Message):
             file_size_mb = file_size / (1024 * 1024)
             
             # For video files larger than 50MB, don't fallback to document
-            # Instead, try to send as video with streaming support
+            # Instead, try to send as video with streaming support using smart strategy
             if (media_type == "video" or file_extension.lower() in video_exts) and file_size_mb > 50:
                 try:
-                    # Prepare video parameters safely
-                    video_params = {
-                        'chat_id': message.chat.id,
-                        'video': file_to_check,
-                        'caption': _safe_caption(caption, max_len=950),
-                        'supports_streaming': True
-                    }
+                    # Use smart upload strategy for large video files
+                    success = await smart_upload_strategy(
+                        client, message.chat.id, file_to_check, "video",
+                        caption=_safe_caption(caption, max_len=950),
+                        duration=video_duration if 'video_duration' in locals() else None,
+                        width=video_width if 'video_width' in locals() else None,
+                        height=video_height if 'video_height' in locals() else None,
+                        supports_streaming=True
+                    )
                     
-                    # Only add duration if available
-                    if video_duration is not None:
-                        video_params['duration'] = video_duration
-                    
-                    # Only add width/height if available and valid
-                    if video_width is not None and video_width > 0:
-                        video_params['width'] = video_width
-                    
-                    if video_height is not None and video_height > 0:
-                        video_params['height'] = video_height
-                    
-                    # Force video upload with streaming for large files
-                    await client.send_video(**video_params)
+                    if not success:
+                        raise Exception("Smart upload strategy failed for large video")
+                        
                 except Exception as video_fallback_error:
                     print(f"Video fallback error: {video_fallback_error}")
                     await message.reply_text(f"❌ فایل ویدیو بیش از حد بزرگ است ({file_size_mb:.1f}MB). لطفاً فایل کوچکتری انتخاب کنید.")
