@@ -411,11 +411,6 @@ async def handle_universal_link(client: Client, message: Message):
         # Check results
         if not api_data and not fallback_media:
             error_msg = last_api_error_message or "خطا در دریافت اطلاعات"
-            if completed_tasks:
-                for task_name, result in completed_tasks:
-                    if result and isinstance(result, dict):
-                        error_msg = result.get("message", error_msg)
-                        break
             await status_msg.edit_text(f"❌ {error_msg} از {platform}")
             return
 
