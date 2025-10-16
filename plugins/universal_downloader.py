@@ -793,15 +793,32 @@ async def handle_universal_link(client: Client, message: Message):
                                 _log(f"[UNIV] send_video (memory) attempt {attempt+1}/{max_attempts} failed: {e}")
                                 await asyncio.sleep(0.8)
                     else:
-                        # Use smart upload strategy for file-based upload
-                        success = await smart_upload_strategy(
-                            client, message.chat.id, file_path, "video",
-                            caption=caption, duration=video_duration,
-                            width=video_width, height=video_height,
-                            thumb=video_thumb, supports_streaming=True
-                        )
-                        if not success:
-                            last_upload_error = Exception("Smart upload strategy failed")
+                        # Prefer sending as document for faster delivery on larger videos
+                        prefer_document_for_large_video = True
+                        fast_upload_threshold_mb = 15.0
+
+                        if prefer_document_for_large_video and file_size_mb >= fast_upload_threshold_mb:
+                            try:
+                                await client.send_document(
+                                    chat_id=message.chat.id,
+                                    document=file_path,
+                                    caption=_safe_caption(caption, max_len=950)
+                                )
+                                last_upload_error = None
+                                _log(f"[UNIV] Sent large video as document for speed ({file_size_mb:.1f}MB)")
+                            except Exception as e:
+                                last_upload_error = e
+                                _log(f"[UNIV] send_document for large video failed: {e}")
+                        else:
+                            # Use smart upload strategy for file-based upload
+                            success = await smart_upload_strategy(
+                                client, message.chat.id, file_path, "video",
+                                caption=caption, duration=video_duration,
+                                width=video_width, height=video_height,
+                                thumb=video_thumb, supports_streaming=True
+                            )
+                            if not success:
+                                last_upload_error = Exception("Smart upload strategy failed")
                     
                     if last_upload_error:
                         raise last_upload_error
