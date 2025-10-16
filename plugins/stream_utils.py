@@ -146,7 +146,27 @@ async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type
                     # Continue to file upload fallback
             
             # Regular file upload with optimized settings
-            upload_kwargs = kwargs.copy()
+            def _sanitize_upload_kwargs(src: dict) -> dict:
+                """Remove None/invalid values and normalize types for Telegram API."""
+                dst = {}
+                for k, v in src.items():
+                    if v is None:
+                        continue
+                    if k in ("width", "height", "duration"):
+                        try:
+                            iv = int(v)
+                        except (TypeError, ValueError):
+                            continue
+                        if iv <= 0:
+                            continue
+                        dst[k] = iv
+                    elif k == "supports_streaming":
+                        dst[k] = bool(v)
+                    else:
+                        dst[k] = v
+                return dst
+
+            upload_kwargs = _sanitize_upload_kwargs(kwargs.copy())
             
             # Enable streaming for videos
             if media_type == "video":
