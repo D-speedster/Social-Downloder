@@ -22,6 +22,7 @@ import requests
 import time
 from PIL import Image
 import subprocess
+from config import BOT_TOKEN
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -46,6 +47,20 @@ def _log(msg: str):
         print(msg)
     except Exception:
         pass
+
+# --- Bot API helpers to send media by URL (bypass MTProto upload) ---
+def _bot_api_send(method: str, payload: dict, timeout: float = 15.0) -> dict:
+    """Synchronous call to Telegram Bot API. Returns response dict or {'ok': False, 'description': ...}."""
+    try:
+        api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+        resp = requests.post(api_url, json=payload, timeout=timeout)
+        return resp.json()
+    except Exception as e:
+        return {"ok": False, "description": str(e)}
+
+async def _bot_api_send_async(method: str, payload: dict, timeout: float = 15.0) -> dict:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, lambda: _bot_api_send(method, payload, timeout))
 
 # Ensure captions stay within Telegram limits
 def _safe_caption(text: str, max_len: int = 950):
@@ -761,8 +776,37 @@ async def handle_universal_link(client: Client, message: Message):
                     # Check file size for optimization
                     file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
                     file_size_mb = file_size / (1024 * 1024)
-                    
-                    # Use smart upload strategy for video
+
+                    # Try Bot API direct URL send first (bypasses server upload)
+                    bot_api_sent = False
+                    if isinstance(download_url, str) and download_url.startswith(("http://", "https://")) and file_size_mb <= 50.0:
+                        try:
+                            _log("[UNIV] Trying Bot API sendVideo by URL")
+                            payload = {
+                                "chat_id": message.chat.id,
+                                "video": download_url,
+                                "caption": caption,
+                                "supports_streaming": True,
+                            }
+                            # Optional metadata if available
+                            if video_duration is not None and video_duration > 0:
+                                payload["duration"] = video_duration
+                            if video_width is not None and video_width > 0:
+                                payload["width"] = video_width
+                            if video_height is not None and video_height > 0:
+                                payload["height"] = video_height
+
+                            res = await _bot_api_send_async("sendVideo", payload)
+                            if res.get("ok"):
+                                bot_api_sent = True
+                                last_upload_error = None
+                                _log("[UNIV] Bot API URL send succeeded")
+                            else:
+                                _log(f"[UNIV] Bot API sendVideo failed: {res.get('description')}")
+                        except Exception as e:
+                            _log(f"[UNIV] Bot API sendVideo exception: {e}")
+
+                    # Use smart upload strategy for video (fallbacks)
                     if memory_buffer:
                         # Use memory buffer for small videos
                         max_attempts = 3
@@ -792,7 +836,7 @@ async def handle_universal_link(client: Client, message: Message):
                                 last_upload_error = e
                                 _log(f"[UNIV] send_video (memory) attempt {attempt+1}/{max_attempts} failed: {e}")
                                 await asyncio.sleep(0.8)
-                    else:
+                    elif not bot_api_sent:
                         # Prefer sending as document for faster delivery on larger videos
                         prefer_document_for_large_video = True
                         fast_upload_threshold_mb = 15.0
