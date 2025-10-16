@@ -522,18 +522,20 @@ async def handle_universal_link(client: Client, message: Message):
             t_dl_start = time.perf_counter()
             
             # Try memory streaming for small files first (optimization A)
+            use_memory = False
             memory_stream = await download_to_memory_stream(download_url, max_size_mb=10)
-            
             if memory_stream:
-                # Use memory stream for direct upload
-                file_path = filename  # Keep filename for metadata
                 total_size = memory_stream.tell()
                 t_dl_end = time.perf_counter()
                 _log(f"[UNIV] Memory download took {(t_dl_end - t_dl_start):.2f}s | size={total_size}")
-                
-                # Store memory stream for later use
-                memory_buffer = memory_stream
-            else:
+                if total_size and total_size > 0:
+                    # Use memory stream for direct upload
+                    file_path = filename  # Keep filename for metadata
+                    memory_buffer = memory_stream
+                    use_memory = True
+                else:
+                    memory_buffer = None
+            if not use_memory:
                 # Fallback to file download for larger files with optimized retry
                 download_result = None
                 last_error = None
@@ -772,6 +774,7 @@ async def handle_universal_link(client: Client, message: Message):
                             _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
                     
                     last_upload_error = None
+                    upload_done = False
                     
                     # Check file size for optimization
                     file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
@@ -800,6 +803,7 @@ async def handle_universal_link(client: Client, message: Message):
                             if res.get("ok"):
                                 bot_api_sent = True
                                 last_upload_error = None
+                                upload_done = True
                                 _log("[UNIV] Bot API URL send succeeded")
                             else:
                                 _log(f"[UNIV] Bot API sendVideo failed: {res.get('description')}")
@@ -807,7 +811,7 @@ async def handle_universal_link(client: Client, message: Message):
                             _log(f"[UNIV] Bot API sendVideo exception: {e}")
 
                     # Use smart upload strategy for video (fallbacks)
-                    if memory_buffer:
+                    if (not bot_api_sent) and memory_buffer:
                         # Use memory buffer for small videos
                         max_attempts = 3
                         for attempt in range(max_attempts):
@@ -863,7 +867,7 @@ async def handle_universal_link(client: Client, message: Message):
                             )
                             if not success:
                                 last_upload_error = Exception("Smart upload strategy failed")
-                    
+
                     if last_upload_error:
                         raise last_upload_error
                     t_up_end = time.perf_counter()
