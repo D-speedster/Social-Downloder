@@ -104,8 +104,9 @@ class DB:
 
     def register_user(self, user_id: int, last_download: str) -> None:
         try:
-            query = 'INSERT INTO users (user_id, last_download) VALUES (?, ?)'
-            record = (user_id, last_download)
+            # Store first activity time as join time for stats
+            query = 'INSERT INTO users (user_id, last_download, joined_at) VALUES (?, ?, ?)'
+            record = (user_id, last_download, last_download)
             self.cursor.execute(query, record)
             self.mydb.commit()
         except sqlite3.Error as error:
@@ -400,46 +401,69 @@ class DB:
             print(f"Failed to increment request: {e}")
 
     def get_system_stats(self) -> dict:
-        """Get system statistics for admin panel"""
+        """Get system statistics for admin panel with job metrics"""
+        stats = {
+            'total_users': 0,
+            'users_today': 0,
+            'active_today': 0,
+            'total_requests_sum': 0,
+            'blocked_count': 0,
+            'total_jobs': 0,
+            'jobs_pending': 0,
+            'jobs_ready': 0,
+            'jobs_completed': 0,
+        }
         try:
-            # Get total users count
-            self.cursor.execute("SELECT COUNT(*) FROM users")
-            total_users = self.cursor.fetchone()[0]
-            
-            # Get users joined today
-            today = date.today().strftime('%Y-%m-%d')
-            self.cursor.execute("SELECT COUNT(*) FROM users WHERE DATE(joined_at) = ?", (today,))
-            users_today = self.cursor.fetchone()[0]
-            
-            # Get active users today (users who made requests today)
-            self.cursor.execute("SELECT COUNT(*) FROM users WHERE daily_date = ?", (today,))
-            active_today = self.cursor.fetchone()[0]
-            
-            # Get total requests sum
-            self.cursor.execute("SELECT SUM(total_requests) FROM users")
-            total_requests_sum = self.cursor.fetchone()[0] or 0
-            
-            # Get blocked users count
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            self.cursor.execute("SELECT COUNT(*) FROM users WHERE blocked_until > ?", (now,))
-            blocked_count = self.cursor.fetchone()[0]
-            
-            return {
-                'total_users': total_users,
-                'users_today': users_today,
-                'active_today': active_today,
-                'total_requests_sum': total_requests_sum,
-                'blocked_count': blocked_count
-            }
+            # Users count
+            self.cursor.execute('SELECT COUNT(*) FROM users')
+            row = self.cursor.fetchone()
+            stats['total_users'] = int(row[0] or 0) if row else 0
+
+            # Users joined today (joined_at LIKE 'YYYY-MM-DD%')
+            today = date.today().isoformat()
+            try:
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE joined_at LIKE ?', (today + '%',))
+                row = self.cursor.fetchone()
+                stats['users_today'] = int(row[0] or 0) if row else 0
+            except Exception:
+                stats['users_today'] = 0
+
+            # Active users today (daily_date == today AND daily_requests > 0)
+            try:
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE daily_date = ? AND daily_requests > 0', (today,))
+                row = self.cursor.fetchone()
+                stats['active_today'] = int(row[0] or 0) if row else 0
+            except Exception:
+                stats['active_today'] = 0
+
+            # Total requests sum
+            self.cursor.execute('SELECT SUM(total_requests) FROM users')
+            row = self.cursor.fetchone()
+            stats['total_requests_sum'] = int(row[0] or 0) if row and row[0] is not None else 0
+
+            # Blocked users (blocked_until > now)
+            try:
+                now_str = _dt.now().isoformat(timespec='seconds')
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE blocked_until > ?', (now_str,))
+                row = self.cursor.fetchone()
+                stats['blocked_count'] = int(row[0] or 0) if row else 0
+            except Exception:
+                stats['blocked_count'] = 0
+
+            # Jobs counts
+            self.cursor.execute('SELECT COUNT(*) FROM jobs')
+            row = self.cursor.fetchone()
+            stats['total_jobs'] = int(row[0] or 0) if row else 0
+
+            for status_key, field in [('pending', 'jobs_pending'), ('ready', 'jobs_ready'), ('completed', 'jobs_completed')]:
+                self.cursor.execute('SELECT COUNT(*) FROM jobs WHERE status = ?', (status_key,))
+                row = self.cursor.fetchone()
+                stats[field] = int(row[0] or 0) if row else 0
+
+            return stats
         except Exception as e:
             print(f"Error getting system stats: {e}")
-            return {
-                'total_users': 0,
-                'users_today': 0,
-                'active_today': 0,
-                'total_requests_sum': 0,
-                'blocked_count': 0
-            }
+            return stats
     
     def close(self):
         """Close database connection"""

@@ -440,7 +440,8 @@ async def admin_menu_sponsor(_: Client, message: Message):
         "- @username (کانال عمومی)\n"
         "- -100xxxxxxxxxx (آی‌دی عددی، مناسب کانال خصوصی)\n"
         "- لینک t.me/username (به @username تبدیل می‌شود)\n\n"
-        "نکته: لینک دعوت خصوصی (+) پشتیبانی نمی‌شود؛ برای کانال خصوصی از آی‌دی عددی استفاده کنید.",
+        "نکته: لینک دعوت خصوصی (+) پشتیبانی نمی‌شود؛ برای کانال خصوصی از آی‌دی عددی استفاده کنید.\n\n"
+        "برای لغو، روی «❌ لغو» بزنید یا /cancel.",
         reply_markup=admin_reply_kb()
     )
     admin_step['sp'] = 1
@@ -694,6 +695,10 @@ async def admin_menu_back(_: Client, message: Message):
     print("[ADMIN] back pressed by", message.from_user.id)
     # Reset any transient admin steps
     admin_step['broadcast'] = 0
+    admin_step['broadcast_type'] = ''
+    admin_step['broadcast_content'] = None
+    admin_step['advertisement'] = 0
+    admin_step['waiting_msg'] = 0
     admin_step['sp'] = 2
     if 'add_cookie' in admin_step:
         del admin_step['add_cookie']
@@ -726,7 +731,14 @@ async def cancel_operation(_: Client, message: Message):
     # Reset admin steps
     if 'add_cookie' in admin_step:
         del admin_step['add_cookie']
-    
+    # Reset sponsor/ad/waiting/broadcast states
+    admin_step['sp'] = 0
+    admin_step['advertisement'] = 0
+    admin_step['waiting_msg'] = 0
+    admin_step['broadcast'] = 0
+    admin_step['broadcast_type'] = ''
+    admin_step['broadcast_content'] = None
+
     await message.reply("❌ عملیات لغو شد.", reply_markup=admin_reply_kb())
 
 
@@ -752,6 +764,14 @@ async def set_sp_custom(_, __, message: Message):
             return False
         # Only allow text messages
         if not message.text:
+            return False
+        # Ignore admin panel buttons texts (reply keyboard)
+        if message.text.strip() in {
+            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور","🔌 بررسی پروکسی",
+            "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
+            "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
+            "🔝 بالای محتوا","🔻 پایین محتوا"
+        }:
             return False
         # Do NOT capture commands like /language, /start, etc.
         if message.text.strip().startswith('/'):
