@@ -1315,6 +1315,13 @@ async def waiting_cancel_callback_handler(client: Client, callback_query: Callba
 async def handle_advertisement_content(client: Client, message: Message):
     """Handle advertisement content input from admin"""
     try:
+        if message.text and message.text.strip() in {
+            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور","🔌 بررسی پروکسی",
+            "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
+            "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
+            "🔝 بالای محتوا","🔻 پایین محتوا"
+        }:
+            return
         ad_data = {
             'enabled': True,
             'position': 'after'  # default position
