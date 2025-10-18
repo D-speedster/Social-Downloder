@@ -7,6 +7,7 @@ import sys
 import time
 import asyncio
 import tempfile
+import shutil
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery
@@ -16,6 +17,7 @@ from plugins.sqlite_db_wrapper import DB
 from plugins.logger_config import get_logger, get_performance_logger
 from plugins.youtube_quality_selector import quality_selector
 from plugins.youtube_advanced_downloader import youtube_downloader
+from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user
 from utils.util import convert_size
 
 # Initialize loggers
@@ -24,6 +26,7 @@ performance_logger = get_performance_logger()
 
 # Progress tracking
 previous_progress = {}
+previous_progress_ts = {}
 
 def progress_hook(d, user_id: int, call: CallbackQuery):
     """Hook برای نمایش پیشرفت دانلود"""
@@ -43,9 +46,11 @@ def progress_hook(d, user_id: int, call: CallbackQuery):
             else:
                 return
             
-            # Only update if progress changed significantly
-            if user_id not in previous_progress or abs(progress - previous_progress[user_id]) >= 5:
+            # Only update if progress changed significantly or time gate passed
+            last_ts = previous_progress_ts.get(user_id, 0.0)
+            if (user_id not in previous_progress) or abs(progress - previous_progress[user_id]) >= 5 or (time.time() - last_ts) >= 1.5:
                 previous_progress[user_id] = progress
+                previous_progress_ts[user_id] = time.time()
                 
                 # Create progress bar
                 filled = int(progress / 5)
@@ -171,6 +176,12 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     user_id = call.from_user.id
     download_start = time.time()
     
+    # Per-user concurrency guard
+    user_reserved = reserve_user(user_id)
+    if not user_reserved:
+        await call.answer("⚠️ محدودیت دانلود همزمان شما پر شده است. لطفاً صبر کنید.", show_alert=True)
+        return
+    
     callback_new_logger.info(f"Starting download process for user {user_id}")
     performance_logger.info(f"[USER:{user_id}] DOWNLOAD started - Quality: {selected_quality['resolution']}")
     
@@ -191,8 +202,14 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     )
     
     await call.edit_message_text(download_info, parse_mode=ParseMode.MARKDOWN)
+    slot_acquired = False
     
     try:
+        stats = get_queue_stats()
+        if stats['active'] >= stats['capacity']:
+            await call.edit_message_text(download_info + "\n\n⏳ ظرفیت دانلود مشغول است؛ شما در صف هستید...", parse_mode=ParseMode.MARKDOWN)
+        await acquire_slot()
+        slot_acquired = True
         # Create output filename
         safe_title = "".join(c for c in quality_options['title'] if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_title = safe_title[:50]  # Limit length
@@ -218,7 +235,11 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         
         if not download_result.get('success'):
             error_msg = download_result.get('error', 'خطای نامشخص در دانلود')
-            await callback_query.edit_message_text(f"❌ خطا در دانلود: {error_msg}")
+            await call.edit_message_text(f"❌ خطا در دانلود: {error_msg}")
+            if slot_acquired:
+                release_slot()
+            if 'user_reserved' in locals() and user_reserved:
+                release_user(user_id)
             return
         
         file_path = download_result['file_path']
@@ -305,13 +326,31 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
             os.unlink(file_path)
         except:
             pass
-        
+        # پاکسازی thumbnail در صورت وجود
+        try:
+            thumb_path = download_result.get('thumb_path')
+            if thumb_path and os.path.exists(thumb_path):
+                os.unlink(thumb_path)
+        except Exception:
+            pass
+        # پاکسازی دایرکتوری موقت
+        try:
+            temp_dir = download_result.get('temp_dir')
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+
         # Log total time
         total_time = time.time() - download_start
         performance_logger.info(f"[USER:{user_id}] TOTAL PROCESS TIME: {total_time:.2f} seconds")
         performance_logger.info(f"[USER:{user_id}] Breakdown - Download: {download_time:.2f}s, Upload: {upload_time:.2f}s")
         
         callback_new_logger.info(f"Download process completed successfully in {total_time:.2f}s")
+        if slot_acquired:
+            release_slot()
+        if 'user_reserved' in locals() and user_reserved:
+            release_user(user_id)
         
     except Exception as e:
         callback_new_logger.error(f"Download process error: {e}")
@@ -328,3 +367,8 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
             await call.edit_message_text(error_info, parse_mode=ParseMode.MARKDOWN)
         except:
             await call.answer("❌ خطا در دانلود.", show_alert=True)
+        finally:
+            if slot_acquired:
+                release_slot()
+            if user_reserved:
+                release_user(user_id)

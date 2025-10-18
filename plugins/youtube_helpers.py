@@ -29,6 +29,9 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
+            'socket_timeout': 15,
+            'retries': 3,
+            'concurrent_fragments': 4,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         if env_proxy:
@@ -142,6 +145,8 @@ async def get_direct_download_url(url, format_id):
             'noplaylist': True,
             'extract_flat': False,
             'proxy': 'socks5h://127.0.0.1:1084',
+            'socket_timeout': 15,
+            'retries': 3,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         

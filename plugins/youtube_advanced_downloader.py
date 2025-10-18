@@ -232,7 +232,9 @@ class YouTubeAdvancedDownloader:
             file_type = quality_info.get('type', 'combined')
             timestamp = int(time.time())
             base_name = f"video_{timestamp}"
-            temp_output = os.path.join(self.temp_dir, f"{base_name}.mp4")
+            # ایجاد دایرکتوری کاری جداگانه برای این وظیفه
+            work_dir = tempfile.mkdtemp(prefix='ytadv_')
+            temp_output = os.path.join(work_dir, f"{base_name}.mp4")
             final_output = os.path.join(self.download_dir, f"{base_name}.mp4")
 
             # Hook تطبیق با callback پیشرفت
@@ -261,14 +263,30 @@ class YouTubeAdvancedDownloader:
                 merged_path = await self._download_combined(url, quality_info, temp_output, progress_hook)
             else:
                 # دانلود جداگانه و ادغام با ffmpeg و اعمال 720p/H.264/AAC
-                merged_path = await self._download_and_merge_separate(url, quality_info, temp_output, progress_hook)
+                merged_path = await self._download_and_merge_separate(url, quality_info, temp_output, progress_hook, work_dir)
 
             if not merged_path or not os.path.exists(merged_path):
+                # در صورت شکست، دایرکتوری کاری را پاک کن
+                try:
+                    shutil.rmtree(work_dir, ignore_errors=True)
+                except Exception:
+                    pass
                 return {'success': False, 'error': 'دانلود یا ادغام ناموفق بود'}
 
             # تبدیل نهایی به خروجی دقیق 720p/H.264/AAC
             transcode_ok = await self._transcode_to_target(merged_path, final_output)
+            # پاک‌سازی فایل ادغام‌شده موقت
+            try:
+                if os.path.exists(merged_path):
+                    os.unlink(merged_path)
+            except Exception:
+                pass
             if not transcode_ok or not os.path.exists(final_output):
+                # پاک‌سازی دایرکتوری کاری در صورت شکست
+                try:
+                    shutil.rmtree(work_dir, ignore_errors=True)
+                except Exception:
+                    pass
                 return {'success': False, 'error': 'تبدیل نهایی به 720p/H.264/AAC شکست خورد'}
 
             # تولید thumbnail برای تلگرام (اختیاری)
@@ -277,8 +295,14 @@ class YouTubeAdvancedDownloader:
                 try:
                     raw_thumb = await self._download_thumbnail_simple(thumbnail_url)
                     if raw_thumb:
-                        thumb_out = os.path.join(self.temp_dir, f"thumb_{timestamp}.jpg")
+                        thumb_out = os.path.join(work_dir, f"thumb_{timestamp}.jpg")
                         gen_thumb_ok = await self._generate_telegram_thumb(raw_thumb, thumb_out)
+                        # پاک‌سازی فایل خام thumbnail
+                        try:
+                            if os.path.exists(raw_thumb):
+                                os.unlink(raw_thumb)
+                        except Exception:
+                            pass
                         if gen_thumb_ok:
                             thumb_path = thumb_out
                 except Exception as e:
@@ -296,6 +320,10 @@ class YouTubeAdvancedDownloader:
                     os.unlink(final_output)
                 except:
                     pass
+                try:
+                    shutil.rmtree(work_dir, ignore_errors=True)
+                except Exception:
+                    pass
                 return {'success': False, 'error': f"وضوح نهایی {width}x{height} است؛ باید دقیقاً 1280x720 باشد"}
 
             if ('264' not in vcodec) or ('aac' not in acodec):
@@ -303,17 +331,28 @@ class YouTubeAdvancedDownloader:
                     os.unlink(final_output)
                 except:
                     pass
+                try:
+                    shutil.rmtree(work_dir, ignore_errors=True)
+                except Exception:
+                    pass
                 return {'success': False, 'error': 'کدک‌های خروجی باید H.264 و AAC باشند'}
 
             return {
                 'success': True,
                 'file_path': final_output,
                 'file_size': os.path.getsize(final_output),
-                'thumb_path': thumb_path
+                'thumb_path': thumb_path,
+                'temp_dir': work_dir
             }
 
         except Exception as e:
             advanced_logger.error(f"Download/Merge error: {e}")
+            # تلاش برای پاک‌سازی دایرکتوری کاری در صورت وجود
+            try:
+                if 'work_dir' in locals():
+                    shutil.rmtree(work_dir, ignore_errors=True)
+            except Exception:
+                pass
             return {'success': False, 'error': str(e)}
     
     def _download_with_ytdlp(self, url: str, ydl_opts: Dict) -> bool:
@@ -355,6 +394,9 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             'proxy': 'socks5h://127.0.0.1:1084',
+            'socket_timeout': 15,
+            'retries': 3,
+            'concurrent_fragments': 4,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
@@ -383,7 +425,10 @@ class YouTubeAdvancedDownloader:
             
             # Download in thread pool
             loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
+            success = await asyncio.wait_for(
+                loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts),
+                timeout=600
+            )
             
             if success and os.path.exists(output_path):
                 advanced_logger.info("Combined format downloaded successfully")
@@ -411,13 +456,13 @@ class YouTubeAdvancedDownloader:
             pass
     
     async def _download_and_merge_separate(self, url: str, quality_info: Dict, output_path: str,
-                                         progress_callback) -> Optional[str]:
+                                         progress_callback, work_dir: str) -> Optional[str]:
         """دانلود و merge فرمت‌های جداگانه"""
         video_format = quality_info['video_format']
         audio_format = quality_info['audio_format']
         
-        video_path = os.path.join(self.temp_dir, f"video.{video_format.get('ext', 'mp4')}")
-        audio_path = os.path.join(self.temp_dir, f"audio.{audio_format.get('ext', 'm4a')}")
+        video_path = os.path.join(work_dir, f"video.{video_format.get('ext', 'mp4')}")
+        audio_path = os.path.join(work_dir, f"audio.{audio_format.get('ext', 'm4a')}")
         
         # Download video
         advanced_logger.info("Downloading video stream...")
@@ -441,6 +486,15 @@ class YouTubeAdvancedDownloader:
         advanced_logger.info("Merging video and audio...")
         merge_success = await self._merge_with_ffmpeg(video_path, audio_path, output_path)
         
+        # پاک‌سازی اجزای ویدیو و صدا پس از merge
+        try:
+            if os.path.exists(video_path):
+                os.unlink(video_path)
+            if os.path.exists(audio_path):
+                os.unlink(audio_path)
+        except Exception:
+            pass
+        
         if merge_success:
             advanced_logger.info("Merge completed successfully")
             return output_path
@@ -458,6 +512,9 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             'proxy': 'socks5h://127.0.0.1:1084',
+            'socket_timeout': 15,
+            'retries': 3,
+            'concurrent_fragments': 4,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
@@ -481,7 +538,10 @@ class YouTubeAdvancedDownloader:
             # دانلود با کوکی
             
             loop = asyncio.get_event_loop()
-            success = await loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts)
+            success = await asyncio.wait_for(
+                loop.run_in_executor(None, self._download_with_ydl, url, ydl_opts),
+                timeout=600
+            )
             
             if success and os.path.exists(output_path):
                 try:
@@ -861,8 +921,16 @@ class YouTubeAdvancedDownloader:
         # Get file size
         file_size = os.path.getsize(file_path)
         
-        # Use _probe_file to get detailed metadata
-        metadata = self._probe_file(file_path, 'ffprobe')
+        # Use _probe_file to get detailed metadata in executor with timeout
+        try:
+            loop = asyncio.get_event_loop()
+            metadata = await asyncio.wait_for(
+                loop.run_in_executor(None, self._probe_file, file_path, 'ffprobe'),
+                timeout=35
+            )
+        except Exception as e:
+            advanced_logger.error(f"get_file_metadata probe error/timeout: {e}")
+            metadata = {}
         
         # Add file size to metadata
         metadata['size'] = file_size

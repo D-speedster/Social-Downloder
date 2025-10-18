@@ -23,6 +23,7 @@ import time
 from PIL import Image
 import subprocess
 from config import BOT_TOKEN
+from plugins.concurrency import acquire_slot, release_slot, get_queue_stats
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -314,6 +315,13 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Send initial status message
         status_msg = await message.reply_text(f"🔄 در حال پردازش لینک {platform}...")
+        slot_acquired = False
+        stats = get_queue_stats()
+        if stats.get('active') >= stats.get('capacity'):
+            try:
+                await status_msg.edit_text("⏳ ظرفیت دانلود مشغول است؛ شما در صف هستید...")
+            except Exception:
+                pass
         
         # Advertisement will be handled later in the process
         
@@ -513,6 +521,9 @@ async def handle_universal_link(client: Client, message: Message):
             filename = _safe_filename(safe_title_src, file_extension)
 
             # Download file - single status message, no updates during retry
+            if not slot_acquired:
+                await acquire_slot()
+                slot_acquired = True
             await status_msg.edit_text(f"📥 در حال دانلود از {platform}...")
             t_dl_start = time.perf_counter()
             
@@ -562,11 +573,20 @@ async def handle_universal_link(client: Client, message: Message):
                     if last_error:
                         err_txt += f"\nجزئیات: {last_error}"
                     await status_msg.edit_text(err_txt)
+                    try:
+                        if slot_acquired:
+                            release_slot()
+                            slot_acquired = False
+                    except Exception:
+                        pass
                     return
                 
                 memory_buffer = None  # No memory buffer for file downloads
         else:
             # Album download for Instagram: download all supported medias
+            if not slot_acquired:
+                await acquire_slot()
+                slot_acquired = True
             await status_msg.edit_text(f"📥 در حال دانلود {len(medias)} آیتم از {platform}...")
             album_files = []
             t_dl_all_start = time.perf_counter()
@@ -612,6 +632,12 @@ async def handle_universal_link(client: Client, message: Message):
             _log(f"[UNIV] All album downloads took {(t_dl_all_end - t_dl_all_start):.2f}s | files={len(album_files)}")
             if not album_files:
                 await status_msg.edit_text(f"❌ هیچ فایل قابل ارسال از {platform} یافت نشد.")
+                try:
+                    if slot_acquired:
+                        release_slot()
+                        slot_acquired = False
+                except Exception:
+                    pass
                 return
 
             # Ensure caption fields exist for album branch
@@ -902,6 +928,12 @@ async def handle_universal_link(client: Client, message: Message):
                         raise last_upload_error
                     t_up_end = time.perf_counter()
             _log(f"[UNIV] Upload took {(t_up_end - t_up_start):.2f}s")
+            try:
+                if slot_acquired:
+                    release_slot()
+                    slot_acquired = False
+            except Exception:
+                pass
         except Exception as upload_error:
             print(f"Upload error: {upload_error}")
             
@@ -952,6 +984,12 @@ async def handle_universal_link(client: Client, message: Message):
             pass
         
         # Send advertisement after content if enabled and position is 'after'
+        try:
+            if slot_acquired:
+                release_slot()
+                slot_acquired = False
+        except Exception:
+            pass
         if ad_enabled and ad_position == 'after':
             await asyncio.sleep(1)  # Wait 1 second after upload
             await send_advertisement(client, message.chat.id)
@@ -994,6 +1032,12 @@ async def handle_universal_link(client: Client, message: Message):
     except Exception as e:
         error_msg = str(e)
         print(f"Universal download error: {error_msg}")
+        try:
+            if 'slot_acquired' in locals() and slot_acquired:
+                release_slot()
+                slot_acquired = False
+        except Exception:
+            pass
         
         # Clean up status message if it still exists
         try:
