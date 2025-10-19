@@ -8,6 +8,111 @@ from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, ge
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
 
+async def get_available_formats(url):
+    """
+    دریافت لیست فرمت‌های موجود برای ویدیو
+    """
+    try:
+        ydl_opts = {
+            'quiet': True,
+            'simulate': True,
+            'listformats': True,
+            'proxy': 'socks5h://127.0.0.1:1084',
+            'socket_timeout': 15,
+            'retries': 3,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web'],
+                    'player_skip': ['webpage'],
+                    'skip': ['hls', 'dash'],
+                    'innertube_host': 'studio.youtube.com',
+                    'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
+                }
+            },
+        }
+        
+        def extract_info_sync():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+        
+        info = await asyncio.to_thread(extract_info_sync)
+        return info.get('formats', []) if info else []
+    except Exception as e:
+        youtube_helpers_logger.error(f"خطا در دریافت فرمت‌ها: {e}")
+        return []
+
+async def find_best_fallback_format(url, requested_format_id):
+    """
+    پیدا کردن بهترین فرمت جایگزین در صورت عدم دسترسی به فرمت درخواستی
+    """
+    try:
+        formats = await get_available_formats(url)
+        if not formats:
+            return None
+        
+        # اگر فرمت درخواستی شامل + باشد (ترکیب ویدیو + صدا)
+        if '+' in requested_format_id:
+            video_id, audio_id = requested_format_id.split('+')
+            
+            # بررسی وجود فرمت‌های درخواستی
+            video_available = any(f.get('format_id') == video_id for f in formats)
+            audio_available = any(f.get('format_id') == audio_id for f in formats)
+            
+            if video_available and audio_available:
+                return requested_format_id
+            
+            # پیدا کردن بهترین جایگزین
+            video_formats = [f for f in formats if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') == 'none']
+            audio_formats = [f for f in formats if f.get('acodec', 'none') != 'none' and f.get('vcodec', 'none') == 'none']
+            
+            if video_formats and audio_formats:
+                # انتخاب بهترین ویدیو (بر اساس کیفیت)
+                video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                best_video = video_formats[0]
+                
+                # انتخاب بهترین صدا (بر اساس bitrate)
+                audio_formats.sort(key=lambda x: (x.get('abr', 0) or x.get('tbr', 0) or 0), reverse=True)
+                best_audio = audio_formats[0]
+                
+                return f"{best_video['format_id']}+{best_audio['format_id']}"
+        else:
+            # بررسی وجود فرمت تکی
+            if any(f.get('format_id') == requested_format_id for f in formats):
+                return requested_format_id
+            
+            # پیدا کردن بهترین جایگزین
+            # ابتدا فرمت‌های ترکیبی (ویدیو + صدا)
+            combined_formats = [f for f in formats if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
+            if combined_formats:
+                combined_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                return combined_formats[0]['format_id']
+            
+            # اگر فرمت ترکیبی نبود، بهترین ویدیو + بهترین صدا
+            video_formats = [f for f in formats if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') == 'none']
+            audio_formats = [f for f in formats if f.get('acodec', 'none') != 'none' and f.get('vcodec', 'none') == 'none']
+            
+            if video_formats and audio_formats:
+                video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                audio_formats.sort(key=lambda x: (x.get('abr', 0) or x.get('tbr', 0) or 0), reverse=True)
+                return f"{video_formats[0]['format_id']}+{audio_formats[0]['format_id']}"
+        
+        # اگر هیچ فرمت مناسبی پیدا نشد، بهترین فرمت موجود
+        if formats:
+            # اولویت با فرمت‌های ترکیبی
+            combined = [f for f in formats if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
+            if combined:
+                combined.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                return combined[0]['format_id']
+            
+            # در غیر این صورت، بهترین فرمت موجود
+            formats.sort(key=lambda x: (x.get('height', 0) or x.get('abr', 0) or x.get('tbr', 0) or 0), reverse=True)
+            return formats[0]['format_id']
+        
+        return None
+    except Exception as e:
+        youtube_helpers_logger.error(f"خطا در پیدا کردن فرمت جایگزین: {e}")
+        return None
+
 async def download_youtube_file(url, format_id, progress_hook=None):
     """
     دانلود فایل یوتیوب با format_id مشخص
@@ -43,12 +148,15 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                 'Connection': 'keep-alive',
             },
             # Additional options for YouTube compatibility
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web'],
-                    'player_skip': ['webpage'],
-                }
-            },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'web'],
+                'player_skip': ['webpage'],
+                'skip': ['hls', 'dash'],
+                'innertube_host': 'studio.youtube.com',
+                'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
+            }
+        },
         }
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
@@ -82,7 +190,25 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
-            if needs_cookie:
+            format_not_available = 'requested format is not available' in msg
+            
+            if format_not_available:
+                # Try to find a fallback format
+                try:
+                    fallback_format = await find_best_fallback_format(url, format_id)
+                    if fallback_format and fallback_format != format_id:
+                        youtube_helpers_logger.info(f"Format {format_id} not available, trying fallback format: {fallback_format}")
+                        ydl_opts['format'] = fallback_format
+                        def download_sync_fallback():
+                            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                                ydl.download([url])
+                        await asyncio.to_thread(download_sync_fallback)
+                    else:
+                        raise first_err
+                except Exception as fallback_err:
+                    youtube_helpers_logger.error(f"Fallback format search failed: {fallback_err}")
+                    raise first_err
+            elif needs_cookie:
                 try:
                     # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
                     if not cookie_id_used:
@@ -193,7 +319,23 @@ async def get_direct_download_url(url, format_id):
             # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
-            if needs_cookie:
+            format_not_available = 'requested format is not available' in msg
+            
+            if format_not_available:
+                # Try to find a fallback format
+                try:
+                    fallback_format = await find_best_fallback_format(url, format_id)
+                    if fallback_format and fallback_format != format_id:
+                        youtube_helpers_logger.info(f"Format {format_id} not available, trying fallback format: {fallback_format}")
+                        ydl_opts['format'] = fallback_format
+                        info = await asyncio.to_thread(extract_sync)
+                        format_id = fallback_format  # Update format_id for later use
+                    else:
+                        raise first_err
+                except Exception as fallback_err:
+                    youtube_helpers_logger.error(f"Fallback format search failed: {fallback_err}")
+                    raise first_err
+            elif needs_cookie:
                 try:
                     # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
                     if not cookie_id_used:

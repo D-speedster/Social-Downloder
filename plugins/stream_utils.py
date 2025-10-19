@@ -264,8 +264,11 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             # Additional options for YouTube compatibility
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web'],
+                    'player_client': ['ios', 'android', 'web'],
                     'player_skip': ['webpage'],
+                    'skip': ['hls', 'dash'],
+                    'innertube_host': 'studio.youtube.com',
+                    'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
                 }
             },
         }
@@ -294,6 +297,8 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             # Try with different cookie if needed
             msg = str(first_err).lower()
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
+            format_not_available = 'requested format is not available' in msg
+            
             if needs_cookie and not cookie_id_used:
                 try:
                     cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
@@ -304,6 +309,23 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                     else:
                         raise first_err
                 except Exception:
+                    raise first_err
+            elif format_not_available:
+                # Try to find a fallback format
+                try:
+                    from plugins.youtube_helpers import find_best_fallback_format
+                    fallback_format = await find_best_fallback_format(url, format_id)
+                    if fallback_format and fallback_format != format_id:
+                        print(f"Format {format_id} not available, trying fallback format: {fallback_format}")
+                        ydl_opts['format'] = fallback_format
+                        info = await asyncio.to_thread(extract_info_sync)
+                        format_id = fallback_format  # Update format_id for later use
+                    else:
+                        raise first_err
+                except ImportError:
+                    raise first_err
+                except Exception as fallback_err:
+                    print(f"Fallback format search failed: {fallback_err}")
                     raise first_err
             else:
                 raise first_err

@@ -62,14 +62,58 @@ async def answer(client: Client, callback_query: CallbackQuery):
     if callback_query.data == 'download_video':
         # Direct video download with best quality
         if isinstance(info, dict) and 'formats' in info and info.get('title'):
-            # Get best video format with audio, prioritizing 720p+ resolutions
-            video_formats = [f for f in info['formats'] 
-                            if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
+            # First try to get combined formats (video + audio)
+            combined_formats = [f for f in info['formats'] 
+                               if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') != 'none']
             
-            if video_formats:
+            # If no combined formats, use best video + best audio approach
+            if not combined_formats:
+                # Get best video-only format
+                video_only_formats = [f for f in info['formats'] 
+                                     if f.get('vcodec', 'none') != 'none' and f.get('acodec', 'none') == 'none']
+                
+                if video_only_formats:
+                    # Prioritize formats with height >= 720, then >= 480, then any available
+                    hd_formats = [f for f in video_only_formats if (f.get('height', 0) or 0) >= 720]
+                    sd_formats = [f for f in video_only_formats if 480 <= (f.get('height', 0) or 0) < 720]
+                    
+                    if hd_formats:
+                        # Sort HD formats by height (prefer 720p over higher if available)
+                        hd_formats.sort(key=lambda x: abs((x.get('height', 0) or 0) - 720))
+                        best_video = hd_formats[0]
+                    elif sd_formats:
+                        # Sort SD formats by height (prefer higher resolution)
+                        sd_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                        best_video = sd_formats[0]
+                    else:
+                        # Fallback to any available format
+                        video_only_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                        best_video = video_only_formats[0]
+                    
+                    # Get best audio format
+                    audio_formats = [f for f in info['formats'] 
+                                   if f.get('acodec', 'none') != 'none' and f.get('vcodec', 'none') == 'none']
+                    
+                    if audio_formats:
+                        # Sort by audio bitrate (prefer higher quality)
+                        audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0), reverse=True)
+                        best_audio = audio_formats[0]
+                        
+                        # Use format combination (video+audio)
+                        step['format_id'] = f"{best_video['format_id']}+{best_audio['format_id']}"
+                        best_format = best_video  # Use video format for size calculation
+                    else:
+                        # Fallback to video-only
+                        step['format_id'] = best_video['format_id']
+                        best_format = best_video
+                else:
+                    await callback_query.answer("❌ فرمت ویدیویی یافت نشد.", show_alert=True)
+                    return
+            else:
+                # Use combined format
                 # Prioritize formats with height >= 720, then >= 480, then any available
-                hd_formats = [f for f in video_formats if (f.get('height', 0) or 0) >= 720]
-                sd_formats = [f for f in video_formats if 480 <= (f.get('height', 0) or 0) < 720]
+                hd_formats = [f for f in combined_formats if (f.get('height', 0) or 0) >= 720]
+                sd_formats = [f for f in combined_formats if 480 <= (f.get('height', 0) or 0) < 720]
                 
                 if hd_formats:
                     # Sort HD formats by height (prefer 720p over higher if available)
@@ -81,36 +125,35 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     best_format = sd_formats[0]
                 else:
                     # Fallback to any available format
-                    video_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
-                    best_format = video_formats[0]
+                    combined_formats.sort(key=lambda x: (x.get('height', 0) or 0), reverse=True)
+                    best_format = combined_formats[0]
                 
-                # Set format info
                 step['format_id'] = best_format['format_id']
-                step['sort'] = "🎥 ویدیو"
-                filesize = best_format.get('filesize') or best_format.get('filesize_approx')
-                if not filesize:
-                    duration = info.get('duration') or 0
-                    kbps = best_format.get('tbr')
-                    if duration and kbps:
-                        try:
-                            filesize = int((kbps * 1000 / 8) * duration)
-                        except Exception:
-                            filesize = None
-                step['filesize'] = f"{(filesize/1024/1024):.2f} MB" if filesize else "نامشخص"
-                step['ext'] = best_format.get('ext')
-                step['size_bytes'] = int(filesize) if filesize else None
-                step['format_url'] = best_format.get('url')
-                
-                # Show file or link options
-                await callback_query.edit_message_caption(
-                    caption=txt['file_or_link'].format(name=info.get('title'), sort=step['sort'], size=step['filesize']),
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton(txt['telegram_file'], callback_data='_file')],
-                        [InlineKeyboardButton(txt['download_link'], callback_data='_link')]
-                    ])
-                )
-            else:
-                await callback_query.answer("❌ فرمت ویدیویی یافت نشد.", show_alert=True)
+            
+            # Set format info
+            step['sort'] = "🎥 ویدیو"
+            filesize = best_format.get('filesize') or best_format.get('filesize_approx')
+            if not filesize:
+                duration = info.get('duration') or 0
+                kbps = best_format.get('tbr')
+                if duration and kbps:
+                    try:
+                        filesize = int((kbps * 1000 / 8) * duration)
+                    except Exception:
+                        filesize = None
+            step['filesize'] = f"{(filesize/1024/1024):.2f} MB" if filesize else "نامشخص"
+            step['ext'] = best_format.get('ext')
+            step['size_bytes'] = int(filesize) if filesize else None
+            step['format_url'] = best_format.get('url')
+            
+            # Show file or link options
+            await callback_query.edit_message_caption(
+                caption=txt['file_or_link'].format(name=info.get('title'), sort=step['sort'], size=step['filesize']),
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(txt['telegram_file'], callback_data='_file')],
+                    [InlineKeyboardButton(txt['download_link'], callback_data='_link')]
+                ])
+            )
         else:
             await callback_query.answer("❌ اطلاعات ویدیو در دسترس نیست.", show_alert=True)
             
