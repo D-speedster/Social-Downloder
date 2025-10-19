@@ -23,7 +23,7 @@ import time
 from PIL import Image
 import subprocess
 from config import BOT_TOKEN
-from plugins.concurrency import acquire_slot, release_slot, get_queue_stats
+from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user, get_user_active
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -313,6 +313,16 @@ async def handle_universal_link(client: Client, message: Message):
         platform = get_platform_name(url)
         _log(f"[UNIV] Platform detected: {platform}")
         
+        # Reserve user for per-user concurrency control
+        user_reserved = False
+        try:
+            if not reserve_user(user_id):
+                await message.reply_text("⛔ شما هم‌اکنون به سقف دانلود همزمان خود رسیده‌اید. لطفاً منتظر تکمیل دانلود‌های قبلی بمانید.")
+                return
+            user_reserved = True
+        except Exception:
+            pass
+        
         # Send initial status message
         status_msg = await message.reply_text(f"🔄 در حال پردازش لینک {platform}...")
         slot_acquired = False
@@ -420,6 +430,11 @@ async def handle_universal_link(client: Client, message: Message):
         if not api_data and not fallback_media:
             error_msg = last_api_error_message or "خطا در دریافت اطلاعات"
             await status_msg.edit_text(f"❌ {error_msg} از {platform}")
+            try:
+                if user_reserved:
+                    release_user(user_id)
+            except Exception:
+                pass
             return
 
         # Debug logging for API response
@@ -451,6 +466,11 @@ async def handle_universal_link(client: Client, message: Message):
             if not fallback_media:
                 err_msg = last_api_error_message or "لطفاً لینک را بررسی کنید."
                 await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {err_msg}")
+                try:
+                    if user_reserved:
+                        release_user(user_id)
+                except Exception:
+                    pass
                 return
         
         # Extract media information
@@ -487,6 +507,11 @@ async def handle_universal_link(client: Client, message: Message):
             else:
                 _log(f"[UNIV] No fallback media available, returning error")
                 await status_msg.edit_text(f"❌ هیچ فایل قابل دانلودی از {platform} یافت نشد.")
+                try:
+                    if user_reserved:
+                        release_user(user_id)
+                except Exception:
+                    pass
                 return
         
         # Prefer video over audio, and highest quality
@@ -514,6 +539,11 @@ async def handle_universal_link(client: Client, message: Message):
 
             if not download_url:
                 await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
+                try:
+                    if user_reserved:
+                        release_user(user_id)
+                except Exception:
+                    pass
                 return
 
             # Create filename (Windows-safe)
@@ -579,6 +609,11 @@ async def handle_universal_link(client: Client, message: Message):
                             slot_acquired = False
                     except Exception:
                         pass
+                    try:
+                        if user_reserved:
+                            release_user(user_id)
+                    except Exception:
+                        pass
                     return
                 
                 memory_buffer = None  # No memory buffer for file downloads
@@ -636,6 +671,11 @@ async def handle_universal_link(client: Client, message: Message):
                     if slot_acquired:
                         release_slot()
                         slot_acquired = False
+                except Exception:
+                    pass
+                try:
+                    if user_reserved:
+                        release_user(user_id)
                 except Exception:
                     pass
                 return
@@ -962,6 +1002,11 @@ async def handle_universal_link(client: Client, message: Message):
                 except Exception as video_fallback_error:
                     print(f"Video fallback error: {video_fallback_error}")
                     await message.reply_text(f"❌ فایل ویدیو بیش از حد بزرگ است ({file_size_mb:.1f}MB). لطفاً فایل کوچکتری انتخاب کنید.")
+                    try:
+                        if user_reserved:
+                            release_user(user_id)
+                    except Exception:
+                        pass
                     return
             else:
                 # For smaller files or non-video files, use document fallback
@@ -974,6 +1019,11 @@ async def handle_universal_link(client: Client, message: Message):
                 except Exception as fallback_error:
                     print(f"Fallback upload error: {fallback_error}")
                     await message.reply_text(f"❌ خطا در ارسال فایل از {platform}: {str(upload_error)}")
+                    try:
+                        if user_reserved:
+                            release_user(user_id)
+                    except Exception:
+                        pass
                     return
         
         # Delete status message safely
@@ -1028,6 +1078,13 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Start cleanup in background without waiting
         asyncio.create_task(cleanup_and_stats())
+        
+        # Release per-user reservation
+        try:
+            if user_reserved:
+                release_user(user_id)
+        except Exception:
+            pass
             
     except Exception as e:
         error_msg = str(e)
@@ -1036,6 +1093,14 @@ async def handle_universal_link(client: Client, message: Message):
             if 'slot_acquired' in locals() and slot_acquired:
                 release_slot()
                 slot_acquired = False
+        except Exception:
+            pass
+        
+        # Release per-user reservation on error
+        try:
+            if 'user_reserved' in locals() and user_reserved:
+                release_user(user_id)
+                user_reserved = False
         except Exception:
             pass
         

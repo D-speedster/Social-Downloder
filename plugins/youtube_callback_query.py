@@ -16,6 +16,7 @@ from plugins.logger_config import get_logger
 from plugins.youtube_helpers import download_youtube_file, get_direct_download_url, safe_edit_text
 from plugins import constant
 from utils.util import convert_size
+from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload
 import random
 import subprocess
 
@@ -332,10 +333,10 @@ async def answer(client: Client, callback_query: CallbackQuery):
         except Exception as e:
             youtube_callback_logger.error(f"خطا در بررسی محدودیت: {e}")
 
-        youtube_callback_logger.info(f"شروع دانلود برای کاربر {callback_query.from_user.id}")
-        # نمایش فوری پیام شروع دانلود به کاربر
+        youtube_callback_logger.info(f"شروع آپلود مستقیم برای کاربر {callback_query.from_user.id}")
+        # نمایش فوری پیام شروع آپلود مستقیم به کاربر
         await safe_edit_text(
-            f"🚀 **شروع دانلود**\n\n"
+            f"🚀 **شروع آپلود مستقیم**\n\n"
             f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
             f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
             f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
@@ -379,12 +380,13 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 try:
                     elapsed = time.time() - start_time
                     await safe_edit_text(
-                        f"⬇️ **در حال دانلود**\n\n"
+                        f"🚀 **آپلود مستقیم در حال انجام**\n\n"
                         f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
                         f"📊 پیشرفت: {progress}%\n"
                         f"⏱️ زمان سپری شده: {int(elapsed)}s\n"
                         f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                        f"💾 حجم: {step.get('filesize', 'نامشخص')}",
+                        f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                        f"💡 فایل مستقیماً به تلگرام ارسال می‌شود",
                         parse_mode=ParseMode.MARKDOWN
                     )
                     await asyncio.sleep(2)
@@ -396,65 +398,49 @@ async def answer(client: Client, callback_query: CallbackQuery):
         progress_task = asyncio.create_task(progress_display())
 
         try:
-            # Download the file
-            youtube_callback_logger.info("شروع دانلود فایل")
-            downloaded_file = await download_youtube_file(
-                info.get('webpage_url', ''),
-                step.get('format_id', ''),
-                status_hook
-            )
-            
             # Stop progress display
             progress_task.cancel()
-            progress = 100
+            
+            # آپلود مستقیم بدون ذخیره در سرور
+            youtube_callback_logger.info("شروع آپلود مستقیم")
+            
+            # تبدیل format_id به quality_info
+            quality_info = {
+                'format_id': step.get('format_id', ''),
+                'type': 'audio_only' if step.get('sort') == '🎵 صدا' else 'video'
+            }
+            
+            upload_result = await direct_youtube_upload(
+                client=client,
+                chat_id=callback_query.message.chat.id,
+                url=info.get('webpage_url', ''),
+                quality_info=quality_info,
+                title=info.get('title', 'نامشخص'),
+                thumbnail_url=info.get('thumbnail'),
+                progress_callback=status_hook,
+                reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+            )
+            
+            if not upload_result.get('success'):
+                error_msg = upload_result.get('error', 'خطای نامشخص در آپلود')
+                raise Exception(error_msg)
             
             # Update job as completed
             DB().update_job_status(job_id, 'completed')
-            youtube_callback_logger.info(f"دانلود کامل شد: {downloaded_file}")
-
-            # Upload to Telegram
-            await safe_edit_text(
-                f"⬆️ **در حال آپلود به تلگرام**\n\n"
-                f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
-                f"📁 فایل: {os.path.basename(downloaded_file)}\n"
-                f"💾 حجم: {step.get('filesize', 'نامشخص')}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
-            # Send the file
-            call = callback_query
-            if step.get('sort') == '🎥 ویدیو':
-                await client.send_video(
-                    chat_id=call.message.chat.id,
-                    video=downloaded_file,
-                    caption=f"🎬 {info.get('title', 'Video')}",
-                    reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-                )
-            else:
-                await client.send_audio(
-                    chat_id=call.message.chat.id,
-                    audio=downloaded_file,
-                    caption=f"🎵 {info.get('title', 'Audio')}",
-                    reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-                )
-            
-            # Clean up
-            youtube_callback_logger.info("پاک‌سازی فایل‌های موقت")
-            os.remove(downloaded_file)
+            youtube_callback_logger.info("آپلود مستقیم با موفقیت کامل شد")
             
             # Delete the progress message
             try:
-                await call.message.delete()
+                await callback_query.message.delete()
             except Exception:
                 pass  # Ignore if message is already deleted
-            youtube_callback_logger.info("دانلود و آپلود با موفقیت کامل شد")
             
         except Exception as e:
-            youtube_callback_logger.error(f"خطا در دانلود: {e}")
+            youtube_callback_logger.error(f"خطا در آپلود مستقیم: {e}")
             await client.edit_message_text(
-                chat_id=call.message.chat.id,
-                message_id=call.message.message_id,
-                text=f"❌ خطا در دانلود: {str(e)}",
+                chat_id=callback_query.message.chat.id,
+                message_id=callback_query.message.message_id,
+                text=f"❌ خطا در آپلود: {str(e)}",
                 reply_markup=None
             )
             # Update job as failed

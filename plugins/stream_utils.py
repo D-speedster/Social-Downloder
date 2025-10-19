@@ -83,7 +83,15 @@ async def download_with_progress_callback(url: str, file_path: str, progress_cal
                         # Call progress callback if provided
                         if progress_callback and total_size > 0:
                             try:
-                                await progress_callback(downloaded, total_size)
+                                # Format progress data for YouTube callback
+                                progress_data = {
+                                    'status': 'downloading',
+                                    'downloaded_bytes': downloaded,
+                                    'total_bytes': total_size,
+                                    'speed': 0,  # We don't calculate speed here
+                                    'eta': 0     # We don't calculate ETA here
+                                }
+                                progress_callback(progress_data)
                             except Exception:
                                 pass  # Don't let progress callback errors stop download
                 
@@ -191,3 +199,142 @@ async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type
                 await asyncio.sleep(delay)
     
     return False
+
+
+async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: dict, title: str = "", thumbnail_url: str = None, progress_callback=None, **kwargs) -> dict:
+    """
+    Direct YouTube upload without saving to server storage
+    Downloads and uploads simultaneously for maximum efficiency
+    """
+    import yt_dlp
+    import tempfile
+    from plugins.cookie_manager import get_cookie_file_with_fallback, get_rotated_cookie_file, mark_cookie_used
+    
+    try:
+        # Extract format_id and media_type from quality_info
+        format_id = quality_info.get('format_id', '')
+        media_type = 'audio' if quality_info.get('type') == 'audio_only' else 'video'
+        
+        # Configure yt-dlp options for direct streaming
+        def _get_env_proxy():
+            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+        env_proxy = _get_env_proxy()
+
+        # Get direct download URL from yt-dlp without downloading
+        ydl_opts = {
+            'format': format_id,
+            'noplaylist': True,
+            'extract_flat': False,
+            'socket_timeout': 15,
+            'retries': 2,
+            'quiet': True,
+            'no_warnings': True,
+        }
+        if env_proxy:
+            ydl_opts['proxy'] = env_proxy
+
+        cookie_id_used = None
+        
+        # Try to get cookie file
+        try:
+            cookiefile, cid = get_cookie_file_with_fallback(None)
+            if cookiefile:
+                ydl_opts['cookiefile'] = cookiefile
+                cookie_id_used = cid
+        except Exception:
+            pass
+
+        # Extract info and get direct URL
+        def extract_info_sync():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+        
+        try:
+            info = await asyncio.to_thread(extract_info_sync)
+        except Exception as first_err:
+            # Try with different cookie if needed
+            msg = str(first_err).lower()
+            needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
+            if needs_cookie and not cookie_id_used:
+                try:
+                    cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
+                    if cookiefile:
+                        ydl_opts['cookiefile'] = cookiefile
+                        cookie_id_used = cid
+                        info = await asyncio.to_thread(extract_info_sync)
+                    else:
+                        raise first_err
+                except Exception:
+                    raise first_err
+            else:
+                raise first_err
+
+        # Find the requested format
+        if 'formats' in info:
+            selected_format = None
+            for fmt in info['formats']:
+                if fmt.get('format_id') == format_id:
+                    selected_format = fmt
+                    break
+            
+            if not selected_format or not selected_format.get('url'):
+                raise Exception(f"Format {format_id} not found or has no direct URL")
+            
+            direct_url = selected_format['url']
+            file_size = selected_format.get('filesize') or selected_format.get('filesize_approx', 0)
+            file_size_mb = file_size / (1024 * 1024) if file_size else 0
+            
+        elif info.get('url'):
+            # Single format
+            direct_url = info['url']
+            file_size = info.get('filesize') or info.get('filesize_approx', 0)
+            file_size_mb = file_size / (1024 * 1024) if file_size else 0
+        else:
+            raise Exception("No direct URL found")
+
+        # Mark cookie as successful if used
+        if cookie_id_used:
+            try:
+                mark_cookie_used(cookie_id_used, True)
+            except Exception:
+                pass
+
+        # Use temp file approach for all files (no size limitation)
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+            temp_path = temp_file.name
+        
+        try:
+            # Download to temp file with progress callback
+            await download_with_progress_callback(direct_url, temp_path, progress_callback)
+            
+            # Upload from temp file
+            upload_kwargs = kwargs.copy()
+            upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+            
+            if media_type == "video":
+                upload_kwargs['supports_streaming'] = True
+                message = await client.send_video(chat_id=chat_id, video=temp_path, **upload_kwargs)
+            elif media_type == "audio":
+                message = await client.send_audio(chat_id=chat_id, audio=temp_path, **upload_kwargs)
+            else:
+                message = await client.send_document(chat_id=chat_id, document=temp_path, **upload_kwargs)
+            
+            return {"success": True, "message": message}
+            
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+
+    except Exception as e:
+        print(f"Direct YouTube upload failed: {e}")
+        # Mark cookie as failed if used
+        if 'cookie_id_used' in locals() and cookie_id_used:
+            try:
+                mark_cookie_used(cookie_id_used, False)
+            except Exception:
+                pass
+        return {"success": False, "error": str(e)}

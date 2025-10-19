@@ -19,6 +19,7 @@ from plugins.youtube_quality_selector import quality_selector
 from plugins.youtube_advanced_downloader import youtube_downloader
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user
 from utils.util import convert_size
+from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload
 
 # Initialize loggers
 callback_new_logger = get_logger('youtube_callback_new')
@@ -65,11 +66,12 @@ def progress_hook(d, user_id: int, call: CallbackQuery):
                 eta_text = f"{eta}s" if eta else "نامشخص"
                 
                 progress_text = (
-                    f"📥 **در حال دانلود...**\n\n"
+                    f"🚀 **آپلود مستقیم در حال انجام...**\n\n"
                     f"🔄 پیشرفت: {progress}%\n"
                     f"[{progress_bar}]\n\n"
                     f"⚡ سرعت: {speed_text}\n"
-                    f"⏱ زمان باقی‌مانده: {eta_text}"
+                    f"⏱ زمان باقی‌مانده: {eta_text}\n\n"
+                    f"💡 فایل مستقیماً به تلگرام ارسال می‌شود"
                 )
                 
                 # Update message asynchronously
@@ -193,7 +195,7 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     size_text = convert_size(2, selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
     
     download_info = (
-        f"📥 **شروع دانلود**\n\n"
+        f"🚀 **شروع آپلود مستقیم**\n\n"
         f"🎬 **{quality_options['title']}**\n\n"
         f"📊 کیفیت: {quality_text}\n"
         f"📦 حجم تقریبی: {size_text}\n"
@@ -221,136 +223,50 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
         
         output_path = os.path.join(tempfile.gettempdir(), filename)
         
-        # Setup progress callback
+        # Setup progress callback for direct upload
         def progress_callback(d):
             progress_hook(d, user_id, call)
         
-        # دانلود و merge
-        download_result = await youtube_downloader.download_and_merge(
+        # آپلود مستقیم بدون ذخیره در سرور
+        upload_result = await direct_youtube_upload(
+            client=client,
+            chat_id=call.message.chat.id,
             url=url,
             quality_info=selected_quality,
-            callback=progress_callback,
-            thumbnail_url=quality_options.get('thumbnail')
+            title=quality_options['title'],
+            thumbnail_url=quality_options.get('thumbnail'),
+            progress_callback=progress_callback,
+            reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
         )
         
-        if not download_result.get('success'):
-            error_msg = download_result.get('error', 'خطای نامشخص در دانلود')
-            await call.edit_message_text(f"❌ خطا در دانلود: {error_msg}")
+        if upload_result.get("success"):
+            # موفقیت آپلود
+            total_time = time.time() - download_start
+            performance_logger.info(f"[USER:{user_id}] DIRECT UPLOAD completed in: {total_time:.2f} seconds")
+            
+            # حذف پیام callback
+            try:
+                await call.message.delete()
+            except Exception as e:
+                callback_new_logger.warning(f"Failed to delete callback message: {e}")
+                
+            callback_new_logger.info(f"Download process completed successfully in {total_time:.2f}s")
+        else:
+            # خطا در آپلود
+            error_msg = upload_result.get("error", "نامشخص")
+            await call.edit_message_text(f"❌ خطا در آپلود فایل: {error_msg}")
+            callback_new_logger.error(f"Direct upload failed for user {user_id}: {error_msg}")
+        
+        try:
             if slot_acquired:
                 release_slot()
+        except Exception:
+            pass
+        try:
             if 'user_reserved' in locals() and user_reserved:
                 release_user(user_id)
-            return
-        
-        file_path = download_result['file_path']
-        file_size = download_result['file_size']
-        
-        # Get accurate metadata from final file
-        metadata = await youtube_downloader.get_file_metadata(file_path)
-        
-        download_time = time.time() - download_start
-        performance_logger.info(f"[USER:{user_id}] DOWNLOAD completed in: {download_time:.2f} seconds")
-        
-        # Update message with completion info
-        actual_size = convert_size(2, metadata.get('file_size', 0))
-        actual_duration = metadata.get('duration', 0)
-        actual_resolution = f"{metadata.get('width', 0)}x{metadata.get('height', 0)}" if metadata.get('width') and metadata.get('height') else "نامشخص"
-        
-        if actual_duration:
-            minutes, seconds = divmod(int(actual_duration), 60)
-            hours, minutes = divmod(minutes, 60)
-            if hours:
-                duration_text = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-            else:
-                duration_text = f"{minutes:02d}:{seconds:02d}"
-        else:
-            duration_text = "نامشخص"
-        
-        completion_info = (
-            f"✅ **دانلود کامل شد!**\n\n"
-            f"🎬 **{quality_options['title']}**\n\n"
-            f"📊 وضوح واقعی: {actual_resolution}\n"
-            f"⏱ مدت زمان: {duration_text}\n"
-            f"📦 حجم نهایی: {actual_size}\n"
-            f"🎵 کدک صوتی: {metadata.get('audio_codec', 'نامشخص')}\n"
-            f"🎥 کدک ویدیو: {metadata.get('video_codec', 'نامشخص')}\n\n"
-            f"📤 در حال ارسال..."
-        )
-        
-        await call.edit_message_text(completion_info, parse_mode=ParseMode.MARKDOWN)
-        
-        # اعتبارسنجی سخت‌گیرانه وضوح 1280x720 قبل از آپلود
-        if metadata.get('width') != 1280 or metadata.get('height') != 720:
-            await call.edit_message_text(
-                "❌ خروجی نهایی دقیقاً 1280×720 نیست. پردازش متوقف شد.")
-            try:
-                os.unlink(file_path)
-            except:
-                pass
-            return
-
-        # Send file to user
-        upload_start = time.time()
-        
-        if selected_quality['type'] == 'audio_only':
-            await client.send_audio(
-                chat_id=call.message.chat.id,
-                audio=file_path,
-                caption=f"🎵 {quality_options['title']}\n📦 {actual_size}",
-                duration=int(actual_duration) if actual_duration else None,
-                reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-            )
-        else:
-            await client.send_video(
-                chat_id=call.message.chat.id,
-                video=file_path,
-                caption=f"🎬 {quality_options['title']}\n📊 {actual_resolution} • 📦 {actual_size}",
-                duration=int(actual_duration) if actual_duration else None,
-                width=metadata.get('width'),
-                height=metadata.get('height'),
-                thumb=download_result.get('thumb_path'),
-                reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
-            )
-        
-        upload_time = time.time() - upload_start
-        performance_logger.info(f"[USER:{user_id}] UPLOAD completed in: {upload_time:.2f} seconds")
-        
-        # Delete the callback message
-        try:
-            await call.message.delete()
-        except:
-            pass
-        
-        # Clean up file
-        try:
-            os.unlink(file_path)
-        except:
-            pass
-        # پاکسازی thumbnail در صورت وجود
-        try:
-            thumb_path = download_result.get('thumb_path')
-            if thumb_path and os.path.exists(thumb_path):
-                os.unlink(thumb_path)
         except Exception:
             pass
-        # پاکسازی دایرکتوری موقت
-        try:
-            temp_dir = download_result.get('temp_dir')
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-        # Log total time
-        total_time = time.time() - download_start
-        performance_logger.info(f"[USER:{user_id}] TOTAL PROCESS TIME: {total_time:.2f} seconds")
-        performance_logger.info(f"[USER:{user_id}] Breakdown - Download: {download_time:.2f}s, Upload: {upload_time:.2f}s")
-        
-        callback_new_logger.info(f"Download process completed successfully in {total_time:.2f}s")
-        if slot_acquired:
-            release_slot()
-        if 'user_reserved' in locals() and user_reserved:
-            release_user(user_id)
         
     except Exception as e:
         callback_new_logger.error(f"Download process error: {e}")
