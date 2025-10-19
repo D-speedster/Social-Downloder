@@ -29,10 +29,26 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
-            'socket_timeout': 15,
+            'socket_timeout': 30,
             'retries': 3,
             'concurrent_fragments': 4,
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
+            # Enhanced headers to mimic real browser
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+            },
+            # Additional options for YouTube compatibility
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage'],
+                }
+            },
         }
         if env_proxy:
             ydl_opts['proxy'] = env_proxy

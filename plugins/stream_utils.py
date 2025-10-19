@@ -23,10 +23,21 @@ async def download_to_memory_stream(url: str, max_size_mb: int = 50) -> Optional
     Returns a StreamBuffer that can be used directly with Pyrogram send methods
     """
     try:
+        # Headers to mimic a real browser and avoid 403 errors
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
         # Dynamic timeout based on expected file size
         timeout_seconds = min(60, max(15, max_size_mb * 2))
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds)) as session:
-            async with session.get(url) as response:
+            async with session.get(url, headers=headers) as response:
                 response.raise_for_status()
                 
                 # Check content length
@@ -63,9 +74,20 @@ async def download_with_progress_callback(url: str, file_path: str, progress_cal
     Download file with progress callback support for Pyrogram
     """
     try:
+        # Headers to mimic a real browser and avoid 403 errors
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
         # Start with a reasonable timeout, will be adjusted based on actual file size
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120)) as session:
-            async with session.get(url) as response:
+            async with session.get(url, headers=headers) as response:
                 response.raise_for_status()
                 
                 total_size = int(response.headers.get('content-length', 0))
@@ -225,10 +247,27 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             'format': format_id,
             'noplaylist': True,
             'extract_flat': False,
-            'socket_timeout': 15,
-            'retries': 2,
+            'socket_timeout': 30,
+            'retries': 3,
             'quiet': True,
             'no_warnings': True,
+            # Enhanced headers to mimic real browser
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
+                'Keep-Alive': '300',
+                'Connection': 'keep-alive',
+            },
+            # Additional options for YouTube compatibility
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web'],
+                    'player_skip': ['webpage'],
+                }
+            },
         }
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
@@ -337,4 +376,45 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 mark_cookie_used(cookie_id_used, False)
             except Exception:
                 pass
-        return {"success": False, "error": str(e)}
+        
+        # Fallback to traditional download method
+        try:
+            print("Falling back to traditional download method...")
+            from plugins.youtube_helpers import download_youtube_file
+            
+            # Download using traditional method
+            downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+            
+            if downloaded_file and os.path.exists(downloaded_file):
+                try:
+                    # Upload the downloaded file
+                    upload_kwargs = kwargs.copy()
+                    upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+                    
+                    if media_type == "video":
+                        upload_kwargs['supports_streaming'] = True
+                        message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
+                    elif media_type == "audio":
+                        message = await client.send_audio(chat_id=chat_id, audio=downloaded_file, **upload_kwargs)
+                    else:
+                        message = await client.send_document(chat_id=chat_id, document=downloaded_file, **upload_kwargs)
+                    
+                    return {"success": True, "message": message, "fallback_used": True}
+                    
+                finally:
+                    # Clean up downloaded file
+                    try:
+                        os.unlink(downloaded_file)
+                        # Also clean up the temp directory if it exists
+                        temp_dir = os.path.dirname(downloaded_file)
+                        if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
+                            import shutil
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+            else:
+                return {"success": False, "error": "Fallback download failed - no file downloaded"}
+                
+        except Exception as fallback_error:
+            print(f"Fallback download also failed: {fallback_error}")
+            return {"success": False, "error": f"Both direct upload and fallback failed. Direct: {str(e)}, Fallback: {str(fallback_error)}"}
