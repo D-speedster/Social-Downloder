@@ -65,8 +65,25 @@ class YouTubeAdvancedDownloader:
             'extract_flat': False,
             'ignoreerrors': False,
             'no_check_certificate': True,
-            'socket_timeout': 15,
-            'connect_timeout': 10,
+            'socket_timeout': 30,  # افزایش timeout برای شبکه‌های کند
+            'connect_timeout': 20,  # افزایش timeout اتصال
+            'retries': 5,  # تعداد تلاش مجدد
+            'fragment_retries': 5,  # تلاش مجدد برای قطعات
+            'retry_sleep_functions': {
+                'http': lambda n: min(4 ** n, 60),  # تاخیر تصاعدی
+                'fragment': lambda n: min(2 ** n, 30),
+                'extractor': lambda n: min(2 ** n, 30)
+            },
+            # تنظیمات شبکه بهتر برای حل مشکل DNS
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         # ست کردن پروکسی از متغیرهای محیطی در صورت وجود
@@ -113,13 +130,71 @@ class YouTubeAdvancedDownloader:
             pass
     
     def _extract_info(self, url: str, ydl_opts: Dict) -> Optional[Dict]:
-        """استخراج اطلاعات در thread جداگانه"""
+        """استخراج اطلاعات در thread جداگانه با مدیریت خطاهای DNS"""
+        import time
+        
+        # تلاش اول با تنظیمات کامل
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
         except Exception as e:
-            advanced_logger.error(f"yt-dlp extraction error: {e}")
-            return None
+            error_msg = str(e).lower()
+            
+            # بررسی خطاهای DNS resolution
+            if 'failed to resolve' in error_msg or 'name resolution' in error_msg or 'temporary failure' in error_msg:
+                advanced_logger.warning(f"DNS resolution error detected: {e}")
+                advanced_logger.info("تلاش مجدد با تنظیمات ساده‌تر...")
+                
+                # تلاش دوم با تنظیمات ساده‌تر
+                simple_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    'ignoreerrors': True,  # نادیده گیری خطاهای جزئی
+                    'no_check_certificate': True,
+                    'socket_timeout': 60,  # timeout بیشتر
+                    'connect_timeout': 45,
+                    'retries': 10,  # تلاش بیشتر
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (compatible; yt-dlp)',
+                    }
+                }
+                
+                # کپی کردن کوکی از تنظیمات اصلی
+                if 'cookiefile' in ydl_opts:
+                    simple_opts['cookiefile'] = ydl_opts['cookiefile']
+                
+                try:
+                    time.sleep(2)  # تاخیر کوتاه قبل از تلاش مجدد
+                    with yt_dlp.YoutubeDL(simple_opts) as ydl:
+                        advanced_logger.info("تلاش مجدد با تنظیمات ساده...")
+                        return ydl.extract_info(url, download=False)
+                except Exception as e2:
+                    advanced_logger.error(f"تلاش مجدد نیز ناموفق: {e2}")
+                    
+                    # تلاش سوم با حداقل تنظیمات
+                    minimal_opts = {
+                        'quiet': True,
+                        'ignoreerrors': True,
+                        'no_check_certificate': True,
+                        'socket_timeout': 120,
+                        'retries': 15
+                    }
+                    
+                    if 'cookiefile' in ydl_opts:
+                        minimal_opts['cookiefile'] = ydl_opts['cookiefile']
+                    
+                    try:
+                        time.sleep(5)  # تاخیر بیشتر
+                        with yt_dlp.YoutubeDL(minimal_opts) as ydl:
+                            advanced_logger.info("تلاش نهایی با حداقل تنظیمات...")
+                            return ydl.extract_info(url, download=False)
+                    except Exception as e3:
+                        advanced_logger.error(f"همه تلاش‌ها ناموفق: {e3}")
+                        return None
+            else:
+                advanced_logger.error(f"yt-dlp extraction error: {e}")
+                return None
     
     def get_mergeable_qualities(self, info: Dict) -> List[Dict]:
         """دریافت لیست کیفیت‌های قابل merge"""
@@ -356,19 +431,87 @@ class YouTubeAdvancedDownloader:
             return {'success': False, 'error': str(e)}
     
     def _download_with_ytdlp(self, url: str, ydl_opts: Dict) -> bool:
-        """دانلود با yt-dlp"""
+        """دانلود با yt-dlp با مکانیزم retry برای DNS resolution"""
+        import yt_dlp
+        
+        # تنظیمات پایه برای DNS resolution
+        base_opts = ydl_opts.copy()
+        
+        # مرحله 1: تلاش با تنظیمات کامل
+        enhanced_opts = base_opts.copy()
+        enhanced_opts.update({
+            'socket_timeout': 30,
+            'connect_timeout': 20,
+            'retries': 5,
+            'fragment_retries': 5,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+        })
+        
         try:
-            import yt_dlp
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            advanced_logger.info("تلاش اول: دانلود با تنظیمات کامل")
+            with yt_dlp.YoutubeDL(enhanced_opts) as ydl:
                 ydl.download([url])
-            
             advanced_logger.info("yt-dlp download completed successfully")
             return True
             
         except Exception as e:
-            advanced_logger.error(f"yt-dlp download error: {e}")
-            # Check if any file was downloaded in the download directory
+            error_str = str(e).lower()
+            if 'failed to resolve' in error_str or 'name resolution' in error_str:
+                advanced_logger.warning(f"DNS resolution error in first attempt: {e}")
+                
+                # مرحله 2: تلاش با تنظیمات ساده‌تر
+                time.sleep(2)
+                simple_opts = base_opts.copy()
+                simple_opts.update({
+                    'socket_timeout': 60,
+                    'connect_timeout': 45,
+                    'retries': 10,
+                    'fragment_retries': 10
+                })
+                
+                try:
+                    advanced_logger.info("تلاش دوم: دانلود با تنظیمات ساده‌تر")
+                    with yt_dlp.YoutubeDL(simple_opts) as ydl:
+                        ydl.download([url])
+                    advanced_logger.info("yt-dlp download completed successfully on second attempt")
+                    return True
+                    
+                except Exception as e2:
+                    error_str2 = str(e2).lower()
+                    if 'failed to resolve' in error_str2 or 'name resolution' in error_str2:
+                        advanced_logger.warning(f"DNS resolution error in second attempt: {e2}")
+                        
+                        # مرحله 3: تلاش با حداقل تنظیمات
+                        time.sleep(5)
+                        minimal_opts = base_opts.copy()
+                        minimal_opts.update({
+                            'socket_timeout': 120,
+                            'retries': 15
+                        })
+                        
+                        try:
+                            advanced_logger.info("تلاش سوم: دانلود با حداقل تنظیمات")
+                            with yt_dlp.YoutubeDL(minimal_opts) as ydl:
+                                ydl.download([url])
+                            advanced_logger.info("yt-dlp download completed successfully on third attempt")
+                            return True
+                            
+                        except Exception as e3:
+                            advanced_logger.error(f"All download attempts failed. Final error: {e3}")
+                    else:
+                        advanced_logger.error(f"Non-DNS error in second attempt: {e2}")
+            else:
+                advanced_logger.error(f"Non-DNS error in first attempt: {e}")
+            
+            # Check if any file was downloaded despite errors
             outtmpl = ydl_opts.get('outtmpl', '')
             if isinstance(outtmpl, str):
                 # Extract base filename pattern
@@ -394,10 +537,20 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             
-            'socket_timeout': 15,
-            'retries': 3,
+            'socket_timeout': 30,
+            'connect_timeout': 20,
+            'retries': 5,
+            'fragment_retries': 5,
             'concurrent_fragments': 4,
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
@@ -512,10 +665,20 @@ class YouTubeAdvancedDownloader:
             'no_warnings': True,
             'ignoreerrors': False,
             
-            'socket_timeout': 15,
-            'retries': 3,
+            'socket_timeout': 30,
+            'connect_timeout': 20,
+            'retries': 5,
+            'fragment_retries': 5,
             'concurrent_fragments': 4,
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
         }
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
@@ -565,14 +728,83 @@ class YouTubeAdvancedDownloader:
             pass
     
     def _download_with_ydl(self, url: str, ydl_opts: Dict) -> bool:
-        """دانلود با yt-dlp در thread جداگانه"""
+        """دانلود با yt-dlp در thread جداگانه با مکانیزم retry برای DNS resolution"""
+        # تنظیمات پایه برای DNS resolution
+        base_opts = ydl_opts.copy()
+        
+        # مرحله 1: تلاش با تنظیمات کامل
+        enhanced_opts = base_opts.copy()
+        enhanced_opts.update({
+            'socket_timeout': 30,
+            'connect_timeout': 20,
+            'retries': 5,
+            'fragment_retries': 5,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+        })
+        
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            advanced_logger.info("تلاش اول: دانلود با تنظیمات کامل")
+            with yt_dlp.YoutubeDL(enhanced_opts) as ydl:
                 ydl.download([url])
-                return True
+            return True
+            
         except Exception as e:
-            advanced_logger.error(f"yt-dlp download error: {e}")
-            return False
+            error_str = str(e).lower()
+            if 'failed to resolve' in error_str or 'name resolution' in error_str:
+                advanced_logger.warning(f"DNS resolution error in first attempt: {e}")
+                
+                # مرحله 2: تلاش با تنظیمات ساده‌تر
+                time.sleep(2)
+                simple_opts = base_opts.copy()
+                simple_opts.update({
+                    'socket_timeout': 60,
+                    'connect_timeout': 45,
+                    'retries': 10,
+                    'fragment_retries': 10
+                })
+                
+                try:
+                    advanced_logger.info("تلاش دوم: دانلود با تنظیمات ساده‌تر")
+                    with yt_dlp.YoutubeDL(simple_opts) as ydl:
+                        ydl.download([url])
+                    return True
+                    
+                except Exception as e2:
+                    error_str2 = str(e2).lower()
+                    if 'failed to resolve' in error_str2 or 'name resolution' in error_str2:
+                        advanced_logger.warning(f"DNS resolution error in second attempt: {e2}")
+                        
+                        # مرحله 3: تلاش با حداقل تنظیمات
+                        time.sleep(5)
+                        minimal_opts = base_opts.copy()
+                        minimal_opts.update({
+                            'socket_timeout': 120,
+                            'retries': 15
+                        })
+                        
+                        try:
+                            advanced_logger.info("تلاش سوم: دانلود با حداقل تنظیمات")
+                            with yt_dlp.YoutubeDL(minimal_opts) as ydl:
+                                ydl.download([url])
+                            return True
+                            
+                        except Exception as e3:
+                            advanced_logger.error(f"All download attempts failed. Final error: {e3}")
+                            return False
+                    else:
+                        advanced_logger.error(f"Non-DNS error in second attempt: {e2}")
+                        return False
+            else:
+                advanced_logger.error(f"Non-DNS error in first attempt: {e}")
+                return False
     
     async def _merge_with_ffmpeg(self, video_path: str, audio_path: str, output_path: str, target_resolution: str = '720p') -> bool:
         """ادغام و اطمینان از خروجی MP4/H.264/AAC با وضوح دقیق 1280x720"""
