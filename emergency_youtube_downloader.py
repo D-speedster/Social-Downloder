@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Emergency YouTube Downloader
-Bypasses DNS resolution issues by using direct IP addresses
+Emergency YouTube Downloader - دانلودر اضطراری یوتیوب
+این اسکریپت برای حل مشکلات DNS و اتصال به YouTube طراحی شده است
+نسخه جدید با پشتیبانی از کوکی‌ها و جلوگیری از تشخیص ربات
 """
 
 import os
@@ -17,16 +18,57 @@ import time
 import asyncio
 from urllib.parse import urlparse, urlunparse
 import logging
+from pathlib import Path
 
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 class EmergencyYouTubeDownloader:
+    """دانلودر اضطراری یوتیوب با قابلیت دور زدن DNS و احراز هویت کوکی"""
+    
     def __init__(self):
         self.setup_environment()
         self.setup_logging()
         self.ip_mappings = self.get_youtube_ip_mappings()
         self.setup_dns_bypass()
+        self.setup_cookies()
+        self.setup_user_agents()
+        
+        # تنظیمات پیش‌فرض yt-dlp
+        self.ytdl_opts = {
+            'format': 'best[height<=720]',
+            'outtmpl': '%(title)s.%(ext)s',
+            'ignoreerrors': True,
+            'no_warnings': False,
+            'extractaudio': False,
+            'audioformat': 'mp3',
+            'embed_subs': True,
+            'writesubtitles': True,
+            'writeautomaticsub': True,
+            'socket_timeout': 60,
+            'retries': 5,
+            'fragment_retries': 10,
+            'http_chunk_size': 10485760,
+            'user_agent': self.get_random_user_agent(),
+            'headers': {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+                'Sec-Fetch-User': '?1'
+            }
+        }
+        
+        # اضافه کردن کوکی‌ها اگر موجود باشند
+        if self.cookie_file:
+            self.ytdl_opts['cookiefile'] = self.cookie_file
+        elif self.cookie_json:
+            self.ytdl_opts['cookiesfrombrowser'] = ('chrome',)
         
     def setup_environment(self):
         """Setup emergency environment variables"""
@@ -70,6 +112,59 @@ class EmergencyYouTubeDownloader:
             'r6---sn-4g5e6nls.googlevideo.com': '216.58.194.174',
         }
         
+    def setup_cookies(self):
+        """تنظیم کوکی‌ها برای احراز هویت"""
+        self.cookie_file = None
+        self.cookie_json = None
+        
+        # جستجو برای فایل‌های کوکی
+        cookie_files = [
+            'youtube_cookies.txt',
+            'cookies.txt',
+            '/tmp/youtube_cookies.txt',
+            os.path.expanduser('~/youtube_cookies.txt')
+        ]
+        
+        for cookie_file in cookie_files:
+            if os.path.exists(cookie_file):
+                self.cookie_file = cookie_file
+                self.logger.info(f"✓ فایل کوکی پیدا شد: {cookie_file}")
+                break
+        
+        # جستجو برای فایل JSON کوکی
+        json_files = [
+            'youtube_cookies.json',
+            'cookies.json',
+            '/tmp/youtube_cookies.json'
+        ]
+        
+        for json_file in json_files:
+            if os.path.exists(json_file):
+                self.cookie_json = json_file
+                self.logger.info(f"✓ فایل JSON کوکی پیدا شد: {json_file}")
+                break
+        
+        if not self.cookie_file and not self.cookie_json:
+            self.logger.warning("⚠️ هیچ فایل کوکی پیدا نشد - ممکن است با مشکل احراز هویت مواجه شوید")
+    
+    def setup_user_agents(self):
+        """تنظیم User Agent های مختلف برای جلوگیری از تشخیص ربات"""
+        import random
+        self.user_agents = [
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/120.0',
+            'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+    
+    def get_random_user_agent(self):
+        """دریافت User Agent تصادفی"""
+        import random
+        return random.choice(self.user_agents)
+    
     def setup_dns_bypass(self):
         """Setup DNS bypass using direct IP mapping"""
         original_getaddrinfo = socket.getaddrinfo
