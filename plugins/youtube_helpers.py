@@ -17,7 +17,7 @@ async def get_available_formats(url):
             'quiet': True,
             'simulate': True,
             'listformats': True,
-            'proxy': 'socks5h://127.0.0.1:1084',
+            
             'socket_timeout': 15,
             'retries': 3,
             'extractor_args': {
@@ -309,7 +309,7 @@ async def get_direct_download_url(url, format_id):
             'simulate': True,
             'noplaylist': True,
             'extract_flat': False,
-            'proxy': 'socks5h://127.0.0.1:1084',
+            
             'socket_timeout': 15,
             'retries': 3,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند

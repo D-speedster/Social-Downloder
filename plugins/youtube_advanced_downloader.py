@@ -393,7 +393,7 @@ class YouTubeAdvancedDownloader:
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': False,
-            'proxy': 'socks5h://127.0.0.1:1084',
+            
             'socket_timeout': 15,
             'retries': 3,
             'concurrent_fragments': 4,
@@ -511,7 +511,7 @@ class YouTubeAdvancedDownloader:
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': False,
-            'proxy': 'socks5h://127.0.0.1:1084',
+            
             'socket_timeout': 15,
             'retries': 3,
             'concurrent_fragments': 4,
