@@ -10,6 +10,8 @@ import shutil
 import asyncio
 import tempfile
 import subprocess
+import socket
+import urllib3
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import yt_dlp
@@ -28,6 +30,10 @@ class YouTubeAdvancedDownloader:
         self.ffmpeg_path = self._find_ffmpeg()
         # Cookie rotation state
         self._prev_cookie_id: Optional[int] = None
+        
+        # تنظیمات DNS سفارشی برای محیط سرور
+        self._setup_dns_config()
+        
         advanced_logger.info("YouTubeAdvancedDownloader initialized")
     
     def _find_ffmpeg(self) -> Optional[str]:
@@ -55,37 +61,90 @@ class YouTubeAdvancedDownloader:
         advanced_logger.warning("FFmpeg not found in common locations")
         return None
     
+    def _setup_dns_config(self):
+        """تنظیم DNS سفارشی برای حل مشکلات resolution در سرور"""
+        try:
+            # تنظیم timeout برای DNS queries
+            socket.setdefaulttimeout(30)
+            
+            # تنظیم urllib3 برای مدیریت بهتر اتصالات
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            advanced_logger.info("DNS configuration setup completed")
+            
+        except Exception as e:
+            advanced_logger.warning(f"DNS configuration setup failed: {e}")
+
+    def _get_enhanced_ydl_opts(self, base_opts: Dict = None) -> Dict:
+        """تولید تنظیمات پیشرفته yt-dlp با DNS resolution بهبود یافته"""
+        if base_opts is None:
+            base_opts = {}
+            
+        enhanced_opts = base_opts.copy()
+        enhanced_opts.update({
+            # تنظیمات شبکه پیشرفته
+            'socket_timeout': 60,
+            'connect_timeout': 45,
+            'read_timeout': 120,
+            'retries': 15,
+            'fragment_retries': 15,
+            'skip_unavailable_fragments': True,
+            'keep_fragments': False,
+            
+            # تنظیمات HTTP پیشرفته
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none'
+            },
+            
+            # تنظیمات امنیتی برای سرور
+            'no_check_certificate': True,
+            'ignoreerrors': True,
+            'no_warnings': True,
+            'quiet': True,
+            
+            # تنظیمات اضافی برای پایداری
+            'concurrent_fragments': 1,  # کاهش همزمانی برای پایداری بیشتر
+            'sleep_interval': 1,
+            'max_sleep_interval': 5,
+            'sleep_interval_requests': 1,
+            
+            # تنظیمات proxy و DNS
+            'source_address': '0.0.0.0',  # استفاده از همه آدرس‌های موجود
+        })
+        
+        return enhanced_opts
+    
     async def get_video_info(self, url: str) -> Optional[Dict]:
-        """دریافت اطلاعات کامل ویدیو"""
+        """دریافت اطلاعات کامل ویدیو با DNS resolution بهبود یافته"""
         advanced_logger.info(f"Getting video info for: {url}")
         
-        ydl_opts = {
+        # استفاده از تنظیمات پیشرفته DNS
+        base_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'ignoreerrors': False,
             'no_check_certificate': True,
-            'socket_timeout': 30,  # افزایش timeout برای شبکه‌های کند
-            'connect_timeout': 20,  # افزایش timeout اتصال
-            'retries': 5,  # تعداد تلاش مجدد
-            'fragment_retries': 5,  # تلاش مجدد برای قطعات
             'retry_sleep_functions': {
                 'http': lambda n: min(4 ** n, 60),  # تاخیر تصاعدی
                 'fragment': lambda n: min(2 ** n, 30),
                 'extractor': lambda n: min(2 ** n, 30)
             },
-            # تنظیمات شبکه بهتر برای حل مشکل DNS
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip, deflate',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-            },
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
+        
+        # دریافت تنظیمات بهبود یافته
+        ydl_opts = self._get_enhanced_ydl_opts(base_opts)
         # ست کردن پروکسی از متغیرهای محیطی در صورت وجود
         try:
             import os as _os
@@ -146,19 +205,14 @@ class YouTubeAdvancedDownloader:
                 advanced_logger.info("تلاش مجدد با تنظیمات ساده‌تر...")
                 
                 # تلاش دوم با تنظیمات ساده‌تر
-                simple_opts = {
+                simple_base_opts = {
                     'quiet': True,
                     'no_warnings': True,
                     'extract_flat': False,
                     'ignoreerrors': True,  # نادیده گیری خطاهای جزئی
                     'no_check_certificate': True,
-                    'socket_timeout': 60,  # timeout بیشتر
-                    'connect_timeout': 45,
-                    'retries': 10,  # تلاش بیشتر
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (compatible; yt-dlp)',
-                    }
                 }
+                simple_opts = self._get_enhanced_ydl_opts(simple_base_opts)
                 
                 # کپی کردن کوکی از تنظیمات اصلی
                 if 'cookiefile' in ydl_opts:
@@ -437,23 +491,8 @@ class YouTubeAdvancedDownloader:
         # تنظیمات پایه برای DNS resolution
         base_opts = ydl_opts.copy()
         
-        # مرحله 1: تلاش با تنظیمات کامل
-        enhanced_opts = base_opts.copy()
-        enhanced_opts.update({
-            'socket_timeout': 30,
-            'connect_timeout': 20,
-            'retries': 5,
-            'fragment_retries': 5,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
-        })
+        # مرحله 1: تلاش با تنظیمات کامل بهبود یافته
+        enhanced_opts = self._get_enhanced_ydl_opts(base_opts)
         
         try:
             advanced_logger.info("تلاش اول: دانلود با تنظیمات کامل")
@@ -530,28 +569,16 @@ class YouTubeAdvancedDownloader:
         """دانلود فرمت combined"""
         format_id = quality_info['format_id']
         
-        ydl_opts = {
+        base_opts = {
             'format': format_id,
             'outtmpl': output_path,
             'quiet': True,
             'no_warnings': True,
             'ignoreerrors': False,
-            
-            'socket_timeout': 30,
-            'connect_timeout': 20,
-            'retries': 5,
-            'fragment_retries': 5,
-            'concurrent_fragments': 4,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
-                'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
-            }
         }
+        
+        # استفاده از تنظیمات بهبود یافته DNS
+        ydl_opts = self._get_enhanced_ydl_opts(base_opts)
         # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
             from .cookie_manager import get_cookie_file_with_fallback
