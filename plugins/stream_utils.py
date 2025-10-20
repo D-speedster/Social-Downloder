@@ -5,6 +5,7 @@ import asyncio
 import aiohttp
 import io
 import os
+import requests
 from typing import BinaryIO, Union, Optional
 
 
@@ -69,6 +70,48 @@ async def download_to_memory_stream(url: str, max_size_mb: int = 50) -> Optional
         return None
 
 
+async def download_to_memory_stream_requests(url: str, max_size_mb: int = 50) -> Optional[StreamBuffer]:
+    """
+    Fallback: Download file to memory using requests (sync) with stream=True.
+    Runs in a thread to avoid blocking the event loop.
+    """
+    def _sync() -> Optional[StreamBuffer]:
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            with requests.Session() as session:
+                # timeout=(connect, read)
+                with session.get(url, headers=headers, stream=True, timeout=(10, max(30, max_size_mb))) as resp:
+                    resp.raise_for_status()
+                    content_length = resp.headers.get('content-length')
+                    if content_length:
+                        size_mb = int(content_length) / (1024 * 1024)
+                        if size_mb > max_size_mb:
+                            return None
+                    filename = url.split('/')[-1].split('?')[0] or 'media_file'
+                    buffer = StreamBuffer(filename)
+                    for chunk in resp.iter_content(chunk_size=64 * 1024):
+                        if not chunk:
+                            continue
+                        buffer.write(chunk)
+                        if buffer.tell() > max_size_mb * 1024 * 1024:
+                            buffer.close()
+                            return None
+                    buffer.seek(0)
+                    return buffer
+        except Exception as e:
+            print(f"Requests memory streaming error: {e}")
+            return None
+    return await asyncio.to_thread(_sync)
+
+
 async def download_with_progress_callback(url: str, file_path: str, progress_callback=None) -> str:
     """
     Download file with progress callback support for Pyrogram
@@ -110,8 +153,8 @@ async def download_with_progress_callback(url: str, file_path: str, progress_cal
                                     'status': 'downloading',
                                     'downloaded_bytes': downloaded,
                                     'total_bytes': total_size,
-                                    'speed': 0,  # We don't calculate speed here
-                                    'eta': 0     # We don't calculate ETA here
+                                    'speed': 0,
+                                    'eta': 0
                                 }
                                 progress_callback(progress_data)
                             except Exception:
@@ -251,6 +294,9 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             'retries': 3,
             'quiet': True,
             'no_warnings': True,
+            'nocheckcertificate': True,
+            'prefer_insecure': True,
+            'force_ipv4': True,
             # Enhanced headers to mimic real browser
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -360,8 +406,64 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             except Exception:
                 pass
 
-        # Use temp file approach for all files (no size limitation)
-        # Create a temporary file
+        # Try in-memory streaming first (no disk usage)
+        memory_threshold_mb = int(kwargs.pop('memory_threshold_mb', 50))
+        try:
+            memory_buffer = await download_to_memory_stream(direct_url, max_size_mb=memory_threshold_mb)
+        except Exception:
+            memory_buffer = None
+        
+        if memory_buffer:
+            upload_kwargs = kwargs.copy()
+            upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+            
+            try:
+                if media_type == "video":
+                    upload_kwargs['supports_streaming'] = True
+                    message = await client.send_video(chat_id=chat_id, video=memory_buffer, **upload_kwargs)
+                elif media_type == "audio":
+                    message = await client.send_audio(chat_id=chat_id, audio=memory_buffer, **upload_kwargs)
+                else:
+                    message = await client.send_document(chat_id=chat_id, document=memory_buffer, **upload_kwargs)
+                
+                memory_buffer.close()
+                return {"success": True, "message": message, "in_memory": True}
+            except Exception as mem_upload_err:
+                print(f"In-memory upload failed, will try requests fallback: {mem_upload_err}")
+                try:
+                    memory_buffer.close()
+                except Exception:
+                    pass
+        
+        # Fallback: memory streaming via requests
+        try:
+            memory_buffer = await download_to_memory_stream_requests(direct_url, max_size_mb=memory_threshold_mb)
+        except Exception:
+            memory_buffer = None
+        
+        if memory_buffer:
+            upload_kwargs = kwargs.copy()
+            upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+            
+            try:
+                if media_type == "video":
+                    upload_kwargs['supports_streaming'] = True
+                    message = await client.send_video(chat_id=chat_id, video=memory_buffer, **upload_kwargs)
+                elif media_type == "audio":
+                    message = await client.send_audio(chat_id=chat_id, audio=memory_buffer, **upload_kwargs)
+                else:
+                    message = await client.send_document(chat_id=chat_id, document=memory_buffer, **upload_kwargs)
+                
+                memory_buffer.close()
+                return {"success": True, "message": message, "in_memory": True}
+            except Exception as req_upload_err:
+                print(f"Requests in-memory upload failed, will fallback to temp file: {req_upload_err}")
+                try:
+                    memory_buffer.close()
+                except Exception:
+                    pass
+
+        # Use temp file approach as a last resort (ephemeral, deleted immediately)
         with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
             temp_path = temp_file.name
         

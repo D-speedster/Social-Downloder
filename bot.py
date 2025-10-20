@@ -1,6 +1,7 @@
 from pyrogram import Client, idle
 from pyrogram.storage import MemoryStorage
 from plugins.sqlite_db_wrapper import DB
+from plugins.job_queue import init_job_queue
 from logging import basicConfig, ERROR, INFO
 import os
 import sys
@@ -127,19 +128,44 @@ async def main():
     client = None
     try:
         print("🚀 در حال راه‌اندازی کلاینت ربات...")
-        client = Client(
-            name="ytdownloader3_dev2",
-            bot_token=BOT_TOKEN,
-            api_id=API_ID,  # Changed from APP_ID to API_ID
-            api_hash=API_HASH,
-            plugins=plugins,
-            workers=MAX_WORKERS,
-            sleep_threshold=60,  # Add sleep threshold to prevent flood
-        )
+        
+        # Prepare client configuration
+        client_config = {
+            "name": "ytdownloader3_dev2",
+            "bot_token": BOT_TOKEN,
+            "api_id": API_ID,
+            "api_hash": API_HASH,
+            "plugins": plugins,
+            "workers": MAX_WORKERS,
+            "sleep_threshold": 60,
+            "test_mode": False,  # Use production servers
+            "ipv6": False,       # Disable IPv6 to avoid connection issues
+        }
+        
+        # Add proxy configuration if available
+        if config.PROXY_HOST and config.PROXY_PORT:
+            from pyrogram.types import ProxyType
+            proxy_config = {
+                "scheme": "socks5",  # Default to SOCKS5
+                "hostname": config.PROXY_HOST,
+                "port": config.PROXY_PORT,
+            }
+            
+            # Add authentication if provided
+            if config.PROXY_USERNAME and config.PROXY_PASSWORD:
+                proxy_config["username"] = config.PROXY_USERNAME
+                proxy_config["password"] = config.PROXY_PASSWORD
+            
+            client_config["proxy"] = proxy_config
+            print(f"🔧 استفاده از پروکسی: {config.PROXY_HOST}:{config.PROXY_PORT}")
+        
+        client = Client(**client_config)
         
         logger.info("Starting bot client...")
         print("🔗 در حال اتصال به تلگرام...")
         await client.start()
+        # Initialize job queue and recover any pending/incomplete jobs
+        await init_job_queue(client)
         logger.info("Bot started successfully")
         print("✅ ربات با موفقیت راه‌اندازی شد!")
         print("🔄 ربات در حال اجرا است... (Ctrl+C برای توقف)")

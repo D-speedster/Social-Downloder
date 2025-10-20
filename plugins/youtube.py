@@ -268,8 +268,9 @@ async def show_video(client: Client, message: Message):
             'extract_flat': False,
             'format': 'best[height>=720]/best[height>=480]/best',  # Prioritize higher quality (720p+, then 480p+)
             'ignoreerrors': True,
-            'no_check_certificate': True,
+            'nocheckcertificate': True,
             'prefer_insecure': True, # Skip HTTPS when possible for speed
+            'force_ipv4': True,
             'youtube_include_dash_manifest': False,  # Skip DASH manifest for speed
             'writesubtitles': False, # Skip subtitle extraction
             'writeautomaticsub': False, # Skip auto subtitles

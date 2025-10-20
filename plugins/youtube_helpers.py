@@ -113,16 +113,26 @@ async def find_best_fallback_format(url, requested_format_id):
         youtube_helpers_logger.error(f"خطا در پیدا کردن فرمت جایگزین: {e}")
         return None
 
-async def download_youtube_file(url, format_id, progress_hook=None):
+async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None):
     """
     دانلود فایل یوتیوب با format_id مشخص
+    اگر out_dir مشخص شود، فایل در آن پوشه ذخیره می‌شود؛ در غیر این‌صورت از دایرکتوری موقت استفاده می‌شود.
     """
     try:
         youtube_helpers_logger.info(f"شروع دانلود: {url} با فرمت {format_id}")
         
-        # Create temporary directory for download
-        temp_dir = tempfile.mkdtemp()
-        youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
+        # Prepare output directory
+        temp_dir = None
+        if out_dir:
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+            except Exception as e:
+                youtube_helpers_logger.error(f"ناتوانی در ایجاد پوشه دانلود {out_dir}: {e}")
+                out_dir = None
+        if not out_dir:
+            temp_dir = tempfile.mkdtemp()
+            youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
+        target_dir = out_dir or temp_dir
         
         # Configure yt-dlp options with proxy (from env if present)
         def _get_env_proxy():
@@ -131,12 +141,21 @@ async def download_youtube_file(url, format_id, progress_hook=None):
 
         ydl_opts = {
             'format': format_id,
-            'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
+            'outtmpl': os.path.join(target_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
             'socket_timeout': 30,
             'retries': 3,
-            'concurrent_fragments': 4,
+            'concurrent_fragments': 8,
+            'force_ipv4': True,
+            'http_chunk_size': '16M',
+            'fragment_retries': 3,
+            # Ensure resume for partial downloads on restart
+            'continuedl': True,
+            'nopart': False,
+            'nooverwrites': True,
+            # Windows-safe filenames to avoid path issues
+            'windowsfilenames': True,
             # Enhanced headers to mimic real browser
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -148,15 +167,15 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                 'Connection': 'keep-alive',
             },
             # Additional options for YouTube compatibility
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['ios', 'android', 'web'],
-                'player_skip': ['webpage'],
-                'skip': ['hls', 'dash'],
-                'innertube_host': 'studio.youtube.com',
-                'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
-            }
-        },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web'],
+                    'player_skip': ['webpage'],
+                    'skip': ['hls', 'dash'],
+                    'innertube_host': 'studio.youtube.com',
+                    'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
+                }
+            },
         }
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
@@ -251,13 +270,17 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             except Exception:
                 pass
         
-        # Find downloaded file
-        downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
+        # Find downloaded file in target_dir (pick the newest)
+        downloaded_files = [
+            os.path.join(target_dir, f) for f in os.listdir(target_dir)
+            if os.path.isfile(os.path.join(target_dir, f))
+        ]
         if not downloaded_files:
             youtube_helpers_logger.error("هیچ فایل دانلود شده‌ای یافت نشد")
             return None
         
-        downloaded_file = os.path.join(temp_dir, downloaded_files[0])
+        downloaded_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+        downloaded_file = downloaded_files[0]
         youtube_helpers_logger.info(f"دانلود موفق: {downloaded_file}")
         
         return downloaded_file
