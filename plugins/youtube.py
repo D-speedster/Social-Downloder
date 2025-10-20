@@ -16,6 +16,7 @@ import time
 import logging
 import sys
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
+from plugins.youtube_helpers import safe_extract_info
 
 # Configure logging for performance monitoring
 import os
@@ -225,11 +226,7 @@ async def show_video(client: Client, message: Message):
     youtube_logger.debug(f"پیام پردازش ارسال شد در {message_sent_time - start_time:.2f} ثانیه")
 
     try:
-        # تنظیم yt-dlp بدون وابستگی به کوکی‌ها
-        youtube_logger.debug("شروع تنظیم yt-dlp بدون کوکی")
-        use_cookies = False
-
-        # Security: Use environment variable for ffmpeg path or auto-detect
+        # Security: Use environment variable for ffmpeg path or auto-detect (kept for future use)
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
         try:
             if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
@@ -248,81 +245,21 @@ async def show_video(client: Client, message: Message):
                 if shutil.which(path) or os.path.exists(path):
                     ffmpeg_path = path
                     break
-        
         youtube_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
         
-        # Helper: pick proxy from environment if available
-        def _get_env_proxy():
-            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
-
-        env_proxy = _get_env_proxy()
-
-        ydl_opts = {
-            'quiet': True,
-            'simulate': True,
-            'extractor_retries': 0,  # No retries for maximum speed
-            'fragment_retries': 0,   # No retries for maximum speed
-            'socket_timeout': 8,     # Aggressive timeout for speed
-            'connect_timeout': 5,    # Connection timeout
-            'no_warnings': True,
-            'extract_flat': False,
-            'format': 'best[height>=720]/best[height>=480]/best',  # Prioritize higher quality (720p+, then 480p+)
-            'ignoreerrors': True,
-            'nocheckcertificate': True,
-            'prefer_insecure': True, # Skip HTTPS when possible for speed
-            'force_ipv4': True,
-            'youtube_include_dash_manifest': False,  # Skip DASH manifest for speed
-            'writesubtitles': False, # Skip subtitle extraction
-            'writeautomaticsub': False, # Skip auto subtitles
-            'writethumbnail': True, # Skip thumbnail download
-            'writeinfojson': False,  # Skip info json writing
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
-        }
-        if env_proxy:
-            ydl_opts['proxy'] = env_proxy
-        
-        if ffmpeg_path:
-            ydl_opts['ffmpeg_location'] = ffmpeg_path
-            
-        # همیشه ابتدا سعی کن از فایل کوکی استفاده کنی
-        cookie_id_used = None
-        try:
-            cookiefile, cid = get_cookie_file_with_fallback(None)
-            if cookiefile:
-                ydl_opts['cookiefile'] = cookiefile
-                cookie_id_used = cid
-                if cid == -1:
-                    youtube_logger.info("استفاده از کوکی اصلی cookie_youtube.txt برای استخراج اطلاعات")
-                else:
-                    youtube_logger.info(f"استفاده از کوکی استخر برای استخراج اطلاعات: id={cid}")
-        except Exception:
-            pass
-
-        # Run extraction in a background thread to avoid blocking the event loop
+        # Run extraction in a background thread via safe wrapper
         extraction_start = time.time()
-        performance_logger.info(f"[USER:{user_id}] Starting yt-dlp extraction...")
-        youtube_logger.debug("شروع استخراج اطلاعات ویدیو با yt-dlp")
+        performance_logger.info(f"[USER:{user_id}] Starting safe info extraction...")
+        youtube_logger.debug("شروع استخراج اطلاعات ویدیو با safe_extract_info")
         
-        try:
-            info = await asyncio.to_thread(lambda: YoutubeDL(ydl_opts).extract_info(url, download=False))
-            if not info:
-                raise RuntimeError("اطلاعاتی از yt-dlp دریافت نشد")
-            youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
-            
-            # اگر از کوکی استفاده شد و موفق بود، ثبت کن
-            if cookie_id_used:
-                try:
-                    mark_cookie_used(cookie_id_used, True)
-                except Exception:
-                    pass
-                
-        finally:
-            # وابستگی کوکی حذف شده است؛ نیازی به پاک‌سازی فایل کوکی نیست
-            pass
+        info = await safe_extract_info(url, base_opts={'format': 'best[height>=720]/best[height>=480]/best'})
+        if not info:
+            raise RuntimeError("اطلاعاتی از yt-dlp دریافت نشد")
+        youtube_logger.debug(f"استخراج اطلاعات موفق: عنوان={info.get('title', 'نامشخص')}, مدت={info.get('duration', 0)} ثانیه")
         
         extraction_end = time.time()
         extraction_time = extraction_end - extraction_start
-        performance_logger.info(f"[USER:{user_id}] yt-dlp extraction completed in: {extraction_time:.2f} seconds")
+        performance_logger.info(f"[USER:{user_id}] info extraction completed in: {extraction_time:.2f} seconds")
         youtube_logger.debug(f"استخراج اطلاعات تکمیل شد در {extraction_time:.2f} ثانیه")
         
         if info:
@@ -356,101 +293,17 @@ async def show_video(client: Client, message: Message):
 
     except Exception as e:
         err_text = str(e)
-        performance_logger.error(f"[USER:{user_id}] yt-dlp extraction failed: {err_text}")
+        performance_logger.error(f"[USER:{user_id}] info extraction failed: {err_text}")
         youtube_logger.error(f"خطا در استخراج اطلاعات: {err_text}")
         print(f"Error processing YouTube link: {err_text}")
-
-        # منطق تلاش‌های جایگزین: ابتدا بدون کوکی/پراکسی، سپس بر اساس نیاز
-        def _needs_cookie(msg: str) -> bool:
-            msg_l = (msg or '').lower()
-            hints = ['login required', 'sign in', 'age', 'restricted', 'private', 'consent']
-            return any(h in msg_l for h in hints)
-
-        cookiefile = None
-        cookie_id_used = None
-        # اجرای تلاش‌های جایگزین بدون بلاک try بیرونی که لازم نیست
-        # Attempt 1: فقط کوکی اگر لازم باشد
-        info = None
-        if _needs_cookie(err_text):
-            try:
-                    cookiefile, cookie_id_used = get_rotated_cookie_file(None)
-                    if cookiefile:
-                        opts = dict(ydl_opts)
-                        opts['cookiefile'] = cookiefile
-                        # ست کردن پروکسی از محیط در صورت وجود
-                        if env_proxy:
-                            opts['proxy'] = env_proxy
-                        performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
-                        youtube_logger.debug("تلاش مجدد با کوکی")
-                        info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
-                        if cookie_id_used:
-                            mark_cookie_used(cookie_id_used, True)
-            except Exception as ce:
-                    youtube_logger.error(f"خطا در تلاش با کوکی: {ce}")
-                    if cookie_id_used:
-                        try:
-                            mark_cookie_used(cookie_id_used, False)
-                        except Exception:
-                            pass
-
-        # Attempt 2: تلاش مجدد با کوکی اگر قبلاً موفق نبوده
-        if not info:
-            try:
-                if not cookiefile:
-                    cookiefile, cookie_id_used = get_rotated_cookie_file(None)
-                if cookiefile:
-                    opts = dict(ydl_opts)
-                    opts['cookiefile'] = cookiefile
-                    # ست کردن پروکسی از محیط در صورت وجود
-                    if env_proxy:
-                        opts['proxy'] = env_proxy
-                    performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
-                    youtube_logger.debug("تلاش مجدد با کوکی")
-                    info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
-            except Exception as ce:
-                youtube_logger.error(f"خطا در تلاش مجدد با کوکی: {ce}")
-                    
-                    
-                if info and cookie_id_used:
-                     mark_cookie_used(cookie_id_used, True)
-            except Exception as cpe:
-                youtube_logger.error(f"خطا در تلاش ترکیبی: {cpe}")
-                if cookie_id_used:
-                    try:
-                        mark_cookie_used(cookie_id_used, False)
-                    except Exception:
-                        pass
-
-        if info:
-            # موفقیت در fallback
-            with open("yt_dlp_info_fallback.json", "w", encoding="utf-8") as f:
-                json.dump(info, f, ensure_ascii=False, indent=4)
-            print("Fallback extracted info written to yt_dlp_info_fallback.json")
-            step['link'] = info
-            step['title'] = info.get('title', 'Unknown Title')
-            step['duration'] = info.get('duration', 0)
-            step['thumbnail'] = info.get('thumbnail', None)
-
-            await display_video_info_with_cover(client, processing_message, info)
-
-            end_time = time.time()
-            total_time = end_time - start_time
-            performance_logger.info(f"[USER:{user_id}] FALLBACK TOTAL TIME: {total_time:.2f} seconds")
-            if total_time > 8.0:
-                performance_logger.warning(f"[USER:{user_id}] ⚠️ SLOW FALLBACK: {total_time:.2f}s (Target: <8s)")
-            else:
-                performance_logger.info(f"[USER:{user_id}] ✅ GOOD FALLBACK: {total_time:.2f}s (Target: <8s)")
-        else:
-            # شکست همراه با پیام شفاف و بدون دسترسی به info.get از None
-            performance_logger.error(f"[USER:{user_id}] Fallback extraction also failed: {err_text}")
-            youtube_logger.error("استخراج جایگزین نیز ناکام ماند؛ info=None")
-            try:
-                await processing_message.edit_text(
-                    "❌ **خطا در پردازش لینک یوتیوب**\n\n"
-                    "امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
-                    "راهکارها: استفاده از کوکی معتبر، بررسی پراکسی سیستم، یا تلاش دوباره.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception:
-                await processing_message.edit_text("خطا در پردازش لینک یوتیوب. لطفاً دوباره تلاش کنید.")
-            return
+        
+        try:
+            await processing_message.edit_text(
+                "❌ **خطا در پردازش لینک یوتیوب**\n\n"
+                "امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
+                "راهکارها: استفاده از کوکی معتبر، بررسی پراکسی سیستم، یا تلاش دوباره.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception:
+            await processing_message.edit_text("خطا در پردازش لینک یوتیوب. لطفاً دوباره تلاش کنید.")
+        return

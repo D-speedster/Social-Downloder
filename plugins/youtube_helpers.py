@@ -303,6 +303,10 @@ async def get_direct_download_url(url, format_id):
         youtube_helpers_logger.info(f"دریافت لینک مستقیم: {url} با فرمت {format_id}")
         
         # Configure yt-dlp options for URL extraction with proxy
+        def _get_env_proxy():
+            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+        env_proxy = _get_env_proxy()
+        
         ydl_opts = {
             'format': format_id,
             'quiet': True,
@@ -314,6 +318,9 @@ async def get_direct_download_url(url, format_id):
             'retries': 3,
             # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
+        
+        if env_proxy:
+            ydl_opts['proxy'] = env_proxy
         
         cookie_id_used = None
         
@@ -343,6 +350,7 @@ async def get_direct_download_url(url, format_id):
             msg = str(first_err).lower()
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
             format_not_available = 'requested format is not available' in msg
+            proxy_suspect = any(h in msg for h in ['proxy', '407', 'socks', '403', 'tls', 'ssl', 'timeout'])
             
             if format_not_available:
                 # Try to find a fallback format
@@ -387,6 +395,16 @@ async def get_direct_download_url(url, format_id):
                     youtube_helpers_logger.debug(f"خطا در استخراج لینک با کوکی: {cookie_err}")
                     ydl_opts.pop('cookiefile', None)
                     info = await asyncio.to_thread(extract_sync)
+            elif proxy_suspect and env_proxy:
+                try:
+                    youtube_helpers_logger.info("تلاش مجدد بدون پروکسی به‌دلیل خطای شبکه/پروکسی")
+                    ydl_opts.pop('proxy', None)
+                    info = await asyncio.to_thread(extract_sync)
+                    if info:
+                        youtube_helpers_logger.info("✅ بازیابی موفق با غیرفعال‌سازی پروکسی")
+                except Exception:
+                    # If still failing, propagate original error later
+                    pass
             else:
                 # شاید صرفاً محدودیت/شبکه باشد، تلاش مجدد
                 youtube_helpers_logger.debug("تلاش مجدد استخراج لینک")
@@ -423,6 +441,131 @@ async def get_direct_download_url(url, format_id):
         except Exception:
             pass
         return None
+
+# New robust info extraction wrapper
+async def safe_extract_info(url, base_opts=None):
+    """
+    Extract video info safely with automatic cookie rotation and proxy recovery.
+    Returns the info dict or raises on fatal failure.
+    """
+    # Base options tuned for fast extraction
+    def _get_env_proxy():
+        return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+    env_proxy = _get_env_proxy()
+
+    ydl_opts = {
+        'quiet': True,
+        'simulate': True,
+        'extractor_retries': 0,
+        'fragment_retries': 0,
+        'socket_timeout': 10,
+        'connect_timeout': 6,
+        'no_warnings': True,
+        'extract_flat': False,
+        'ignoreerrors': True,
+        'prefer_insecure': True,
+        'force_ipv4': True,
+        'youtube_include_dash_manifest': False,
+        'writesubtitles': False,
+        'writeautomaticsub': False,
+        'writeinfojson': False,
+    }
+    if base_opts:
+        try:
+            ydl_opts.update(base_opts)
+        except Exception:
+            pass
+    if env_proxy:
+        ydl_opts['proxy'] = env_proxy
+
+    cookie_id_used = None
+    # Always try cookie file first for reliability
+    try:
+        cookiefile, cid = get_cookie_file_with_fallback(None)
+        if cookiefile:
+            ydl_opts['cookiefile'] = cookiefile
+            cookie_id_used = cid
+            if cid == -1:
+                youtube_helpers_logger.info("استخراج اطلاعات با کوکی اصلی cookie_youtube.txt")
+            else:
+                youtube_helpers_logger.debug(f"استخراج اطلاعات با کوکی استخر: id={cid}, path={cookiefile}")
+    except Exception:
+        pass
+
+    def extract_sync():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            return ydl.extract_info(url, download=False)
+
+    try:
+        info = await asyncio.to_thread(extract_sync)
+        if cookie_id_used:
+            try:
+                mark_cookie_used(cookie_id_used, True)
+            except Exception:
+                pass
+        return info
+    except Exception as first_err:
+        msg = str(first_err).lower()
+        needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
+        proxy_suspect = any(h in msg for h in ['proxy', '407', 'socks', '403', 'tls', 'ssl', 'timeout'])
+        youtube_helpers_logger.debug(f"اولین خطا در استخراج: {first_err}")
+
+        # Retry with rotated cookie if needed
+        if needs_cookie:
+            try:
+                if not cookie_id_used:
+                    cookiefile, cid = get_cookie_file_with_fallback(None)
+                else:
+                    cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
+                if cookiefile:
+                    ydl_opts['cookiefile'] = cookiefile
+                    cookie_id_used = cid
+                    info = await asyncio.to_thread(extract_sync)
+                    if cookie_id_used and cookie_id_used != -1:
+                        try:
+                            mark_cookie_used(cookie_id_used, True)
+                        except Exception:
+                            pass
+                    return info
+            except Exception as cookie_err:
+                youtube_helpers_logger.debug(f"خطا در تلاش با کوکی: {cookie_err}")
+                # fall through
+
+        # Retry without proxy if proxy suspected
+        if proxy_suspect and env_proxy:
+            try:
+                youtube_helpers_logger.info("تلاش مجدد بدون پروکسی به‌دلیل خطای شبکه/پروکسی")
+                ydl_opts.pop('proxy', None)
+                info = await asyncio.to_thread(extract_sync)
+                if info:
+                    youtube_helpers_logger.info("✅ بازیابی موفق با غیرفعال‌سازی پروکسی")
+                    if cookie_id_used:
+                        try:
+                            mark_cookie_used(cookie_id_used, True)
+                        except Exception:
+                            pass
+                    return info
+            except Exception as proxy_err:
+                youtube_helpers_logger.debug(f"خطا در تلاش بدون پروکسی: {proxy_err}")
+
+        # Final attempt: no cookie, no proxy
+        try:
+            ydl_opts.pop('cookiefile', None)
+        except Exception:
+            pass
+        try:
+            info = await asyncio.to_thread(extract_sync)
+            if info:
+                return info
+        except Exception as final_err:
+            youtube_helpers_logger.error(f"استخراج اطلاعات ناکام: {final_err}")
+            # Mark cookie failure if any cookie was involved
+            try:
+                if 'cookie_id_used' in locals() and cookie_id_used:
+                    mark_cookie_used(cookie_id_used, False)
+            except Exception:
+                pass
+            raise first_err
 
 async def safe_edit_text(message, text, parse_mode=None, reply_markup=None):
     """

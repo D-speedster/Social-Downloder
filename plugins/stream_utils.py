@@ -7,6 +7,7 @@ import io
 import os
 import requests
 from typing import BinaryIO, Union, Optional
+from plugins.youtube_helpers import get_direct_download_url
 
 
 class StreamBuffer(io.BytesIO):
@@ -271,141 +272,18 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
     Direct YouTube upload without saving to server storage
     Downloads and uploads simultaneously for maximum efficiency
     """
-    import yt_dlp
     import tempfile
-    from plugins.cookie_manager import get_cookie_file_with_fallback, get_rotated_cookie_file, mark_cookie_used
     
     try:
         # Extract format_id and media_type from quality_info
         format_id = quality_info.get('format_id', '')
         media_type = 'audio' if quality_info.get('type') == 'audio_only' else 'video'
         
-        # Configure yt-dlp options for direct streaming
-        def _get_env_proxy():
-            return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
-        env_proxy = _get_env_proxy()
-
-        # Get direct download URL from yt-dlp without downloading
-        ydl_opts = {
-            'format': format_id,
-            'noplaylist': True,
-            'extract_flat': False,
-            'socket_timeout': 30,
-            'retries': 3,
-            'quiet': True,
-            'no_warnings': True,
-            'nocheckcertificate': True,
-            'prefer_insecure': True,
-            'force_ipv4': True,
-            # Enhanced headers to mimic real browser
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Accept-Encoding': 'gzip,deflate',
-                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
-                'Keep-Alive': '300',
-                'Connection': 'keep-alive',
-            },
-            # Additional options for YouTube compatibility
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['ios', 'android', 'web'],
-                    'player_skip': ['webpage'],
-                    'skip': ['hls', 'dash'],
-                    'innertube_host': 'studio.youtube.com',
-                    'innertube_key': 'AIzaSyBUPetSUmoZL-OhlxA7wSac5XinrygCqMo'
-                }
-            },
-        }
-        if env_proxy:
-            ydl_opts['proxy'] = env_proxy
-
-        cookie_id_used = None
-        
-        # Try to get cookie file
-        try:
-            cookiefile, cid = get_cookie_file_with_fallback(None)
-            if cookiefile:
-                ydl_opts['cookiefile'] = cookiefile
-                cookie_id_used = cid
-        except Exception:
-            pass
-
-        # Extract info and get direct URL
-        def extract_info_sync():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                return ydl.extract_info(url, download=False)
-        
-        try:
-            info = await asyncio.to_thread(extract_info_sync)
-        except Exception as first_err:
-            # Try with different cookie if needed
-            msg = str(first_err).lower()
-            needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
-            format_not_available = 'requested format is not available' in msg
-            
-            if needs_cookie and not cookie_id_used:
-                try:
-                    cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
-                    if cookiefile:
-                        ydl_opts['cookiefile'] = cookiefile
-                        cookie_id_used = cid
-                        info = await asyncio.to_thread(extract_info_sync)
-                    else:
-                        raise first_err
-                except Exception:
-                    raise first_err
-            elif format_not_available:
-                # Try to find a fallback format
-                try:
-                    from plugins.youtube_helpers import find_best_fallback_format
-                    fallback_format = await find_best_fallback_format(url, format_id)
-                    if fallback_format and fallback_format != format_id:
-                        print(f"Format {format_id} not available, trying fallback format: {fallback_format}")
-                        ydl_opts['format'] = fallback_format
-                        info = await asyncio.to_thread(extract_info_sync)
-                        format_id = fallback_format  # Update format_id for later use
-                    else:
-                        raise first_err
-                except ImportError:
-                    raise first_err
-                except Exception as fallback_err:
-                    print(f"Fallback format search failed: {fallback_err}")
-                    raise first_err
-            else:
-                raise first_err
-
-        # Find the requested format
-        if 'formats' in info:
-            selected_format = None
-            for fmt in info['formats']:
-                if fmt.get('format_id') == format_id:
-                    selected_format = fmt
-                    break
-            
-            if not selected_format or not selected_format.get('url'):
-                raise Exception(f"Format {format_id} not found or has no direct URL")
-            
-            direct_url = selected_format['url']
-            file_size = selected_format.get('filesize') or selected_format.get('filesize_approx', 0)
-            file_size_mb = file_size / (1024 * 1024) if file_size else 0
-            
-        elif info.get('url'):
-            # Single format
-            direct_url = info['url']
-            file_size = info.get('filesize') or info.get('filesize_approx', 0)
-            file_size_mb = file_size / (1024 * 1024) if file_size else 0
-        else:
+        # Resolve direct download URL using helper (handles cookies/proxy/fallbacks)
+        direct_url = await get_direct_download_url(url, preferred_format_id=format_id)
+        if not direct_url:
             raise Exception("No direct URL found")
-
-        # Mark cookie as successful if used
-        if cookie_id_used:
-            try:
-                mark_cookie_used(cookie_id_used, True)
-            except Exception:
-                pass
-
+        
         # Try in-memory streaming first (no disk usage)
         memory_threshold_mb = int(kwargs.pop('memory_threshold_mb', 50))
         try:
@@ -494,12 +372,6 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
 
     except Exception as e:
         print(f"Direct YouTube upload failed: {e}")
-        # Mark cookie as failed if used
-        if 'cookie_id_used' in locals() and cookie_id_used:
-            try:
-                mark_cookie_used(cookie_id_used, False)
-            except Exception:
-                pass
         
         # Fallback to traditional download method
         try:
