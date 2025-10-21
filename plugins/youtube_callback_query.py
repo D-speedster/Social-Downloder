@@ -18,7 +18,7 @@ from plugins.job_queue import enqueue_download_job
 from plugins.concurrency import get_queue_stats
 from plugins import constant
 from utils.util import convert_size
-from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload
+from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload, concurrent_download_upload
 import random
 import subprocess
 
@@ -456,6 +456,84 @@ async def answer(client: Client, callback_query: CallbackQuery):
 
         downloaded_file = None
         try:
+            # 🚀 تلاش برای streaming همزمان (دانلود + آپلود همزمان)
+            # این روش برای فایل‌های بزرگ بسیار سریع‌تر است
+            try:
+                # دریافت URL مستقیم دانلود
+                direct_url = await get_direct_download_url(
+                    info.get('webpage_url', ''),
+                    step.get('format_id', '')
+                )
+                
+                if direct_url:
+                    youtube_callback_logger.info("🚀 شروع streaming همزمان (دانلود + آپلود)")
+                    
+                    # نوع مدیا برای آپلود
+                    media_type = 'audio' if step.get('sort') == '🔊 صدا' else 'video'
+                    caption = f"🎬 {info.get('title', 'نامشخص')}" if media_type == 'video' else f"🔊 {info.get('title', 'نامشخص')}"
+                    
+                    # Progress callback برای streaming همزمان
+                    stream_progress = {'current': 0, 'total': 0, 'last_update': 0}
+                    
+                    async def stream_progress_callback(current, total):
+                        stream_progress['current'] = current
+                        stream_progress['total'] = total
+                        
+                        now = time.time()
+                        progress_percent = (current / total * 100) if total > 0 else 0
+                        
+                        if (now - stream_progress['last_update'] >= 2.0 or 
+                            progress_percent - stream_progress.get('last_percent', 0) >= 10):
+                            
+                            stream_progress['last_update'] = now
+                            stream_progress['last_percent'] = progress_percent
+                            
+                            try:
+                                await safe_edit_text(
+                                    callback_query.message,
+                                    f"🚀 **Streaming همزمان در حال انجام**\n\n"
+                                    f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                                    f"📊 پیشرفت: {progress_percent:.1f}%\n"
+                                    f"📁 پردازش شده: {convert_size(current)} از {convert_size(total)}\n"
+                                    f"⚡ سرعت: {convert_size(current / max(1, now - start_time))}/s\n\n"
+                                    f"💡 دانلود و آپلود همزمان انجام می‌شود",
+                                    parse_mode=ParseMode.MARKDOWN
+                                )
+                            except Exception as e:
+                                youtube_callback_logger.debug(f"خطا در نمایش پیشرفت streaming: {e}")
+                    
+                    # اجرای streaming همزمان
+                    result = await concurrent_download_upload(
+                        client=client,
+                        chat_id=callback_query.message.chat.id,
+                        download_url=direct_url,
+                        file_name=f"{info.get('title', 'video')}.{step.get('ext', 'mp4')}",
+                        media_type=media_type,
+                        progress_callback=stream_progress_callback,
+                        caption=caption,
+                        duration=info.get('duration'),
+                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+                    )
+                    
+                    if result.get('success'):
+                        youtube_callback_logger.info(f"✅ Streaming همزمان موفق در {result.get('total_time', 0):.2f}s")
+                        DB().update_job_status(job_id, 'completed')
+                        
+                        # حذف پیام پیشرفت
+                        try:
+                            await callback_query.message.delete()
+                        except Exception:
+                            pass
+                        return  # خروج موفق از تابع
+                    else:
+                        youtube_callback_logger.warning(f"Streaming همزمان ناموفق: {result.get('error', 'نامشخص')}")
+                        
+            except Exception as e:
+                youtube_callback_logger.warning(f"Streaming همزمان ناموفق، بازگشت به روش سنتی: {e}")
+            
+            # 📥 روش سنتی: دانلود سپس آپلود (fallback)
+            youtube_callback_logger.info("📥 شروع دانلود سنتی")
+            
             # دانلود به پوشه downloads روی سرور
             downloads_dir = os.path.join(os.getcwd(), 'downloads')
             
@@ -494,24 +572,62 @@ async def answer(client: Client, callback_query: CallbackQuery):
             media_type = 'audio' if step.get('sort') == '🔊 صدا' else 'video'
             caption = f"🎬 {info.get('title', 'نامشخص')}" if media_type == 'video' else f"🔊 {info.get('title', 'نامشخص')}"
             
+            # Progress callback برای نمایش پیشرفت آپلود
+            upload_progress = {'current': 0, 'total': 0, 'last_update': 0}
+            
+            async def upload_progress_callback(current, total):
+                upload_progress['current'] = current
+                upload_progress['total'] = total
+                
+                # به‌روزرسانی هر 2 ثانیه یا در 10% پیشرفت
+                now = time.time()
+                progress_percent = (current / total * 100) if total > 0 else 0
+                
+                if (now - upload_progress['last_update'] >= 2.0 or 
+                    progress_percent - (upload_progress.get('last_percent', 0)) >= 10):
+                    
+                    upload_progress['last_update'] = now
+                    upload_progress['last_percent'] = progress_percent
+                    
+                    try:
+                        await safe_edit_text(
+                            callback_query.message,
+                            f"📤 **آپلود به تلگرام در حال انجام**\n\n"
+                            f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                            f"📊 پیشرفت آپلود: {progress_percent:.1f}%\n"
+                            f"📁 آپلود شده: {convert_size(current)} از {convert_size(total)}\n"
+                            f"⚡ سرعت: {convert_size(current / max(1, now - t_ul_start))}/s\n\n"
+                            f"⏳ لطفاً صبر کنید...",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    except Exception as e:
+                        youtube_callback_logger.debug(f"خطا در نمایش پیشرفت آپلود: {e}")
+            
             # انتخاب روش آپلود: برای فایل‌های بزرگ، به صورت Document (chunked)
             file_size_mb = os.path.getsize(downloaded_file) / (1024 * 1024)
             LARGE_MB = 50
             t_ul_start = time.perf_counter()
             upload_ok = False
+            
             if file_size_mb >= LARGE_MB:
                 try:
+                    # تنظیمات بهینه برای آپلود فایل‌های بزرگ
                     await client.send_document(
                         chat_id=callback_query.message.chat.id,
                         document=downloaded_file,
                         caption=caption,
-                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+                        progress=upload_progress_callback,
+                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None,
+                        # تنظیمات بهینه برای سرعت آپلود
+                        file_name=os.path.basename(downloaded_file),
+                        force_document=True  # اجبار به آپلود به عنوان سند
                     )
                     upload_ok = True
                 except Exception as e:
                     youtube_callback_logger.error(f"آپلود Document ناموفق بود: {e}")
                     upload_ok = False
             else:
+                # برای فایل‌های کوچک‌تر، استفاده از smart_upload_strategy با progress
                 upload_ok = await smart_upload_strategy(
                     client=client,
                     chat_id=callback_query.message.chat.id,
@@ -519,6 +635,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     media_type=media_type,
                     caption=caption,
                     duration=info.get('duration'),
+                    progress=upload_progress_callback,
                     reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
                 )
             t_ul_end = time.perf_counter()
@@ -614,7 +731,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
 
     else:
         youtube_callback_logger.warning(f"callback_query.data ناشناخته: {callback_query.data}")
-        await callback_query.answer("❌ گزینه نامعتبر", show_alert=True)
+        await callback_query.answer("❌ گزینه نامعبر", show_alert=True)
 
 
 # End of file

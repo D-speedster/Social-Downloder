@@ -52,6 +52,10 @@ if not os.path.exists('.env'):
 load_dotenv()
 
 # وارد کردن config پس از بارگذاری .env
+from config import (
+    BOT_TOKEN, API_ID, API_HASH, USE_MYSQL, db_config,
+    RECOVER_JOBS_ON_STARTUP, RECOVERY_NOTIFY_USERS, TELEGRAM_THROTTLING
+)
 import config as config
 
 # Security: Validate configuration before starting
@@ -129,15 +133,17 @@ async def main():
     try:
         print("🚀 در حال راه‌اندازی کلاینت ربات...")
         
-        # Prepare client configuration
+        # Prepare client configuration with optimized throttling settings
         client_config = {
             "name": "ytdownloader3_dev2",
             "bot_token": BOT_TOKEN,
             "api_id": API_ID,
             "api_hash": API_HASH,
             "plugins": plugins,
-            "workers": MAX_WORKERS,
-            "sleep_threshold": 60,
+            "workers": TELEGRAM_THROTTLING['max_workers'],
+            "sleep_threshold": TELEGRAM_THROTTLING['sleep_threshold'],
+            "flood_sleep_threshold": TELEGRAM_THROTTLING['flood_sleep_threshold'],
+            "max_concurrent_transmissions": TELEGRAM_THROTTLING['max_concurrent_transmissions'],
             "test_mode": False,  # Use production servers
             "ipv6": False,       # Disable IPv6 to avoid connection issues
         }

@@ -9,6 +9,10 @@ import requests
 from typing import BinaryIO, Union, Optional
 from plugins.youtube_helpers import get_direct_download_url
 from plugins.logger_config import get_logger, get_performance_logger
+import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
+from config import TELEGRAM_THROTTLING
 
 
 class StreamBuffer(io.BytesIO):
@@ -183,6 +187,65 @@ def optimize_chunk_size(file_size_mb: float) -> int:
         return 256 * 1024  # 256KB for very large files
 
 
+def calculate_upload_delay(file_size_mb: float, chunk_count: int) -> float:
+    """
+    Calculate optimal delay between chunks to avoid Telegram throttling
+    """
+    # Base delay for large files
+    if file_size_mb > 100:
+        return TELEGRAM_THROTTLING['upload_delay_large']  # delay for very large files
+    elif file_size_mb > 50:
+        return TELEGRAM_THROTTLING['upload_delay_large']  # delay for large files
+    elif file_size_mb > 20:
+        return TELEGRAM_THROTTLING['upload_delay_medium']  # delay for medium files
+    else:
+        return TELEGRAM_THROTTLING['upload_delay_small']  # delay for small files
+
+
+async def throttled_upload_with_retry(upload_func, max_retries=None, base_delay=None):
+    """
+    اجرای تابع آپلود با مکانیزم تلاش مجدد exponential backoff
+    """
+    if max_retries is None:
+        max_retries = TELEGRAM_THROTTLING['retry_attempts']
+    if base_delay is None:
+        base_delay = TELEGRAM_THROTTLING['base_retry_delay']
+        
+    for attempt in range(max_retries + 1):
+        try:
+            return await upload_func()
+        except FloodWaitError as e:
+            if attempt == max_retries:
+                print(f"FloodWaitError: Maximum retries reached. Waiting {e.seconds} seconds...")
+                await asyncio.sleep(e.seconds)
+                raise
+            
+            wait_time = min(e.seconds, base_delay * (2 ** attempt))
+            print(f"FloodWaitError: Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+            await asyncio.sleep(wait_time)
+            
+        except SlowModeWaitError as e:
+            if attempt == max_retries:
+                print(f"SlowModeWaitError: Maximum retries reached. Waiting {e.seconds} seconds...")
+                await asyncio.sleep(e.seconds)
+                raise
+            
+            wait_time = min(e.seconds, base_delay * (2 ** attempt))
+            print(f"SlowModeWaitError: Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}")
+            await asyncio.sleep(wait_time)
+            
+        except Exception as e:
+            if attempt == max_retries:
+                print(f"Upload failed after {max_retries} retries: {e}")
+                raise
+            
+            wait_time = base_delay * (2 ** attempt)
+            print(f"Upload error: {e}. Retrying in {wait_time} seconds...")
+            await asyncio.sleep(wait_time)
+    
+    return None
+
+
 async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type: str, **kwargs) -> bool:
     """
     Smart upload strategy with optimized retry and timeout handling
@@ -191,81 +254,67 @@ async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type
     file_size = os.path.getsize(file_path)
     file_size_mb = file_size / (1024 * 1024)
     
-    # Determine retry strategy based on file size
-    max_attempts = 2 if file_size_mb > 50 else 3
-    base_delay = 0.5 if file_size_mb > 20 else 0.8
+    # استخراج progress callback از kwargs
+    progress_callback = kwargs.pop('progress', None)
     
-    for attempt in range(max_attempts):
-        try:
-            # For small files (< 10MB), try memory streaming first
-            if file_size_mb < 10 and attempt == 0:
-                try:
-                    with open(file_path, 'rb') as f:
-                        buffer = StreamBuffer(os.path.basename(file_path))
-                        buffer.write(f.read())
-                        buffer.seek(0)
-                        
-                        if media_type == "video":
-                            await client.send_video(chat_id=chat_id, video=buffer, **kwargs)
-                        elif media_type == "photo":
-                            await client.send_photo(chat_id=chat_id, photo=buffer, **kwargs)
-                        elif media_type == "audio":
-                            await client.send_audio(chat_id=chat_id, audio=buffer, **kwargs)
-                        else:
-                            await client.send_document(chat_id=chat_id, document=buffer, **kwargs)
-                        
-                        buffer.close()
-                        return True
-                except Exception as e:
-                    print(f"Memory upload failed, falling back to file upload: {e}")
-                    # Continue to file upload fallback
-            
-            # Regular file upload with optimized settings
-            def _sanitize_upload_kwargs(src: dict) -> dict:
-                """Remove None/invalid values and normalize types for Telegram API."""
-                dst = {}
-                for k, v in src.items():
-                    if v is None:
-                        continue
-                    if k in ("width", "height", "duration"):
-                        try:
-                            iv = int(v)
-                        except (TypeError, ValueError):
-                            continue
-                        if iv <= 0:
-                            continue
-                        dst[k] = iv
-                    elif k == "supports_streaming":
-                        dst[k] = bool(v)
+    # Calculate optimal delay for throttling
+    upload_delay = calculate_upload_delay(file_size_mb, 1)
+    
+    # Define upload function for throttled retry
+    async def perform_upload():
+        # For small files (< 10MB), try memory streaming first
+        if file_size_mb < 10:
+            try:
+                with open(file_path, 'rb') as f:
+                    buffer = StreamBuffer(os.path.basename(file_path))
+                    buffer.write(f.read())
+                    buffer.seek(0)
+                    
+                    # اضافه کردن progress callback اگر موجود باشد
+                    upload_kwargs = kwargs.copy()
+                    if progress_callback:
+                        upload_kwargs['progress'] = progress_callback
+                    
+                    if media_type == "video":
+                        result = await client.send_video(chat_id=chat_id, video=buffer, **upload_kwargs)
+                    elif media_type == "photo":
+                        result = await client.send_photo(chat_id=chat_id, photo=buffer, **upload_kwargs)
+                    elif media_type == "audio":
+                        result = await client.send_audio(chat_id=chat_id, audio=buffer, **upload_kwargs)
                     else:
-                        dst[k] = v
-                return dst
-
-            upload_kwargs = _sanitize_upload_kwargs(kwargs.copy())
-            
-            # Enable streaming for videos
-            if media_type == "video":
-                upload_kwargs['supports_streaming'] = True
-                await client.send_video(chat_id=chat_id, video=file_path, **upload_kwargs)
-            elif media_type == "photo":
-                await client.send_photo(chat_id=chat_id, photo=file_path, **upload_kwargs)
-            elif media_type == "audio":
-                await client.send_audio(chat_id=chat_id, audio=file_path, **upload_kwargs)
-            else:
-                await client.send_document(chat_id=chat_id, document=file_path, **upload_kwargs)
-            
-            return True
-            
-        except Exception as e:
-            print(f"Smart upload attempt {attempt+1}/{max_attempts} failed: {e}")
-            
-            # Don't retry on the last attempt
-            if attempt < max_attempts - 1:
-                # Exponential backoff with jitter
-                delay = base_delay * (2 ** attempt)
-                await asyncio.sleep(delay)
+                        result = await client.send_document(chat_id=chat_id, document=buffer, **upload_kwargs)
+                    
+                    buffer.close()
+                    return result
+            except Exception as e:
+                print(f"Memory upload failed, falling back to file upload: {e}")
+        
+        # File-based upload with progress callback
+        upload_kwargs = kwargs.copy()
+        if progress_callback:
+            upload_kwargs['progress'] = progress_callback
+        
+        # Add throttling delay before upload
+        if upload_delay > 0:
+            await asyncio.sleep(upload_delay)
+        
+        # تنظیمات بهینه برای آپلود فایل
+        if media_type == "video":
+            return await client.send_video(chat_id=chat_id, video=file_path, **upload_kwargs)
+        elif media_type == "photo":
+            return await client.send_photo(chat_id=chat_id, photo=file_path, **upload_kwargs)
+        elif media_type == "audio":
+            return await client.send_audio(chat_id=chat_id, audio=file_path, **upload_kwargs)
+        else:
+            return await client.send_document(chat_id=chat_id, document=file_path, **upload_kwargs)
     
-    return False
+    # Use throttled upload with retry
+    try:
+        await throttled_upload_with_retry(perform_upload, max_retries=3, base_delay=upload_delay)
+        return True
+    except Exception as e:
+        print(f"Smart upload failed after all retries: {e}")
+        return False
 
 
 async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: dict, title: str = "", thumbnail_url: str = None, progress_callback=None, **kwargs) -> dict:
@@ -531,3 +580,136 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             stream_utils_logger.error(f"❌ Fallback download also failed after {fallback_time:.2f}s: {fallback_error}")
             performance_logger.error(f"[FALLBACK_ERROR] Time: {fallback_time:.2f}s, Error: {str(fallback_error)}")
             return {"success": False, "error": f"Both direct upload and fallback failed. Direct: {str(e)}, Fallback: {str(fallback_error)}"}
+
+
+async def concurrent_download_upload(client, chat_id: int, download_url: str, file_name: str, 
+                                   media_type: str = "document", progress_callback=None, 
+                                   chunk_size: int = 1024*1024, **kwargs) -> dict:
+    """
+    دانلود و آپلود همزمان برای حداکثر کارایی
+    Downloads and uploads simultaneously using streaming
+    """
+    logger = get_logger('stream_utils')
+    performance_logger = get_performance_logger()
+    
+    start_time = time.time()
+    
+    try:
+        # ایجاد یک فایل موقت برای streaming
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file_name)[1]) as temp_file:
+            temp_path = temp_file.name
+            
+            # شروع دانلود در background
+            download_task = asyncio.create_task(
+                _stream_download_to_file(download_url, temp_path, progress_callback, chunk_size)
+            )
+            
+            # صبر کردن تا حداقل 5MB دانلود شود قبل شروع آپلود
+            await asyncio.sleep(2)  # 2 ثانیه صبر برای شروع دانلود
+            
+            # بررسی اینکه آیا فایل شروع به دانلود شده
+            while not os.path.exists(temp_path) or os.path.getsize(temp_path) < 1024*1024:  # 1MB
+                if download_task.done():
+                    break
+                await asyncio.sleep(0.5)
+            
+            # شروع آپلود همزمان با دانلود با throttling
+            upload_kwargs = kwargs.copy()
+            if progress_callback:
+                upload_kwargs['progress'] = progress_callback
+            
+            # محاسبه تأخیر برای throttling
+            file_size_mb = os.path.getsize(temp_path) / (1024 * 1024) if os.path.exists(temp_path) else 10
+            upload_delay = calculate_upload_delay(file_size_mb, 1)
+            
+            # تعریف تابع آپلود با throttling
+            async def perform_concurrent_upload():
+                if upload_delay > 0:
+                    await asyncio.sleep(upload_delay)
+                    
+                if media_type == "video":
+                    return await client.send_video(chat_id=chat_id, video=temp_path, **upload_kwargs)
+                elif media_type == "audio":
+                    return await client.send_audio(chat_id=chat_id, audio=temp_path, **upload_kwargs)
+                else:
+                    return await client.send_document(chat_id=chat_id, document=temp_path, **upload_kwargs)
+            
+            # استفاده از throttled upload
+            upload_task = asyncio.create_task(
+                throttled_upload_with_retry(perform_concurrent_upload, max_retries=2, base_delay=upload_delay)
+            )
+            
+            # انتظار برای تکمیل هر دو عملیات
+            download_result, upload_result = await asyncio.gather(
+                download_task, upload_task, return_exceptions=True
+            )
+            
+            # بررسی نتایج
+            if isinstance(download_result, Exception):
+                raise download_result
+            if isinstance(upload_result, Exception):
+                raise upload_result
+                
+            total_time = time.time() - start_time
+            performance_logger.info(f"Concurrent download/upload completed in {total_time:.2f}s")
+            
+            # حذف فایل موقت
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+                
+            return {
+                "success": True,
+                "message": upload_result,
+                "download_time": download_result.get("time", 0),
+                "total_time": total_time
+            }
+            
+    except Exception as e:
+        logger.error(f"Concurrent download/upload failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def _stream_download_to_file(url: str, file_path: str, progress_callback=None, chunk_size: int = 1024*1024) -> dict:
+    """
+    دانلود streaming به فایل با progress callback
+    """
+    start_time = time.time()
+    downloaded_size = 0
+    
+    try:
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=3600, connect=30),
+            connector=aiohttp.TCPConnector(limit=10, limit_per_host=5)
+        ) as session:
+            async with session.get(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }) as response:
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                
+                with open(file_path, 'wb') as f:
+                    async for chunk in response.content.iter_chunked(chunk_size):
+                        f.write(chunk)
+                        downloaded_size += len(chunk)
+                        
+                        # فراخوانی progress callback
+                        if progress_callback and total_size > 0:
+                            progress = (downloaded_size / total_size) * 100
+                            try:
+                                await progress_callback(downloaded_size, total_size)
+                            except:
+                                pass  # ignore callback errors
+                
+                download_time = time.time() - start_time
+                return {
+                    "success": True,
+                    "size": downloaded_size,
+                    "time": download_time,
+                    "speed_mbps": (downloaded_size / (1024*1024)) / download_time if download_time > 0 else 0
+                }
+                
+    except Exception as e:
+        return {"success": False, "error": str(e)}
