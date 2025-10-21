@@ -65,30 +65,30 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         youtube_helpers_logger.info(f"استفاده از temp directory: {temp_dir}")
         youtube_helpers_logger.info(f"شروع دانلود: {url} با فرمت {format_id}")
         
-        # Detect ffmpeg path (env → common locations → config)
+        import shutil
+        import sys
+
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
-        try:
-            if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
-                ffmpeg_path = '/usr/bin/ffmpeg'
-        except Exception:
-            pass
+        if not ffmpeg_path or not (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
+            youtube_helpers_logger.debug("FFMPEG_PATH env not set or invalid, searching common paths...")
+            candidates = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg']
+            for candidate in candidates:
+                found_path = shutil.which(candidate)
+                if found_path:
+                    ffmpeg_path = found_path
+                    youtube_helpers_logger.debug(f"Found ffmpeg at: {ffmpeg_path}")
+                    break
+
         if not ffmpeg_path:
+            youtube_helpers_logger.debug("ffmpeg not found in common paths, checking config.py")
             try:
                 from config import FFMPEG_PATH
-                candidates = [
-                    FFMPEG_PATH,
-                    "C\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
-                    "/usr/local/bin/ffmpeg",
-                    "/usr/bin/ffmpeg",
-                    "ffmpeg"
-                ]
-                for p in candidates:
-                    if shutil.which(p) or os.path.exists(p):
-                        ffmpeg_path = p
-                        break
-            except Exception:
-                pass
-        youtube_helpers_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
+                if FFMPEG_PATH and (shutil.which(FFMPEG_PATH) or os.path.exists(FFMPEG_PATH)):
+                    ffmpeg_path = FFMPEG_PATH
+            except (ImportError, AttributeError):
+                youtube_helpers_logger.warning("Could not import FFMPEG_PATH from config or it is invalid.")
+
+        youtube_helpers_logger.debug(f"Final ffmpeg path: {ffmpeg_path}")
         
         # Configure yt-dlp options with proxy (from env if present)
         def _get_env_proxy():
