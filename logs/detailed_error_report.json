@@ -1,39 +1,37 @@
 {
-  "timestamp": "2025-10-21T09:02:02.705068",
+  "timestamp": "2025-10-21T18:18:21.390394",
   "system_info": {
     "platform": "Windows-11-10.0.26200-SP0",
     "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
     "python_executable": "C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
     "working_directory": "C:\\Users\\speedster\\Desktop\\DownloaderYT-V1",
-    "timestamp": "2025-10-21T09:02:02.657028",
+    "timestamp": "2025-10-21T18:18:21.381545",
     "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.EXE"
   },
   "error_analysis": {
-    "timestamp": "2025-10-21T09:02:02.665939",
-    "error_type": "OperationalError",
-    "error_message": "database is locked",
+    "timestamp": "2025-10-21T18:18:21.387857",
+    "error_type": "TypeError",
+    "error_message": "Client.__init__() got an unexpected keyword argument 'flood_sleep_threshold'. Did you mean 'sleep_threshold'?",
     "traceback": [
       "Traceback (most recent call last):\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 166, in main\n    await client.start()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 58, in start\n    is_authorized = await self.connect()\n                    ^^^^^^^^^^^^^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\connect.py\", line 40, in connect\n    await self.load_session()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 616, in load_session\n    await self.storage.open()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 63, in open\n    self.update()\n    ~~~~~~~~~~~^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 52, in update\n    self.version(version)\n    ~~~~~~~~~~~~^^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\sqlite_storage.py\", line 219, in version\n    self.conn.execute(\n    ~~~~~~~~~~~~~~~~~^\n        \"UPDATE version SET number = ?\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        (value,)\n        ^^^^^^^^\n    )\n    ^\n",
-      "sqlite3.OperationalError: database is locked\n"
+      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 225, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\base_events.py\", line 719, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n",
+      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 168, in main\n    client = Client(**client_config)\n",
+      "TypeError: Client.__init__() got an unexpected keyword argument 'flood_sleep_threshold'. Did you mean 'sleep_threshold'?\n"
     ],
     "suggestions": [
-      "مشکل در اتصال یا عملیات پایگاه داده",
-      "فایل پایگاه داده را بررسی کنید",
-      "دسترسی نوشتن در دایرکتوری را چک کنید"
+      "خطای غیرمنتظره رخ داده است",
+      "لاگ‌های کامل را بررسی کنید",
+      "کد مربوطه را دیباگ کنید"
     ]
   },
   "environment_issues": [
     {
       "type": "missing_dependencies",
       "severity": "high",
-      "message": "پکیج‌های مورد نیاز نصب نشده: mysql-connector-python, Pyrogram, python-dateutil, python-dotenv, Pillow, TgCrypto",
+      "message": "پکیج‌های مورد نیاز نصب نشده: mysql-connector-python, Pyrogram, python-dateutil, python-dotenv, Pillow",
       "solution": "دستور pip install -r requirements.txt را اجرا کنید"
     }
   ]

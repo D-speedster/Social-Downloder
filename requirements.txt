@@ -1,5 +1,5 @@
 mysql-connector-python
-Pyrogram==2.0.106
+Pyrogram
 instaloader
 python-dateutil
 yt-dlp
@@ -7,4 +7,3 @@ psutil
 python-dotenv
 requests>=2.28.2
 Pillow>=9.0.0
-TgCrypto
