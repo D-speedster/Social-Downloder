@@ -65,13 +65,15 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         youtube_helpers_logger.info(f"استفاده از temp directory: {temp_dir}")
         youtube_helpers_logger.info(f"شروع دانلود: {url} با فرمت {format_id}")
         
-        import shutil
-        import sys
-
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
-        if not ffmpeg_path or not (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
+        
+        # اگر FFMPEG_PATH تنظیم شده و معتبر است، از آن استفاده کن
+        if ffmpeg_path and (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
+            youtube_helpers_logger.debug(f"استفاده از FFMPEG_PATH از متغیر محیطی: {ffmpeg_path}")
+        else:
+            # جستجو در مسیرهای معمول
             youtube_helpers_logger.debug("FFMPEG_PATH env not set or invalid, searching common paths...")
-            candidates = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg']
+            candidates = ['/usr/bin/ffmpeg', '/usr/local/bin/ffmpeg', 'ffmpeg', 'C\\Program Files\\ffmpeg\\bin\\ffmpeg.exe', 'C\\ffmpeg\\bin\\ffmpeg.exe']
             for candidate in candidates:
                 found_path = shutil.which(candidate)
                 if found_path:

@@ -204,22 +204,90 @@ def _api_request_sync(url):
         return loop.run_in_executor(executor, _make_request)
 
 def _extract_video_metadata(video_path: str):
-    """Fast stub: avoid ffmpeg/ffprobe calls and thumbnail generation.
-    Returns placeholder metadata to minimize pre-upload overhead."""
+    """Extract basic metadata and a small thumbnail for Telegram.
+    Uses ffprobe/ffmpeg when available; keeps lightweight and skips for large files."""
+    import shutil
     try:
+        if not video_path or not os.path.exists(video_path):
+            return {'width': 0, 'height': 0, 'duration': 0, 'thumbnail': None}
+        
+        # Skip heavy work for large files (let Telegram infer)
+        file_size = os.path.getsize(video_path)
+        file_size_mb = file_size / (1024 * 1024)
+        if file_size_mb > 30:
+            return {'width': None, 'height': None, 'duration': 0, 'thumbnail': None}
+        
+        # Locate ffprobe/ffmpeg
+        ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        if not ffmpeg_path:
+            try:
+                from config import FFMPEG_PATH as CFG_FFMPEG
+                ffmpeg_path = CFG_FFMPEG
+            except Exception:
+                ffmpeg_path = None
+        
+        ffprobe_path = None
+        ffmpeg_exe = None
+        if ffmpeg_path and os.path.exists(ffmpeg_path):
+            ffmpeg_exe = ffmpeg_path
+            base_dir = os.path.dirname(ffmpeg_path)
+            if os.name == 'nt':
+                cand = os.path.join(base_dir, 'ffprobe.exe')
+            else:
+                cand = os.path.join(base_dir, 'ffprobe')
+            if os.path.exists(cand):
+                ffprobe_path = cand
+        if not ffprobe_path:
+            ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
+        if not ffmpeg_exe:
+            ffmpeg_exe = shutil.which('ffmpeg') or 'ffmpeg'
+        
+        width = 0
+        height = 0
+        duration = 0
+        thumb_path = None
+        
+        # Probe streams and format
+        try:
+            cmd = [ffprobe_path, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', video_path]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0 and res.stdout:
+                data = json.loads(res.stdout)
+                # Duration from format
+                fmt = data.get('format') or {}
+                try:
+                    duration = int(float(fmt.get('duration', 0)))
+                except Exception:
+                    duration = 0
+                # Width/height from first video stream
+                for s in data.get('streams', []):
+                    if s.get('codec_type') == 'video':
+                        width = int(s.get('width') or 0)
+                        height = int(s.get('height') or 0)
+                        break
+        except Exception:
+            pass
+        
+        # Generate small Telegram-friendly thumbnail (optional)
+        try:
+            # Only if ffmpeg is available
+            if ffmpeg_exe and isinstance(ffmpeg_exe, str):
+                thumb_path = video_path.rsplit('.', 1)[0] + '_thumb.jpg'
+                cmd = [ffmpeg_exe, '-ss', '00:00:01', '-i', video_path, '-vframes', '1', '-vf', 'scale=320:-2', '-y', thumb_path]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if not os.path.exists(thumb_path):
+                    thumb_path = None
+        except Exception:
+            thumb_path = None
+        
         return {
-            'width': 0,
-            'height': 0,
-            'duration': 0,
-            'thumbnail': None
+            'width': width or None,
+            'height': height or None,
+            'duration': duration or 0,
+            'thumbnail': thumb_path
         }
     except Exception:
-        return {
-            'width': 0,
-            'height': 0,
-            'duration': 0,
-            'thumbnail': None
-        }
+        return {'width': 0, 'height': 0, 'duration': 0, 'thumbnail': None}
 
 def _progress_callback(current, total):
     """Optimized progress callback for upload tracking"""
