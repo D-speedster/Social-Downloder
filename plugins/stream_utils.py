@@ -9,7 +9,6 @@ import requests
 import shutil
 from typing import BinaryIO, Union, Optional
 from plugins.youtube_helpers import get_direct_download_url
-from plugins.universal_downloader import _extract_video_metadata
 from plugins.logger_config import get_logger, get_performance_logger
 import tempfile
 import time
@@ -372,7 +371,8 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 return {"success": False, "error": "Download failed in traditional path"}
             
             # Extract robust metadata and thumbnail for better Telegram display
-            video_meta = _extract_video_metadata(downloaded_file)
+            from plugins.universal_downloader import _extract_video_metadata as _extract_video_metadata_local
+            video_meta = _extract_video_metadata_local(downloaded_file)
             duration = video_meta.get('duration', 0) or None
             width = video_meta.get('width', 0) or None
             height = video_meta.get('height', 0) or None
