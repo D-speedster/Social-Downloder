@@ -284,6 +284,42 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         if not direct_url:
             raise Exception("No direct URL found")
         
+        # Early decision: force traditional path for large/unsupported videos
+        direct_fallback_threshold_mb = int(kwargs.pop('direct_fallback_threshold_mb', 100))
+        force_traditional = bool(kwargs.pop('force_traditional', False))
+        content_length = 0
+        content_type = ''
+        try:
+            timeout = aiohttp.ClientTimeout(total=8)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.request('HEAD', direct_url, headers={'User-Agent': 'Mozilla/5.0'}) as resp:
+                    content_length = int(resp.headers.get('Content-Length') or 0)
+                    content_type = (resp.headers.get('Content-Type') or '').lower()
+        except Exception:
+            pass
+        
+        if media_type == "video" and (force_traditional or content_length == 0 or content_length > direct_fallback_threshold_mb * 1024 * 1024 or ('mp4' not in content_type)):
+            try:
+                from plugins.youtube_helpers import download_youtube_file
+                downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+                if downloaded_file and os.path.exists(downloaded_file):
+                    upload_kwargs = kwargs.copy()
+                    upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+                    upload_kwargs['supports_streaming'] = True
+                    message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
+                    try:
+                        os.unlink(downloaded_file)
+                        temp_dir = os.path.dirname(downloaded_file)
+                        if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
+                            import shutil
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                    except Exception:
+                        pass
+                    return {"success": True, "message": message, "fallback_used": True}
+            except Exception:
+                # If fallback fails, continue with direct streaming path below
+                pass
+        
         # Try in-memory streaming first (no disk usage)
         memory_threshold_mb = int(kwargs.pop('memory_threshold_mb', 50))
         try:

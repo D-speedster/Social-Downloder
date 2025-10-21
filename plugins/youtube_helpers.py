@@ -2,6 +2,9 @@ import os
 import asyncio
 import tempfile
 import yt_dlp
+import shutil
+import sys
+import subprocess
 from plugins.logger_config import get_logger
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
 
@@ -11,6 +14,7 @@ youtube_helpers_logger = get_logger('youtube_helpers')
 async def download_youtube_file(url, format_id, progress_hook=None):
     """
     دانلود فایل یوتیوب با format_id مشخص
+    با ادغام ویدئو/صوت (در صورت نیاز) و تبدیل به MP4 بهینه برای تلگرام
     """
     try:
         youtube_helpers_logger.info(f"شروع دانلود: {url} با فرمت {format_id}")
@@ -19,20 +23,72 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         temp_dir = tempfile.mkdtemp()
         youtube_helpers_logger.debug(f"دایرکتوری موقت ایجاد شد: {temp_dir}")
         
+        # Detect ffmpeg path (env → common locations → config)
+        ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        try:
+            if (not ffmpeg_path) and sys.platform.startswith('linux') and os.path.exists('/usr/bin/ffmpeg'):
+                ffmpeg_path = '/usr/bin/ffmpeg'
+        except Exception:
+            pass
+        if not ffmpeg_path:
+            try:
+                from config import FFMPEG_PATH
+                candidates = [
+                    FFMPEG_PATH,
+                    "C\\Program Files\\ffmpeg\\bin\\ffmpeg.exe",
+                    "/usr/local/bin/ffmpeg",
+                    "/usr/bin/ffmpeg",
+                    "ffmpeg"
+                ]
+                for p in candidates:
+                    if shutil.which(p) or os.path.exists(p):
+                        ffmpeg_path = p
+                        break
+            except Exception:
+                pass
+        youtube_helpers_logger.debug(f"مسیر ffmpeg: {ffmpeg_path}")
+        
         # Configure yt-dlp options with proxy (from env if present)
         def _get_env_proxy():
             return os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
         env_proxy = _get_env_proxy()
 
         ydl_opts = {
-            'format': format_id,
+            'format': format_id or 'bestvideo+bestaudio/best',
             'outtmpl': os.path.join(temp_dir, '%(title)s.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
+            'ignoreerrors': False,
+            'quiet': True,
+            'no_warnings': True,
+            'socket_timeout': 30,
+            'connect_timeout': 20,
+            'retries': 5,
+            'fragment_retries': 5,
+            'concurrent_fragments': 8,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            },
         }
+        
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
+        
+        # Enable ffmpeg-based merge and conversion if ffmpeg is available
+        if ffmpeg_path and (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
+            ydl_opts['ffmpeg_location'] = ffmpeg_path
+            ydl_opts['merge_output_format'] = 'mp4'
+            ydl_opts['postprocessors'] = [
+                {'key': 'FFmpegMerger'},
+                {'key': 'FFmpegVideoConvertor', 'preferredformat': 'mp4'},
+                {'key': 'FFmpegMetadata'},
+            ]
         
         # Add progress hook if provided
         if progress_hook:
@@ -53,32 +109,28 @@ async def download_youtube_file(url, format_id, progress_hook=None):
         except Exception:
             pass
 
-        # Initial attempt: direct download
+        # Initial attempt: download with merging
         try:
             def download_sync():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url])
             await asyncio.to_thread(download_sync)
-        except Exception as first_err:
-            # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
-            msg = str(first_err).lower()
-            needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
-            if needs_cookie:
+        except Exception as e:
+            youtube_helpers_logger.debug(f"خطا در دانلود اولیه: {e}")
+            # Retry with reduced options (no postprocessors)
+            try:
+                ydl_opts.pop('postprocessors', None)
+                def download_sync_retry():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([url])
+                await asyncio.to_thread(download_sync_retry)
+            except Exception:
+                # Try cookie rotation
                 try:
-                    # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
-                    if not cookie_id_used:
-                        cookiefile, cid = get_cookie_file_with_fallback(None)
-                    else:
-                        # اگر قبلاً کوکی استفاده شده، از استخر کوکی دیگری بگیر
-                        cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
-                    
+                    cookiefile, cid = get_cookie_file_with_fallback(cookie_id_used)
                     if cookiefile:
                         ydl_opts['cookiefile'] = cookiefile
                         cookie_id_used = cid
-                        if cid == -1:
-                            youtube_helpers_logger.info("تلاش مجدد با کوکی اصلی cookie_youtube.txt")
-                        else:
-                            youtube_helpers_logger.debug(f"تلاش مجدد دانلود با کوکی: id={cid}, path={cookiefile}")
                         def download_sync_cookie():
                             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                                 ydl.download([url])
@@ -94,10 +146,10 @@ async def download_youtube_file(url, format_id, progress_hook=None):
                     # اگر خطا رخ داد، تلاش مجدد بدون کوکی
                     youtube_helpers_logger.debug(f"خطا در دانلود با کوکی: {cookie_err}")
                     ydl_opts.pop('cookiefile', None)
-                    def download_sync_retry():
+                    def download_sync_retry2():
                         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                             ydl.download([url])
-                    await asyncio.to_thread(download_sync_retry)
+                    await asyncio.to_thread(download_sync_retry2)
         
         # ثبت موفقیت استفاده از کوکی
         if cookie_id_used:
@@ -106,14 +158,33 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             except Exception:
                 pass
         
-        # Find downloaded file
-        downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
+        # Find downloaded/merged file (prefer MP4)
+        downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f)) and not f.endswith('.part')]
         if not downloaded_files:
             youtube_helpers_logger.error("هیچ فایل دانلود شده‌ای یافت نشد")
             return None
         
+        # Prefer .mp4 then by size
+        downloaded_files.sort(key=lambda fn: (0 if fn.lower().endswith('.mp4') else 1, -os.path.getsize(os.path.join(temp_dir, fn))))
         downloaded_file = os.path.join(temp_dir, downloaded_files[0])
         youtube_helpers_logger.info(f"دانلود موفق: {downloaded_file}")
+        
+        # Ensure MP4 has moov at start for Telegram (faststart); no re-encode
+        try:
+            if ffmpeg_path and downloaded_file.lower().endswith('.mp4'):
+                base, _ = os.path.splitext(downloaded_file)
+                fast_path = f"{base}_faststart.mp4"
+                cmd = [ffmpeg_path, '-y', '-i', downloaded_file, '-c', 'copy', '-movflags', '+faststart', fast_path]
+                await asyncio.to_thread(lambda: subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+                if os.path.exists(fast_path) and os.path.getsize(fast_path) > 0:
+                    try:
+                        os.remove(downloaded_file)
+                    except Exception:
+                        pass
+                    downloaded_file = fast_path
+                    youtube_helpers_logger.debug("faststart اعمال شد")
+        except Exception as fe:
+            youtube_helpers_logger.debug(f"ناتوان در faststart: {fe}")
         
         return downloaded_file
         
