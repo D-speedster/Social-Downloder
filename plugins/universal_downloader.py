@@ -211,11 +211,7 @@ def _extract_video_metadata(video_path: str):
         if not video_path or not os.path.exists(video_path):
             return {'width': 0, 'height': 0, 'duration': 0, 'thumbnail': None}
         
-        # Skip heavy work for large files (let Telegram infer)
-        file_size = os.path.getsize(video_path)
-        file_size_mb = file_size / (1024 * 1024)
-        if file_size_mb > 30:
-            return {'width': None, 'height': None, 'duration': 0, 'thumbnail': None}
+        # Proceed to metadata extraction without size-based skipping
         
         # Locate ffprobe/ffmpeg
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
@@ -895,23 +891,12 @@ async def handle_universal_link(client: Client, message: Message):
                         video_height = selected_media.get('height')
                         _log(f"[UNIV] Using API metadata: {video_width}x{video_height}")
                     else:
-                        # Skip ffprobe for large files to save time - let Telegram handle it
-                        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
-                        file_size_mb = file_size / (1024 * 1024)
-                        
-                        if file_size_mb > 30:
-                            # For large files, skip metadata extraction to save time
-                            video_width = None
-                            video_height = None
-                            video_thumb = None
-                            _log(f"[UNIV] Skipping metadata extraction for large file ({file_size_mb:.1f}MB)")
-                        else:
-                            # Fallback to ffprobe only for smaller files
-                            video_meta = _extract_video_metadata(file_path)
-                            video_width = video_meta.get('width', 0) or None
-                            video_height = video_meta.get('height', 0) or None
-                            video_thumb = video_meta.get('thumbnail')
-                            _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}")
+                        video_meta = _extract_video_metadata(file_path)
+                        video_width = video_meta.get('width', 0) or None
+                        video_height = video_meta.get('height', 0) or None
+                        video_duration = video_meta.get('duration', 0) or video_duration
+                        video_thumb = video_meta.get('thumbnail')
+                        _log(f"[UNIV] Using ffprobe metadata: {video_width}x{video_height}, duration={video_duration}")
                     
                     last_upload_error = None
                     upload_done = False
@@ -982,8 +967,8 @@ async def handle_universal_link(client: Client, message: Message):
                                 await asyncio.sleep(0.8)
                     elif not bot_api_sent:
                         # Prefer sending as document for faster delivery on larger videos
-                        prefer_document_for_large_video = True
-                        fast_upload_threshold_mb = 15.0
+                        prefer_document_for_large_video = False
+                        fast_upload_threshold_mb = 512.0
 
                         if prefer_document_for_large_video and file_size_mb >= fast_upload_threshold_mb:
                             try:
