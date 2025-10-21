@@ -6,6 +6,7 @@ import aiohttp
 import io
 import os
 import requests
+import shutil
 from typing import BinaryIO, Union, Optional
 from plugins.youtube_helpers import get_direct_download_url
 from plugins.logger_config import get_logger, get_performance_logger
@@ -361,6 +362,9 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         # Early decision: force traditional path for large/unsupported videos
         direct_fallback_threshold_mb = int(kwargs.pop('direct_fallback_threshold_mb', 100))
         force_traditional = bool(kwargs.pop('force_traditional', False))
+        if media_type == 'video':
+            # برای حفظ متادیتا و پیش‌نمایش، از مسیر سنتی استفاده شود
+            force_traditional = True
         content_length = 0
         content_type = ''
         
@@ -479,13 +483,39 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             upload_kwargs = kwargs.copy()
             upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
             
+            # Optional remux to MP4 with faststart to preserve metadata
+            upload_source_path = temp_path
+            if media_type == "video":
+                try:
+                    content_is_mp4 = ('mp4' in (content_type or '').lower()) or (str(quality_info.get('ext','')).lower() == 'mp4')
+                    ffmpeg_path = os.environ.get('FFMPEG_PATH') or shutil.which('ffmpeg')
+                    if ffmpeg_path and content_is_mp4:
+                        remuxed_path = temp_path + ".mp4"
+                        remux_start = time.time()
+                        import subprocess
+                        result = subprocess.run(
+                            [ffmpeg_path, '-y', '-i', temp_path, '-c', 'copy', '-movflags', '+faststart', remuxed_path],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                        )
+                        if result.returncode == 0 and os.path.exists(remuxed_path) and os.path.getsize(remuxed_path) > 0:
+                            remux_time = time.time() - remux_start
+                            stream_utils_logger.info(f"🎞️ Remuxed to faststart in {remux_time:.2f}s")
+                            upload_source_path = remuxed_path
+                        else:
+                            stream_utils_logger.warning("⚠️ Remux failed, using original file")
+                    else:
+                        if not ffmpeg_path:
+                            stream_utils_logger.info("ℹ️ FFmpeg not found; uploading original file")
+                except Exception as remux_err:
+                    stream_utils_logger.warning(f"⚠️ Remux error, uploading original file: {remux_err}")
+            
             if media_type == "video":
                 upload_kwargs['supports_streaming'] = True
-                message = await client.send_video(chat_id=chat_id, video=temp_path, **upload_kwargs)
+                message = await client.send_video(chat_id=chat_id, video=upload_source_path, **upload_kwargs)
             elif media_type == "audio":
-                message = await client.send_audio(chat_id=chat_id, audio=temp_path, **upload_kwargs)
+                message = await client.send_audio(chat_id=chat_id, audio=upload_source_path, **upload_kwargs)
             else:
-                message = await client.send_document(chat_id=chat_id, document=temp_path, **upload_kwargs)
+                message = await client.send_document(chat_id=chat_id, document=upload_source_path, **upload_kwargs)
             
             upload_time = time.time() - upload_start
             total_time = time.time() - start_time
@@ -502,6 +532,11 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             cleanup_start = time.time()
             try:
                 os.unlink(temp_path)
+                if 'upload_source_path' in locals() and upload_source_path != temp_path:
+                    try:
+                        os.unlink(upload_source_path)
+                    except Exception as e2:
+                        stream_utils_logger.warning(f"⚠️ Remuxed file cleanup failed: {e2}")
                 cleanup_time = time.time() - cleanup_start
                 stream_utils_logger.info(f"🧹 Temp file cleanup completed in {cleanup_time:.3f}s")
             except Exception as e:

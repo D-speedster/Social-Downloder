@@ -455,6 +455,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
         progress_task = asyncio.create_task(progress_display())
 
         downloaded_file = None
+        concurrent_enabled = False  # غیرفعال برای حفظ thumbnail و مدت‌زمان
         try:
             # 🚀 تلاش برای streaming همزمان (دانلود + آپلود همزمان)
             # این روش برای فایل‌های بزرگ بسیار سریع‌تر است
@@ -465,7 +466,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     step.get('format_id', '')
                 )
                 
-                if direct_url:
+                if concurrent_enabled and direct_url:
                     youtube_callback_logger.info("🚀 شروع streaming همزمان (دانلود + آپلود)")
                     
                     # نوع مدیا برای آپلود
@@ -603,41 +604,19 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     except Exception as e:
                         youtube_callback_logger.debug(f"خطا در نمایش پیشرفت آپلود: {e}")
             
-            # انتخاب روش آپلود: برای فایل‌های بزرگ، به صورت Document (chunked)
-            file_size_mb = os.path.getsize(downloaded_file) / (1024 * 1024)
-            LARGE_MB = 50
+            # آپلود همیشه به‌صورت ویدیو برای حفظ thumbnail و مدت‌زمان
             t_ul_start = time.perf_counter()
-            upload_ok = False
-            
-            if file_size_mb >= LARGE_MB:
-                try:
-                    # تنظیمات بهینه برای آپلود فایل‌های بزرگ
-                    await client.send_document(
-                        chat_id=callback_query.message.chat.id,
-                        document=downloaded_file,
-                        caption=caption,
-                        progress=upload_progress_callback,
-                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None,
-                        # تنظیمات بهینه برای سرعت آپلود
-                        file_name=os.path.basename(downloaded_file),
-                        force_document=True  # اجبار به آپلود به عنوان سند
-                    )
-                    upload_ok = True
-                except Exception as e:
-                    youtube_callback_logger.error(f"آپلود Document ناموفق بود: {e}")
-                    upload_ok = False
-            else:
-                # برای فایل‌های کوچک‌تر، استفاده از smart_upload_strategy با progress
-                upload_ok = await smart_upload_strategy(
-                    client=client,
-                    chat_id=callback_query.message.chat.id,
-                    file_path=downloaded_file,
-                    media_type=media_type,
-                    caption=caption,
-                    duration=info.get('duration'),
-                    progress=upload_progress_callback,
-                    reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
-                )
+            upload_ok = await smart_upload_strategy(
+                client=client,
+                chat_id=callback_query.message.chat.id,
+                file_path=downloaded_file,
+                media_type=media_type,
+                caption=caption,
+                duration=info.get('duration'),
+                supports_streaming=True,
+                progress=upload_progress_callback,
+                reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+            )
             t_ul_end = time.perf_counter()
             youtube_callback_logger.info(f"⏱️ زمان آپلود: {t_ul_end - t_ul_start:.2f}s")
             
