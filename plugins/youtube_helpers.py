@@ -101,8 +101,8 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             'noplaylist': True,
             'extract_flat': False,
             'ignoreerrors': False,
-            'quiet': True,
-            'no_warnings': True,
+            'quiet': False,  # فعال‌سازی لاگ‌ها
+            'no_warnings': False,
             'socket_timeout': 60,
             'retries': 5,
             'fragment_retries': 5,
@@ -134,6 +134,9 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
                 {'key': 'FFmpegVideoRemuxer', 'preferredformat': 'mp4'},
                 {'key': 'FFmpegMetadata'},
             ]
+            ydl_opts['postprocessor_args'] = {
+                'remuxvideo': ['-movflags', '+faststart']
+            }
         
         # Add progress hook if provided
         if progress_hook:
@@ -213,81 +216,6 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         downloaded_files.sort(key=lambda fn: (0 if fn.lower().endswith('.mp4') else 1, -os.path.getsize(os.path.join(temp_dir, fn))))
         downloaded_file = os.path.join(temp_dir, downloaded_files[0])
         youtube_helpers_logger.info(f"دانلود موفق: {downloaded_file}")
-        
-        # Ensure MP4 has moov at start for Telegram (faststart); no re-encode
-        try:
-            if ffmpeg_path and downloaded_file.lower().endswith('.mp4'):
-                base, _ = os.path.splitext(downloaded_file)
-                fast_path = f"{base}_faststart.mp4"
-                
-                # بهینه‌سازی فرآیند faststart برای کاهش زمان پردازش
-                # استفاده از پارامترهای بهینه ffmpeg برای سرعت بالا
-                cmd = [
-                    ffmpeg_path, '-y', 
-                    '-i', downloaded_file,
-                    '-c', 'copy',  # کپی بدون re-encode
-                    '-movflags', '+faststart',
-                    '-avoid_negative_ts', 'make_zero',  # بهینه‌سازی timestamp
-                    '-fflags', '+genpts',  # تولید سریع timestamp
-                    '-threads', '0',  # استفاده از همه هسته‌های CPU
-                    fast_path
-                ]
-                
-                # اجرای ffmpeg با تنظیمات بهینه برای I/O
-                process_env = os.environ.copy()
-                process_env['FFREPORT'] = 'level=quiet'  # کاهش log output
-                
-                def run_faststart():
-                    return subprocess.run(
-                        cmd, 
-                        check=True, 
-                        stdout=subprocess.DEVNULL, 
-                        stderr=subprocess.DEVNULL,
-                        env=process_env,
-                        # بهینه‌سازی I/O buffer
-                        bufsize=65536  # 64KB buffer
-                    )
-                
-                # اجرای async با timeout برای جلوگیری از hang
-                await asyncio.wait_for(
-                    asyncio.to_thread(run_faststart),
-                    timeout=30.0  # حداکثر 30 ثانیه
-                )
-                
-                # بررسی موفقیت و جایگزینی فایل
-                if os.path.exists(fast_path) and os.path.getsize(fast_path) > 0:
-                    # بررسی اینکه فایل جدید معتبر است
-                    if os.path.getsize(fast_path) >= os.path.getsize(downloaded_file) * 0.95:
-                        try:
-                            os.remove(downloaded_file)
-                        except Exception:
-                            pass
-                        downloaded_file = fast_path
-                        youtube_helpers_logger.debug("faststart اعمال شد با موفقیت")
-                    else:
-                        # اگر فایل جدید خیلی کوچک‌تر است، احتمالاً مشکل دارد
-                        try:
-                            os.remove(fast_path)
-                        except Exception:
-                            pass
-                        youtube_helpers_logger.warning("faststart ناموفق - فایل اصلی حفظ شد")
-                else:
-                    youtube_helpers_logger.warning("faststart فایل خروجی تولید نکرد")
-                    
-        except asyncio.TimeoutError:
-            youtube_helpers_logger.warning("faststart timeout - فایل اصلی حفظ شد")
-            try:
-                if 'fast_path' in locals() and os.path.exists(fast_path):
-                    os.remove(fast_path)
-            except Exception:
-                pass
-        except Exception as fe:
-            youtube_helpers_logger.debug(f"ناتوان در faststart: {fe}")
-            try:
-                if 'fast_path' in locals() and os.path.exists(fast_path):
-                    os.remove(fast_path)
-            except Exception:
-                pass
         
         return downloaded_file
         
