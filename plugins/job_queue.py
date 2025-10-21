@@ -11,6 +11,7 @@ from plugins.youtube_helpers import download_youtube_file
 from plugins.stream_utils import smart_upload_strategy
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, MAX_CONCURRENT_DOWNLOADS
 from plugins.concurrency import reserve_user, release_user
+from config import RECOVER_JOBS_ON_STARTUP, RECOVERY_NOTIFY_USERS
 
 logger = get_logger('job_queue')
 
@@ -220,9 +221,10 @@ async def init_job_queue(client, max_workers: Optional[int] = None):
     if _global_queue is None:
         _global_queue = JobQueue(max_workers=max_workers)
         await _global_queue.start()
-        # Recover incomplete jobs
+        # Recover incomplete jobs only if enabled
         try:
-            await _recover_incomplete_jobs(client)
+            if RECOVER_JOBS_ON_STARTUP:
+                await _recover_incomplete_jobs(client)
         except Exception as e:
             logger.error(f"Failed to recover jobs: {e}")
     return _global_queue
@@ -242,10 +244,12 @@ async def _recover_incomplete_jobs(client):
             rows = db.cursor.execute('SELECT id, user_id, url, title, format_id FROM jobs WHERE status = ? ORDER BY created_at ASC', (st,)).fetchall() or []
             for r in rows:
                 jid, uid, url, title, format_id = r
-                try:
-                    msg = await client.send_message(uid, f"🔁 بازیابی وظیفه دانلود: {title}\n\nدر صف قرار گرفتید")
-                except Exception:
-                    msg = None
+                msg = None
+                if RECOVERY_NOTIFY_USERS:
+                    try:
+                        msg = await client.send_message(uid, f"🔁 بازیابی وظیفه دانلود: {title}\n\nدر صف قرار گرفتید")
+                    except Exception:
+                        msg = None
                 job = DownloadJob(job_id=jid, user_id=uid, url=url, title=title, format_id=format_id, media_type='video', caption=f"🎬 {title}", message=msg, client=client)
                 pos = await _global_queue.enqueue(job)
                 recovered.append((jid, pos))

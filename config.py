@@ -64,6 +64,12 @@ if PROXY_PORT:
         PROXY_HOST = None
         PROXY_PORT = None
 
+# --- Job recovery controls ---
+# Disable recovery by default to avoid spamming on test runs
+RECOVER_JOBS_ON_STARTUP = str(os.environ.get("RECOVER_JOBS_ON_STARTUP", "false")).strip().lower() in ("1", "true", "yes")
+# If recovery is enabled, control whether to notify users for recovered items
+RECOVERY_NOTIFY_USERS = str(os.environ.get("RECOVERY_NOTIFY_USERS", "false")).strip().lower() in ("1", "true", "yes")
+
 youtube_next_fetch = 1  # time in minute
 
 EDIT_TIME = 5
