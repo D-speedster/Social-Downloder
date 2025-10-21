@@ -25,6 +25,40 @@ import subprocess
 # Initialize logger
 youtube_callback_logger = get_logger('youtube_callback')
 
+# ✅ محاسبه حجم کل برای فرمت‌های ترکیبی (video+audio)
+def calculate_total_filesize(format_id, formats_list, info_dict):
+    total_size = 0
+    try:
+        if '+' in str(format_id):
+            for fid in str(format_id).split('+'):
+                fmt = next((f for f in formats_list if str(f.get('format_id')) == str(fid)), None)
+                if fmt:
+                    size = fmt.get('filesize') or fmt.get('filesize_approx')
+                    if not size:
+                        duration = info_dict.get('duration') or 0
+                        bitrate = fmt.get('tbr') or fmt.get('abr') or 0
+                        if duration and bitrate:
+                            size = int((bitrate * 1000 / 8) * duration)
+                    if size:
+                        total_size += int(size)
+                        youtube_callback_logger.debug(f"Format {fid}: {int(size) / (1024*1024):.2f} MB")
+            youtube_callback_logger.info(f"💾 حجم کل محاسبه شده: {total_size / (1024*1024):.2f} MB")
+            return total_size if total_size > 0 else None
+        else:
+            fmt = next((f for f in formats_list if str(f.get('format_id')) == str(format_id)), None)
+            if fmt:
+                size = fmt.get('filesize') or fmt.get('filesize_approx')
+                if not size:
+                    duration = info_dict.get('duration') or 0
+                    bitrate = fmt.get('tbr') or 0
+                    if duration and bitrate:
+                        size = int((bitrate * 1000 / 8) * duration)
+                return int(size) if size else None
+        return None
+    except Exception as e:
+        youtube_callback_logger.warning(f"خطا در calculate_total_filesize: {e}")
+        return None
+
 previousprogress_download = 0
 previousprogress_upload = 0
 
@@ -134,7 +168,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
             
             # Set format info
             step['sort'] = "🎥 ویدیو"
-            filesize = best_format.get('filesize') or best_format.get('filesize_approx')
+            # ✅ محاسبه صحیح حجم با درنظر گرفتن ویدیو+صدا در صورت ترکیبی بودن
+            filesize = calculate_total_filesize(step['format_id'], info.get('formats', []), info)
             if not filesize:
                 duration = info.get('duration') or 0
                 kbps = best_format.get('tbr')
@@ -316,7 +351,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
 
         step['format_id'] = format_id
         step['sort'] = "🎥 ویدیو" if is_video else "🔊 صدا"
-        filesize = selected_format.get('filesize') or selected_format.get('filesize_approx')
+        # ✅ محاسبه صحیح حجم با درنظر گرفتن فرمت ترکیبی (اگر وجود دارد)
+        filesize = calculate_total_filesize(step['format_id'], info.get('formats', []), info)
         if not filesize:
             duration = info.get('duration') or 0
             kbps = selected_format.get('tbr') or selected_format.get('abr')

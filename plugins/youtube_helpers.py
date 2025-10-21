@@ -67,6 +67,8 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         
         youtube_helpers_logger.info(f"استفاده از temp directory: {temp_dir}")
         youtube_helpers_logger.info(f"شروع دانلود: {url} با فرمت {format_id}")
+        youtube_helpers_logger.info(f"📋 Format ID دقیق: '{format_id}'")
+        youtube_helpers_logger.info(f"📋 Type: {type(format_id)}")
         
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
         
@@ -243,6 +245,8 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         file_size = os.path.getsize(downloaded_file)
         
         youtube_helpers_logger.info(f"✅ دانلود موفق: {downloaded_file}")
+        youtube_helpers_logger.info(f"📋 Format ID دقیق: '{format_id}'")
+        youtube_helpers_logger.info(f"📋 Type: {type(format_id)}")
         youtube_helpers_logger.info(f"📦 حجم فایل: {file_size / (1024*1024):.2f} MB")
         
         # 🔍 بررسی metadata با ffprobe
@@ -265,16 +269,30 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
                     if result.returncode == 0:
                         metadata = json.loads(result.stdout)
                         streams = metadata.get('streams', [])
+                        fmt = metadata.get('format', {})
                         has_video = any(s.get('codec_type') == 'video' for s in streams)
                         has_audio = any(s.get('codec_type') == 'audio' for s in streams)
-                        duration = float(metadata.get('format', {}).get('duration', 0))
+                        duration = float(fmt.get('duration', 0) or 0)
+                        bitrate = int(fmt.get('bit_rate', 0) or 0) // 1000  # kbps
+                        size_bytes_meta = int(fmt.get('size', 0) or 0)
                         
                         youtube_helpers_logger.info(
-                            f"📊 Metadata چک شد: "
-                            f"Video={'✅' if has_video else '❌'}, "
+                            f"📊 Metadata: Video={'✅' if has_video else '❌'}, "
                             f"Audio={'✅' if has_audio else '❌'}, "
-                            f"Duration={duration:.1f}s"
+                            f"⏱️ Duration={duration:.1f}s, 📊 Bitrate={bitrate} kbps, "
+                            f"📦 SizeMeta={size_bytes_meta / (1024*1024):.2f} MB"
                         )
+                        
+                        # جزئیات هر stream
+                        for s in streams:
+                            codec_type = s.get('codec_type')
+                            codec_name = s.get('codec_name')
+                            w = s.get('width')
+                            h = s.get('height')
+                            if codec_type == 'video':
+                                youtube_helpers_logger.info(f"🔧 VideoCodec: {codec_name}, 📐 {w}x{h}")
+                            elif codec_type == 'audio':
+                                youtube_helpers_logger.info(f"🔧 AudioCodec: {codec_name}")
                         
                         if not has_audio and has_video:
                             youtube_helpers_logger.warning("⚠️ فایل صوت ندارد!")
