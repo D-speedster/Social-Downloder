@@ -1,3 +1,5 @@
+# youtube_helpers.py - نسخه فیکس شده نهایی
+
 import os
 import asyncio
 import tempfile
@@ -5,6 +7,7 @@ import yt_dlp
 import shutil
 import sys
 import subprocess
+import json
 from plugins.logger_config import get_logger, get_performance_logger
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
 
@@ -108,7 +111,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             'socket_timeout': 60,
             'retries': 5,
             'fragment_retries': 5,
-            'concurrent_fragments': 4,
+            'concurrent_fragments': 8,  # افزایش از 4 به 8
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -127,18 +130,30 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
         
-        # Enable ffmpeg-based merge and conversion if ffmpeg is available
+        # 🔥 فیکس اصلی: تنظیمات صحیح ffmpeg
         if ffmpeg_path and (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             ydl_opts['merge_output_format'] = 'mp4'
+            
+            # ✅ استفاده از FFmpegVideoRemuxer بجای Convertor
             ydl_opts['postprocessors'] = [
-                {'key': 'FFmpegMerger'},
-                {'key': 'FFmpegVideoRemuxer', 'preferredformat': 'mp4'},
-                {'key': 'FFmpegMetadata'},
+                {
+                    'key': 'FFmpegVideoRemuxer',
+                    'preferedformat': 'mp4',
+                },
+                {
+                    'key': 'FFmpegMetadata',
+                    'add_metadata': True,
+                },
             ]
+            
+            # ✅ فیکس کلید postprocessor_args
+            # باید 'video' باشه، نه 'remuxvideo'
             ydl_opts['postprocessor_args'] = {
-                'remuxvideo': ['-movflags', '+faststart']
+                'video': ['-c:v', 'copy', '-c:a', 'copy', '-movflags', '+faststart']
             }
+            
+            youtube_helpers_logger.debug("تنظیمات FFmpeg برای merge و faststart اعمال شد")
         
         # Add progress hook if provided
         if progress_hook:
@@ -170,6 +185,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             # Retry with reduced options (no postprocessors)
             try:
                 ydl_opts.pop('postprocessors', None)
+                ydl_opts.pop('postprocessor_args', None)
                 def download_sync_retry():
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         ydl.download([url])
@@ -209,20 +225,71 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
                 pass
         
         # Find downloaded/merged file (prefer MP4)
-        downloaded_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f)) and not f.endswith('.part')]
+        downloaded_files = [f for f in os.listdir(temp_dir) 
+                          if os.path.isfile(os.path.join(temp_dir, f)) 
+                          and not f.endswith('.part')
+                          and not f.endswith('.ytdl')]
+        
         if not downloaded_files:
             youtube_helpers_logger.error("هیچ فایل دانلود شده‌ای یافت نشد")
             return None
         
         # Prefer .mp4 then by size
-        downloaded_files.sort(key=lambda fn: (0 if fn.lower().endswith('.mp4') else 1, -os.path.getsize(os.path.join(temp_dir, fn))))
+        downloaded_files.sort(key=lambda fn: (
+            0 if fn.lower().endswith('.mp4') else 1, 
+            -os.path.getsize(os.path.join(temp_dir, fn))
+        ))
         downloaded_file = os.path.join(temp_dir, downloaded_files[0])
-        youtube_helpers_logger.info(f"دانلود موفق: {downloaded_file}")
+        file_size = os.path.getsize(downloaded_file)
+        
+        youtube_helpers_logger.info(f"✅ دانلود موفق: {downloaded_file}")
+        youtube_helpers_logger.info(f"📦 حجم فایل: {file_size / (1024*1024):.2f} MB")
+        
+        # 🔍 بررسی metadata با ffprobe
+        if ffmpeg_path:
+            try:
+                ffprobe_path = ffmpeg_path.replace('ffmpeg', 'ffprobe')
+                if not os.path.exists(ffprobe_path):
+                    ffprobe_path = shutil.which('ffprobe')
+                
+                if ffprobe_path:
+                    cmd = [
+                        ffprobe_path, '-v', 'error',
+                        '-show_entries', 'format=duration,size,bit_rate',
+                        '-show_entries', 'stream=codec_type,codec_name,width,height',
+                        '-of', 'json',
+                        downloaded_file
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    
+                    if result.returncode == 0:
+                        metadata = json.loads(result.stdout)
+                        streams = metadata.get('streams', [])
+                        has_video = any(s.get('codec_type') == 'video' for s in streams)
+                        has_audio = any(s.get('codec_type') == 'audio' for s in streams)
+                        duration = float(metadata.get('format', {}).get('duration', 0))
+                        
+                        youtube_helpers_logger.info(
+                            f"📊 Metadata چک شد: "
+                            f"Video={'✅' if has_video else '❌'}, "
+                            f"Audio={'✅' if has_audio else '❌'}, "
+                            f"Duration={duration:.1f}s"
+                        )
+                        
+                        if not has_audio and has_video:
+                            youtube_helpers_logger.warning("⚠️ فایل صوت ندارد!")
+                        if duration == 0:
+                            youtube_helpers_logger.warning("⚠️ مدت زمان صفر است!")
+                    else:
+                        youtube_helpers_logger.warning(f"⚠️ خطا در ffprobe: {result.stderr}")
+                        
+            except Exception as e:
+                youtube_helpers_logger.debug(f"نتوانستیم metadata را بررسی کنیم: {e}")
         
         return downloaded_file
         
     except Exception as e:
-        youtube_helpers_logger.error(f"خطا در دانلود: {e}")
+        youtube_helpers_logger.error(f"❌ خطا در دانلود: {e}")
         # ثبت شکست استفاده از کوکی
         try:
             if 'cookie_id_used' in locals() and cookie_id_used:
@@ -231,6 +298,8 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             pass
         return None
 
+
+# بقیه توابع بدون تغییر...
 async def get_direct_download_url(url, format_id):
     """
     دریافت لینک مستقیم دانلود بدون دانلود فایل
@@ -246,12 +315,10 @@ async def get_direct_download_url(url, format_id):
             'noplaylist': True,
             'extract_flat': False,
             'proxy': 'socks5h://127.0.0.1:1084',
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
         
         cookie_id_used = None
         
-        # همیشه ابتدا سعی کن از فایل کوکی اصلی استفاده کنی
         try:
             cookiefile, cid = get_cookie_file_with_fallback(None)
             if cookiefile:
@@ -264,7 +331,6 @@ async def get_direct_download_url(url, format_id):
         except Exception:
             pass
         
-        # Extract info in thread to avoid blocking
         def extract_sync():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -273,16 +339,13 @@ async def get_direct_download_url(url, format_id):
         try:
             info = await asyncio.to_thread(extract_sync)
         except Exception as first_err:
-            # اگر نیاز به کوکی باشد، تلاش مجدد با کوکی
             msg = str(first_err).lower()
             needs_cookie = any(h in msg for h in ['login required', 'sign in', 'age', 'restricted', 'private'])
             if needs_cookie:
                 try:
-                    # اگر قبلاً کوکی استفاده نشده، سعی کن از فایل اصلی یا استخر استفاده کنی
                     if not cookie_id_used:
                         cookiefile, cid = get_cookie_file_with_fallback(None)
                     else:
-                        # اگر قبلاً کوکی استفاده شده، از استخر کوکی دیگری بگیر
                         cookiefile, cid = get_rotated_cookie_file(cookie_id_used)
                     
                     if cookiefile:
@@ -301,30 +364,24 @@ async def get_direct_download_url(url, format_id):
                     else:
                         youtube_helpers_logger.debug("کوکی دردسترس نیست؛ عبور")
                 except Exception as cookie_err:
-                    # اگر خطا مرتبط با محدودیت/شبکه باشد، تلاش مجدد
                     youtube_helpers_logger.debug(f"خطا در استخراج لینک با کوکی: {cookie_err}")
                     ydl_opts.pop('cookiefile', None)
                     info = await asyncio.to_thread(extract_sync)
             else:
-                # شاید صرفاً محدودیت/شبکه باشد، تلاش مجدد
                 youtube_helpers_logger.debug("تلاش مجدد استخراج لینک")
                 info = await asyncio.to_thread(extract_sync)
-        # تبدیل info به URL مستقیم
+        
         direct_url = None
         try:
             if isinstance(info, dict):
-                # اولویت: url مستقیم در سطح info
                 direct_url = info.get('url')
-                # در صورت وجود requested_formats یا formats، تلاش برای یافتن فرمت مطابق
                 if not direct_url:
                     rf = info.get('requested_formats') or []
                     fmts = info.get('formats') or []
-                    # جستجو بر اساس format_id
                     for entry in (rf if rf else fmts):
                         if str(entry.get('format_id')) == str(format_id) and entry.get('url'):
                             direct_url = entry['url']
                             break
-                    # اگر هنوز چیزی پیدا نشد، اولین URL موجود را برمی‌داریم
                     if not direct_url:
                         for entry in (rf if rf else fmts):
                             if entry.get('url'):
@@ -341,6 +398,7 @@ async def get_direct_download_url(url, format_id):
         except Exception:
             pass
         return None
+
 
 async def safe_edit_text(message, text, parse_mode=None, reply_markup=None):
     """
