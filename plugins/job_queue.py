@@ -165,7 +165,7 @@ class JobQueue:
                             break
 
                 progress_task = asyncio.create_task(progress_display())
-                downloaded_file = await download_youtube_file(job.url, job.format_id, status_hook, out_dir=DOWNLOADS_DIR)
+                downloaded_file = await download_youtube_file(job.url, job.format_id, status_hook)
                 progress_task.cancel()
 
                 if not downloaded_file or not os.path.exists(downloaded_file):
@@ -193,6 +193,11 @@ class JobQueue:
                     f"✅ فایل با موفقیت ارسال شد\n\n"
                     f"🏷️ {job.title}\n"
                 )
+                # پاک‌سازی UI: حذف پیام وضعیت پس از ارسال فایل
+                try:
+                    await job.message.delete()
+                except Exception:
+                    pass
                 logger.info(f"Worker-{worker_id} completed job {job.job_id}")
                 return
 

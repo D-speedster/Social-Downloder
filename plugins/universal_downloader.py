@@ -160,8 +160,8 @@ def get_platform_name(url):
 async def get_universal_data_from_api(url):
     """Get media data from the universal API for Spotify, TikTok, and SoundCloud with timeout"""
     try:
-        # Use asyncio.wait_for with 3 second timeout
-        return await asyncio.wait_for(_api_request_sync(url), timeout=3.0)
+        # Use asyncio.wait_for with 6 second timeout (more robust)
+        return await asyncio.wait_for(_api_request_sync(url), timeout=6.0)
     except asyncio.TimeoutError:
         universal_logger.warning(f"API timeout for URL: {url}")
         return None
@@ -175,7 +175,7 @@ def _api_request_sync(url):
     
     def _make_request():
         try:
-            conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com", timeout=2.5)
+            conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com", timeout=5.0)
             
             payload = json.dumps({"url": url})
             
@@ -236,8 +236,8 @@ def _progress_callback(current, total):
 async def _fetch_og_media(url: str):
     """Fallback: fetch media via OpenGraph tags with timeout"""
     try:
-        # Use asyncio.wait_for with 2.5 second timeout
-        return await asyncio.wait_for(_og_request_sync(url), timeout=2.5)
+        # Use asyncio.wait_for with 4.0 second timeout (more robust)
+        return await asyncio.wait_for(_og_request_sync(url), timeout=4.0)
     except asyncio.TimeoutError:
         universal_logger.warning(f"OG fallback timeout for URL: {url}")
         return None
@@ -252,9 +252,10 @@ def _og_request_sync(url: str):
     def _make_og_request():
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36',
+                'Accept-Language': 'fa-IR,fa;q=0.9,en-US;q=0.8,en;q=0.7'
             }
-            resp = requests.get(url, headers=headers, timeout=2.0)
+            resp = requests.get(url, headers=headers, timeout=3.5, allow_redirects=True)
             html = resp.text
             # Try og:video first
             import re as _re
@@ -342,62 +343,62 @@ async def handle_universal_link(client: Client, message: Message):
         fallback_media = None
         last_api_error_message = None
         
-        # Create tasks for API and fallback (if Instagram)
-        tasks = [("api", asyncio.create_task(get_universal_data_from_api(url)))]
-        
-        # Only add fallback for Instagram
-        if platform == "Instagram":
-            tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
-        
-        # Use asyncio.wait with FIRST_COMPLETED for immediate response
-        pending = {t for _, t in tasks}
-        try:
-            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=5)
-            
-            # Process completed tasks
-            for completed_task in done:
-                # Find which task completed
-                for task_name, task in tasks:
-                    if task is completed_task:
-                        try:
-                            result = completed_task.result()
-                            _log(f"[UNIV] {task_name} completed first with result: {bool(result)}")
-                            
-                            # Check if API result is valid
-                            if task_name == "api" and result:
-                                invalid = (result.get("error", False) or 
-                                         result.get("data", {}).get("error", False) or 
-                                         not result.get("medias"))
-                                if not invalid:
-                                    api_data = result
-                                    _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s")
-                                    break
-                                else:
-                                    # Store error message for later use
-                                    if result.get("message"):
-                                        last_api_error_message = result.get("message")
-                            
-                            # Check if fallback result is valid
-                            elif task_name == "fallback" and result:
-                                fallback_media = result
-                                _log(f"[UNIV] Fallback success in {time.perf_counter() - t_api_start:.2f}s")
-                                break
-                                
-                        except Exception as e:
-                            _log(f"[UNIV] {task_name} task failed: {e}")
-                            if task_name == "api":
-                                last_api_error_message = str(e)
-                        break
-            
-            # If we got a valid result, cancel remaining tasks
-            if api_data or fallback_media:
-                for remaining_task in pending:
-                    remaining_task.cancel()
-            else:
-                # If first task failed, wait for remaining tasks
+        # Layered retry: try API and fallback concurrently, up to N cycles (Instagram)
+        max_cycles = 3 if platform == "Instagram" else 1
+        api_data = None
+        fallback_media = None
+        last_api_error_message = None
+
+        for cycle in range(max_cycles):
+            # Create tasks for API and fallback (Instagram only)
+            tasks = [("api", asyncio.create_task(get_universal_data_from_api(url)))]
+            if platform == "Instagram":
+                tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
+
+            pending = {t for _, t in tasks}
+            wait_timeout = 6 + (2 * cycle)  # grow timeout slightly per cycle
+
+            try:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=wait_timeout)
+
+                # Process completed tasks
+                for completed_task in done:
+                    for task_name, task in tasks:
+                        if task is completed_task:
+                            try:
+                                result = completed_task.result()
+                                _log(f"[UNIV] {task_name} completed (cycle {cycle+1}) with result: {bool(result)}")
+
+                                if task_name == "api" and result:
+                                    invalid = (result.get("error", False) or
+                                               result.get("data", {}).get("error", False) or
+                                               not result.get("medias"))
+                                    if not invalid:
+                                        api_data = result
+                                        _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
+                                    else:
+                                        if result.get("message"):
+                                            last_api_error_message = result.get("message")
+
+                                elif task_name == "fallback" and result:
+                                    fallback_media = result
+                                    _log(f"[UNIV] Fallback success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
+                            except Exception as e:
+                                _log(f"[UNIV] {task_name} task failed: {e}")
+                                if task_name == "api":
+                                    last_api_error_message = str(e)
+                            break
+
+                # If we got a valid result, cancel remaining tasks and break
+                if api_data or fallback_media:
+                    for remaining_task in pending:
+                        remaining_task.cancel()
+                    break
+
+                # Otherwise, wait for remaining tasks this cycle
                 if pending:
                     try:
-                        done, pending = await asyncio.wait(pending, timeout=3)
+                        done, pending = await asyncio.wait(pending, timeout=3 + cycle)  # small grace window
                         for completed_task in done:
                             for task_name, task in tasks:
                                 if task is completed_task:
@@ -411,20 +412,30 @@ async def handle_universal_link(client: Client, message: Message):
                                         _log(f"[UNIV] {task_name} secondary task failed: {e}")
                                     break
                     finally:
-                        # Cancel any remaining tasks
                         for remaining_task in pending:
                             remaining_task.cancel()
-                            
-        except asyncio.TimeoutError:
-            _log(f"[UNIV] All tasks timed out after 5 seconds")
-            last_api_error_message = "Timeout: درخواست بیش از حد طول کشید"
-        except Exception as e:
-            _log(f"[UNIV] Error in parallel API/fallback: {e}")
-        finally:
-            # Ensure all tasks are cancelled
-            for _, task in tasks:
-                if not task.done():
-                    task.cancel()
+
+            except asyncio.TimeoutError:
+                _log(f"[UNIV] Tasks timed out after {wait_timeout} seconds (cycle {cycle+1})")
+                last_api_error_message = "Timeout: درخواست بیش از حد طول کشید"
+            except Exception as e:
+                _log(f"[UNIV] Error in parallel API/fallback (cycle {cycle+1}): {e}")
+            finally:
+                for _, task in tasks:
+                    if not task.done():
+                        task.cancel()
+
+            # Prepare for next cycle if not successful
+            if not (api_data or fallback_media) and cycle + 1 < max_cycles:
+                try:
+                    await status_msg.edit_text(f"🔁 تلاش دوباره برای دریافت اطلاعات از {platform}... (تلاش {cycle+2}/{max_cycles})")
+                except Exception:
+                    pass
+                # small backoff jitter
+                try:
+                    await asyncio.sleep(0.6 * (cycle + 1))
+                except Exception:
+                    pass
         
         # Check results
         if not api_data and not fallback_media:

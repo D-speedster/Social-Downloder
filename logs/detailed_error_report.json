@@ -1,41 +1,32 @@
 {
-  "timestamp": "2025-10-21T01:00:53.732604",
+  "timestamp": "2025-10-21T09:02:02.705068",
   "system_info": {
     "platform": "Windows-11-10.0.26200-SP0",
     "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
     "python_executable": "C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
     "working_directory": "C:\\Users\\speedster\\Desktop\\DownloaderYT-V1",
-    "timestamp": "2025-10-21T01:00:53.721121",
+    "timestamp": "2025-10-21T09:02:02.657028",
     "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.EXE"
   },
   "error_analysis": {
-    "timestamp": "2025-10-21T01:00:53.730988",
-    "error_type": "NameError",
-    "error_message": "name 'Client' is not defined",
+    "timestamp": "2025-10-21T09:02:02.665939",
+    "error_type": "OperationalError",
+    "error_message": "database is locked",
     "traceback": [
       "Traceback (most recent call last):\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 219, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\base_events.py\", line 719, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n",
       "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\bot.py\", line 166, in main\n    await client.start()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 74, in start\n    await self.initialize()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\initialize.py\", line 46, in initialize\n    self.load_plugins()\n    ~~~~~~~~~~~~~~~~~^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 689, in load_plugins\n    module = import_module(module_path)\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\importlib\\__init__.py\", line 88, in import_module\n    return _bootstrap._gcd_import(name[level:], package, level)\n           ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
-      "  File \"<frozen importlib._bootstrap>\", line 1387, in _gcd_import\n",
-      "  File \"<frozen importlib._bootstrap>\", line 1360, in _find_and_load\n",
-      "  File \"<frozen importlib._bootstrap>\", line 1331, in _find_and_load_unlocked\n",
-      "  File \"<frozen importlib._bootstrap>\", line 935, in _load_unlocked\n",
-      "  File \"<frozen importlib._bootstrap_external>\", line 1026, in exec_module\n",
-      "  File \"<frozen importlib._bootstrap>\", line 488, in _call_with_frames_removed\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\DownloaderYT-V1\\plugins\\youtube.py\", line 162, in <module>\n    @Client.on_message(filters.regex(r\"^(?:https?://)?(?:www\\.)?(?:m\\.)?(?:youtube\\.com|youtu\\.be)/\") & filters.private & join)\n     ^^^^^^\n",
-      "NameError: name 'Client' is not defined\n"
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 58, in start\n    is_authorized = await self.connect()\n                    ^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\connect.py\", line 40, in connect\n    await self.load_session()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 616, in load_session\n    await self.storage.open()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 63, in open\n    self.update()\n    ~~~~~~~~~~~^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 52, in update\n    self.version(version)\n    ~~~~~~~~~~~~^^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\sqlite_storage.py\", line 219, in version\n    self.conn.execute(\n    ~~~~~~~~~~~~~~~~~^\n        \"UPDATE version SET number = ?\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        (value,)\n        ^^^^^^^^\n    )\n    ^\n",
+      "sqlite3.OperationalError: database is locked\n"
     ],
     "suggestions": [
-      "خطای غیرمنتظره رخ داده است",
-      "لاگ‌های کامل را بررسی کنید",
-      "کد مربوطه را دیباگ کنید"
+      "مشکل در اتصال یا عملیات پایگاه داده",
+      "فایل پایگاه داده را بررسی کنید",
+      "دسترسی نوشتن در دایرکتوری را چک کنید"
     ]
   },
   "environment_issues": [

@@ -15,6 +15,7 @@ from plugins.sqlite_db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.youtube_helpers import download_youtube_file, get_direct_download_url, safe_edit_text
 from plugins.job_queue import enqueue_download_job
+from plugins.concurrency import get_queue_stats
 from plugins import constant
 from utils.util import convert_size
 from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload
@@ -379,12 +380,14 @@ async def answer(client: Client, callback_query: CallbackQuery):
             media_type,
             caption
         )
+        stats = get_queue_stats()
+        youtube_callback_logger.info(f"Queue stats after enqueue: pos={pos}, active={stats['active']}, waiting={stats['waiting']}, capacity={stats['capacity']}")
         await safe_edit_text(
             f"🕒 **در صف دانلود هستید** (نفر {pos})\n\n"
             f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
             f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
             f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
-            f"🔔 به‌محض شروع دانلود، وضعیت و پیشرفت نمایش داده می‌شود",
+            f"⏳ به‌محض شروع دانلود، پیشرفت به‌صورت زنده نمایش داده می‌شود",
             parse_mode=ParseMode.MARKDOWN
         )
         return

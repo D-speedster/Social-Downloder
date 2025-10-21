@@ -12,8 +12,15 @@ class DB:
         db_path_manager.migrate_existing_database()
         
         db_path = db_path_manager.get_sqlite_db_path()
-        self.mydb = sqlite3.connect(db_path, check_same_thread=False)
+        self.mydb = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
         self.cursor = self.mydb.cursor()
+        # Reduce locking and improve concurrency
+        try:
+            self.cursor.execute('PRAGMA journal_mode=WAL')
+            self.cursor.execute('PRAGMA synchronous=NORMAL')
+            self.cursor.execute('PRAGMA busy_timeout=30000')
+        except Exception:
+            pass
         
         print(f"SQLite database connected at: {db_path}")
 
@@ -258,39 +265,50 @@ class DB:
 
     def list_cookies(self, limit: int = 50) -> list:
         try:
-            q = 'SELECT id, name, source_type, status, use_count, fail_count, last_used_at, created_at FROM cookies ORDER BY id DESC LIMIT ?'
-            self.cursor.execute(q, (limit,))
-            rows = self.cursor.fetchall() or []
-            result = []
-            for r in rows:
-                result.append({
-                    'id': r[0], 'name': r[1], 'source_type': r[2], 'status': r[3],
-                    'use_count': r[4], 'fail_count': r[5], 'last_used_at': r[6], 'created_at': r[7]
-                })
-            return result
+            query = 'SELECT id, name, source_type, format, status, use_count, fail_count, created_at, last_used_at FROM cookies ORDER BY id DESC LIMIT ?'
+            self.cursor.execute(query, (limit,))
+            rows = self.cursor.fetchall()
+            return [{
+                'id': r[0],
+                'name': r[1],
+                'source_type': r[2],
+                'format': r[3],
+                'status': r[4],
+                'use_count': r[5],
+                'fail_count': r[6],
+                'created_at': r[7],
+                'last_used_at': r[8]
+            } for r in rows]
         except sqlite3.Error as e:
             print(f"Failed to list cookies: {e}")
             return []
 
     def get_cookie_by_id(self, cookie_id: int) -> dict:
         try:
-            q = 'SELECT id, name, source_type, format, cookie_text, status, use_count, fail_count, last_used_at, created_at FROM cookies WHERE id = ?'
-            self.cursor.execute(q, (cookie_id,))
+            query = 'SELECT id, name, source_type, format, status, use_count, fail_count, created_at, last_used_at, cookie_text FROM cookies WHERE id = ?'
+            self.cursor.execute(query, (cookie_id,))
             r = self.cursor.fetchone()
             if not r:
                 return {}
             return {
-                'id': r[0], 'name': r[1], 'source_type': r[2], 'format': r[3], 'cookie_text': r[4],
-                'status': r[5], 'use_count': r[6], 'fail_count': r[7], 'last_used_at': r[8], 'created_at': r[9]
+                'id': r[0],
+                'name': r[1],
+                'source_type': r[2],
+                'format': r[3],
+                'status': r[4],
+                'use_count': r[5],
+                'fail_count': r[6],
+                'created_at': r[7],
+                'last_used_at': r[8],
+                'cookie_text': r[9],
             }
         except sqlite3.Error as e:
-            print(f"Failed to get cookie by id: {e}")
+            print(f"Failed to get cookie: {e}")
             return {}
 
     def delete_cookie(self, cookie_id: int) -> bool:
         try:
-            q = 'DELETE FROM cookies WHERE id = ?'
-            self.cursor.execute(q, (cookie_id,))
+            self.cursor.execute('DELETE FROM cookies WHERE id = ?', (cookie_id,))
             self.mydb.commit()
             return True
         except sqlite3.Error as e:
@@ -299,8 +317,7 @@ class DB:
 
     def update_cookie_status(self, cookie_id: int, status: str) -> None:
         try:
-            q = 'UPDATE cookies SET status = ? WHERE id = ?'
-            self.cursor.execute(q, (status, cookie_id))
+            self.cursor.execute('UPDATE cookies SET status = ? WHERE id = ?', (status, cookie_id))
             self.mydb.commit()
         except sqlite3.Error as e:
             print(f"Failed to update cookie status: {e}")
@@ -308,155 +325,97 @@ class DB:
     def mark_cookie_used(self, cookie_id: int, success: bool) -> None:
         try:
             now = _dt.now().isoformat(timespec='seconds')
-            self.cursor.execute('SELECT use_count, fail_count FROM cookies WHERE id = ?', (cookie_id,))
-            row = self.cursor.fetchone()
-            use_count = int(row[0] or 0) if row else 0
-            fail_count = int(row[1] or 0) if row else 0
-            use_count += 1
+            self.cursor.execute('UPDATE cookies SET use_count = use_count + 1, last_used_at = ? WHERE id = ?', (now, cookie_id))
             if not success:
-                fail_count += 1
-            self.cursor.execute('UPDATE cookies SET use_count = ?, fail_count = ?, last_used_at = ? WHERE id = ?', (use_count, fail_count, now, cookie_id))
+                self.cursor.execute('UPDATE cookies SET fail_count = fail_count + 1 WHERE id = ?', (cookie_id,))
             self.mydb.commit()
         except sqlite3.Error as e:
-            print(f"Failed to mark cookie used: {e}")
+            print(f"Failed to update cookie usage: {e}")
 
     def get_next_cookie(self, prev_cookie_id: int | None) -> dict | None:
-        """Pick the least recently used cookie, avoiding immediate reuse of prev_cookie_id."""
         try:
-            q = ('SELECT id, name, cookie_text FROM cookies WHERE status != ? '
-                 'ORDER BY COALESCE(last_used_at, "1970-01-01 00:00:00") ASC, use_count ASC LIMIT 2')
-            self.cursor.execute(q, ('disabled',))
-            rows = self.cursor.fetchall() or []
+            # Simple round robin based on lowest use_count and fail_count
+            rows = self.cursor.execute('SELECT id, name, source_type, format, status, use_count, fail_count, created_at, last_used_at, cookie_text FROM cookies ORDER BY use_count ASC, fail_count ASC, id ASC').fetchall()
             if not rows:
                 return None
             if prev_cookie_id is None:
-                chosen = rows[0]
+                # return first
+                r = rows[0]
+                return {
+                    'id': r[0],
+                    'name': r[1],
+                    'source_type': r[2],
+                    'format': r[3],
+                    'status': r[4],
+                    'use_count': r[5],
+                    'fail_count': r[6],
+                    'created_at': r[7],
+                    'last_used_at': r[8],
+                    'cookie_text': r[9],
+                }
+            # find next after prev
+            idx = None
+            for i, r in enumerate(rows):
+                if r[0] == prev_cookie_id:
+                    idx = i
+                    break
+            if idx is None:
+                r = rows[0]
             else:
-                chosen = None
-                for r in rows:
-                    if r[0] != prev_cookie_id:
-                        chosen = r
-                        break
-                if chosen is None:
-                    chosen = rows[0]
-            return {'id': chosen[0], 'name': chosen[1], 'cookie_text': chosen[2]}
+                r = rows[(idx + 1) % len(rows)]
+            return {
+                'id': r[0],
+                'name': r[1],
+                'source_type': r[2],
+                'format': r[3],
+                'status': r[4],
+                'use_count': r[5],
+                'fail_count': r[6],
+                'created_at': r[7],
+                'last_used_at': r[8],
+                'cookie_text': r[9],
+            }
         except sqlite3.Error as e:
             print(f"Failed to get next cookie: {e}")
             return None
-    
+
     def set_blocked_until(self, user_id: int, until_str: str) -> None:
-        """Set blocked_until timestamp for a user"""
         try:
-            query = 'UPDATE users SET blocked_until = ? WHERE user_id = ?'
-            self.cursor.execute(query, (until_str, user_id))
+            self.cursor.execute('UPDATE users SET blocked_until = ? WHERE user_id = ?', (until_str, user_id))
             self.mydb.commit()
-        except sqlite3.Error as error:
-            print(f"Failed to set blocked_until: {error}")
+        except sqlite3.Error as e:
+            print(f"Failed to set blocked_until: {e}")
 
     def increment_request(self, user_id: int, now_str: str) -> None:
-        """Increase total and daily counters and update last_download."""
         try:
-            # Ensure user exists
-            if not self.check_user_register(user_id):
-                self.register_user(user_id, now_str)
-            
-            # Update last_download
-            self.cursor.execute('UPDATE users SET last_download = ? WHERE user_id = ?', (now_str, user_id))
-            
-            # Get current counters
-            self.cursor.execute('SELECT daily_date, daily_requests, total_requests, blocked_until FROM users WHERE user_id = ?', (user_id,))
-            row = self.cursor.fetchone()
-            daily_date = row[0] if row else ''
-            daily_requests = int(row[1] or 0) if row else 0
-            total_requests = int(row[2] or 0) if row else 0
-            blocked_until = row[3] or '' if row else ''
-            
-            # Reset daily counter if new day
-            today = date.today().isoformat()
-            if daily_date != today:
-                daily_requests = 0
-                daily_date = today
-            
-            # Increment counters
-            daily_requests += 1
-            total_requests += 1
-            
-            # Update counters
-            self.cursor.execute('UPDATE users SET daily_date = ?, daily_requests = ?, total_requests = ? WHERE user_id = ?',
-                                (daily_date, daily_requests, total_requests, user_id))
-            
-            # Enforce 1-hour block after 10 daily requests
-            try:
-                bu = _dt.fromisoformat(blocked_until) if blocked_until else None
-            except Exception:
-                bu = None
-            
-            now_dt = _dt.now()
-            if daily_requests == 10 and (bu is None or bu <= now_dt):
-                until_str = (now_dt + _td(hours=1)).isoformat(timespec='seconds')
-                self.cursor.execute('UPDATE users SET blocked_until = ? WHERE user_id = ?', (until_str, user_id))
-            
+            # Reset daily stats if date changed
+            row = self.cursor.execute('SELECT daily_date FROM users WHERE user_id = ?', (user_id,)).fetchone()
+            if not row or row[0] != now_str:
+                self.cursor.execute('UPDATE users SET daily_date = ?, daily_requests = 1, total_requests = total_requests + 1 WHERE user_id = ?', (now_str, user_id))
+            else:
+                self.cursor.execute('UPDATE users SET daily_requests = daily_requests + 1, total_requests = total_requests + 1 WHERE user_id = ?', (user_id,))
             self.mydb.commit()
-        except Exception as e:
+        except sqlite3.Error as e:
             print(f"Failed to increment request: {e}")
 
     def get_system_stats(self) -> dict:
-        """Get system statistics for admin panel with job metrics"""
         stats = {
             'total_users': 0,
-            'users_today': 0,
-            'active_today': 0,
-            'total_requests_sum': 0,
-            'blocked_count': 0,
             'total_jobs': 0,
-            'jobs_pending': 0,
-            'jobs_ready': 0,
-            'jobs_completed': 0,
+            'pending_jobs': 0,
+            'running_jobs': 0,
+            'completed_jobs': 0,
+            'failed_jobs': 0,
         }
         try:
-            # Users count
-            self.cursor.execute('SELECT COUNT(*) FROM users')
-            row = self.cursor.fetchone()
-            stats['total_users'] = int(row[0] or 0) if row else 0
-
-            # Users joined today (joined_at LIKE 'YYYY-MM-DD%')
-            today = date.today().isoformat()
-            try:
-                self.cursor.execute('SELECT COUNT(*) FROM users WHERE joined_at LIKE ?', (today + '%',))
-                row = self.cursor.fetchone()
-                stats['users_today'] = int(row[0] or 0) if row else 0
-            except Exception:
-                stats['users_today'] = 0
-
-            # Active users today (daily_date == today AND daily_requests > 0)
-            try:
-                self.cursor.execute('SELECT COUNT(*) FROM users WHERE daily_date = ? AND daily_requests > 0', (today,))
-                row = self.cursor.fetchone()
-                stats['active_today'] = int(row[0] or 0) if row else 0
-            except Exception:
-                stats['active_today'] = 0
-
-            # Total requests sum
-            self.cursor.execute('SELECT SUM(total_requests) FROM users')
-            row = self.cursor.fetchone()
-            stats['total_requests_sum'] = int(row[0] or 0) if row and row[0] is not None else 0
-
-            # Blocked users (blocked_until > now)
-            try:
-                now_str = _dt.now().isoformat(timespec='seconds')
-                self.cursor.execute('SELECT COUNT(*) FROM users WHERE blocked_until > ?', (now_str,))
-                row = self.cursor.fetchone()
-                stats['blocked_count'] = int(row[0] or 0) if row else 0
-            except Exception:
-                stats['blocked_count'] = 0
-
-            # Jobs counts
-            self.cursor.execute('SELECT COUNT(*) FROM jobs')
-            row = self.cursor.fetchone()
-            stats['total_jobs'] = int(row[0] or 0) if row else 0
-
-            for status_key, field in [('pending', 'jobs_pending'), ('ready', 'jobs_ready'), ('completed', 'jobs_completed')]:
-                self.cursor.execute('SELECT COUNT(*) FROM jobs WHERE status = ?', (status_key,))
+            for field, q in [
+                ('total_users', 'SELECT COUNT(*) FROM users'),
+                ('total_jobs', 'SELECT COUNT(*) FROM jobs'),
+                ('pending_jobs', "SELECT COUNT(*) FROM jobs WHERE status = 'pending'"),
+                ('running_jobs', "SELECT COUNT(*) FROM jobs WHERE status IN ('downloading','uploading')"),
+                ('completed_jobs', "SELECT COUNT(*) FROM jobs WHERE status = 'completed'"),
+                ('failed_jobs', "SELECT COUNT(*) FROM jobs WHERE status = 'error'"),
+            ]:
                 row = self.cursor.fetchone()
                 stats[field] = int(row[0] or 0) if row else 0
 

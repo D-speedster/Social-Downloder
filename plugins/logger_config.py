@@ -33,11 +33,6 @@ class BotLoggerManager:
             backup_count: تعداد فایل‌های پشتیبان
         """
         logger = logging.getLogger(name)
-        
-        # جلوگیری از اضافه کردن handler های تکراری
-        if logger.handlers:
-            return logger
-            
         logger.setLevel(level)
         
         # تعیین نام فایل لاگ
@@ -46,23 +41,30 @@ class BotLoggerManager:
             
         log_path = os.path.join(self.logs_dir, log_file)
         
-        # ایجاد RotatingFileHandler برای مدیریت اندازه فایل‌ها
-        file_handler = logging.handlers.RotatingFileHandler(
-            log_path,
-            maxBytes=max_bytes,
-            backupCount=backup_count,
-            encoding='utf-8'
-        )
-        
         # تنظیم فرمت لاگ
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        file_handler.setFormatter(formatter)
         
-        # اضافه کردن handler به لاگر
-        logger.addHandler(file_handler)
+        # افزودن FileHandler تنها در صورت عدم وجود
+        has_file = any(isinstance(h, logging.handlers.RotatingFileHandler) for h in logger.handlers)
+        if not has_file:
+            file_handler = logging.handlers.RotatingFileHandler(
+                log_path,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding='utf-8'
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        
+        # افزودن StreamHandler (کنسول) تنها در صورت عدم وجود و اگر فعال باشد
+        has_console = any(isinstance(h, logging.StreamHandler) for h in logger.handlers)
+        if not has_console and os.environ.get('LOG_TO_CONSOLE', '1') == '1':
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            logger.addHandler(console_handler)
         
         # جلوگیری از انتشار به root logger
         logger.propagate = False
@@ -117,5 +119,5 @@ def get_performance_logger():
     return log_manager.get_performance_logger()
 
 def get_error_logger():
-    """دریافت لاگر خطاها"""
+    """دریافت لاگر خطا"""
     return log_manager.get_error_logger()
