@@ -615,3 +615,249 @@ async def answer(client: Client, callback_query: CallbackQuery):
     else:
         youtube_callback_logger.warning(f"callback_query.data ناشناخته: {callback_query.data}")
         await callback_query.answer("❌ گزینه نامعتبر", show_alert=True)
+
+
+import os
+import time
+import tempfile
+import asyncio
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes
+from plugins.youtube_helpers import download_youtube_file
+from plugins.logger_config import get_logger, get_performance_logger
+
+# Initialize loggers
+callback_query_logger = get_logger('youtube_callback_query')
+performance_logger = get_performance_logger()
+
+
+async def handle_youtube_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle YouTube download callback queries with comprehensive logging"""
+    callback_start_time = time.time()
+    query = update.callback_query
+    
+    try:
+        callback_query_logger.info(f"🎯 YouTube callback received - Data: {query.data}")
+        performance_logger.info(f"[CALLBACK_START] Data: {query.data}")
+        
+        # Parse callback data
+        parse_start = time.time()
+        await query.answer()
+        
+        if not query.data.startswith('youtube_'):
+            callback_query_logger.warning(f"⚠️ Invalid callback data format: {query.data}")
+            return
+        
+        # Extract URL and format_id from callback data
+        try:
+            parts = query.data.split('_', 2)  # youtube_formatid_url
+            if len(parts) < 3:
+                raise ValueError("Invalid callback data structure")
+            
+            format_id = parts[1]
+            url = parts[2]
+            
+            callback_query_logger.info(f"📋 Parsed callback - Format: {format_id}, URL: {url[:50]}...")
+            
+        except Exception as e:
+            callback_query_logger.error(f"❌ Failed to parse callback data: {e}")
+            await query.edit_message_text("❌ خطا در پردازش درخواست")
+            return
+        
+        parse_time = time.time() - parse_start
+        performance_logger.info(f"[CALLBACK_PARSE] {parse_time:.3f}s")
+        
+        # Update message to show download starting
+        status_update_start = time.time()
+        await query.edit_message_text(
+            "🚀 شروع دانلود...\n\n"
+            "📥 در حال دانلود فایل از یوتیوب..."
+        )
+        status_update_time = time.time() - status_update_start
+        
+        callback_query_logger.info(f"📝 Status message updated in {status_update_time:.3f}s")
+        performance_logger.info(f"[STATUS_UPDATE] {status_update_time:.3f}s")
+        
+        # Progress tracking variables
+        last_progress_update = time.time()
+        download_start_time = time.time()
+        
+        def progress_callback(downloaded_bytes, total_bytes):
+            nonlocal last_progress_update
+            current_time = time.time()
+            
+            # Update progress every 10 seconds
+            if current_time - last_progress_update >= 10:
+                last_progress_update = current_time
+                
+                if total_bytes > 0:
+                    progress_percent = (downloaded_bytes / total_bytes) * 100
+                    downloaded_mb = downloaded_bytes / (1024 * 1024)
+                    total_mb = total_bytes / (1024 * 1024)
+                    elapsed_time = current_time - download_start_time
+                    speed_mbps = downloaded_mb / elapsed_time if elapsed_time > 0 else 0
+                    
+                    progress_text = (
+                        f"📥 در حال دانلود...\n\n"
+                        f"📊 پیشرفت: {progress_percent:.1f}%\n"
+                        f"💾 حجم: {downloaded_mb:.1f}/{total_mb:.1f} مگابایت\n"
+                        f"⚡ سرعت: {speed_mbps:.2f} مگابایت/ثانیه"
+                    )
+                    
+                    try:
+                        asyncio.create_task(query.edit_message_text(progress_text))
+                        callback_query_logger.info(f"📊 Progress update: {progress_percent:.1f}% - {speed_mbps:.2f} MB/s")
+                        performance_logger.info(f"[PROGRESS_UPDATE] {progress_percent:.1f}%, Speed: {speed_mbps:.2f}MB/s")
+                    except Exception as e:
+                        callback_query_logger.warning(f"⚠️ Progress update failed: {e}")
+        
+        # Start download
+        callback_query_logger.info(f"🎬 Starting download process...")
+        download_process_start = time.time()
+        
+        downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+        
+        download_process_time = time.time() - download_process_start
+        
+        if not downloaded_file or not os.path.exists(downloaded_file):
+            error_time = time.time() - callback_start_time
+            callback_query_logger.error(f"❌ Download failed after {error_time:.2f}s")
+            performance_logger.error(f"[DOWNLOAD_FAILED] Total time: {error_time:.2f}s")
+            
+            await query.edit_message_text(
+                "❌ خطا در دانلود فایل\n\n"
+                "لطفاً دوباره تلاش کنید یا فرمت دیگری انتخاب کنید."
+            )
+            return
+        
+        file_size = os.path.getsize(downloaded_file)
+        file_size_mb = file_size / (1024 * 1024)
+        
+        callback_query_logger.info(f"✅ Download completed in {download_process_time:.2f}s - Size: {file_size_mb:.2f} MB")
+        performance_logger.info(f"[DOWNLOAD_SUCCESS] Time: {download_process_time:.2f}s, Size: {file_size_mb:.2f}MB")
+        
+        # Update message to show upload starting
+        upload_status_start = time.time()
+        await query.edit_message_text(
+            f"✅ دانلود کامل شد!\n\n"
+            f"📤 در حال ارسال فایل ({file_size_mb:.1f} مگابایت)..."
+        )
+        upload_status_time = time.time() - upload_status_start
+        
+        callback_query_logger.info(f"📝 Upload status updated in {upload_status_time:.3f}s")
+        performance_logger.info(f"[UPLOAD_STATUS_UPDATE] {upload_status_time:.3f}s")
+        
+        # Send file to user
+        upload_start = time.time()
+        callback_query_logger.info(f"📤 Starting file upload...")
+        
+        try:
+            # Determine file type and send accordingly
+            filename = os.path.basename(downloaded_file)
+            file_ext = filename.lower().split('.')[-1]
+            
+            if file_ext in ['mp4', 'mkv', 'webm', 'avi']:
+                # Send as video
+                callback_query_logger.info(f"🎥 Sending as video: {filename}")
+                
+                with open(downloaded_file, 'rb') as video_file:
+                    await context.bot.send_video(
+                        chat_id=query.message.chat_id,
+                        video=video_file,
+                        filename=filename,
+                        supports_streaming=True,
+                        caption=f"🎥 ویدیو دانلود شده\n📁 {filename}",
+                        reply_to_message_id=query.message.message_id
+                    )
+                    
+            elif file_ext in ['mp3', 'm4a', 'opus', 'wav']:
+                # Send as audio
+                callback_query_logger.info(f"🎵 Sending as audio: {filename}")
+                
+                with open(downloaded_file, 'rb') as audio_file:
+                    await context.bot.send_audio(
+                        chat_id=query.message.chat_id,
+                        audio=audio_file,
+                        filename=filename,
+                        caption=f"🎵 فایل صوتی دانلود شده\n📁 {filename}",
+                        reply_to_message_id=query.message.message_id
+                    )
+            else:
+                # Send as document
+                callback_query_logger.info(f"📄 Sending as document: {filename}")
+                
+                with open(downloaded_file, 'rb') as doc_file:
+                    await context.bot.send_document(
+                        chat_id=query.message.chat_id,
+                        document=doc_file,
+                        filename=filename,
+                        caption=f"📄 فایل دانلود شده\n📁 {filename}",
+                        reply_to_message_id=query.message.message_id
+                    )
+            
+            upload_time = time.time() - upload_start
+            total_time = time.time() - callback_start_time
+            
+            callback_query_logger.info(f"✅ File uploaded successfully in {upload_time:.2f}s")
+            callback_query_logger.info(f"🎉 Complete process finished in {total_time:.2f}s")
+            performance_logger.info(f"[UPLOAD_SUCCESS] Upload time: {upload_time:.2f}s, Total time: {total_time:.2f}s")
+            
+            # Update final message
+            await query.edit_message_text(
+                f"✅ فایل با موفقیت ارسال شد!\n\n"
+                f"⏱️ زمان کل: {total_time:.1f} ثانیه\n"
+                f"📥 دانلود: {download_process_time:.1f}s\n"
+                f"📤 آپلود: {upload_time:.1f}s\n"
+                f"💾 حجم: {file_size_mb:.1f} مگابایت"
+            )
+            
+        except Exception as upload_error:
+            upload_error_time = time.time() - upload_start
+            total_error_time = time.time() - callback_start_time
+            
+            callback_query_logger.error(f"❌ Upload failed after {upload_error_time:.2f}s: {upload_error}")
+            performance_logger.error(f"[UPLOAD_ERROR] Upload time: {upload_error_time:.2f}s, Total time: {total_error_time:.2f}s, Error: {str(upload_error)}")
+            
+            await query.edit_message_text(
+                f"❌ خطا در ارسال فایل\n\n"
+                f"فایل دانلود شد اما ارسال آن با مشکل مواجه شد.\n"
+                f"ممکن است حجم فایل بیش از حد مجاز باشد."
+            )
+        
+        finally:
+            # Clean up downloaded file
+            cleanup_start = time.time()
+            try:
+                if os.path.exists(downloaded_file):
+                    # Also clean up the temp directory
+                    temp_dir = os.path.dirname(downloaded_file)
+                    if temp_dir and 'youtube_download_' in temp_dir:
+                        import shutil
+                        shutil.rmtree(temp_dir, ignore_errors=True)
+                        callback_query_logger.info(f"🧹 Cleaned up temp directory: {temp_dir}")
+                    else:
+                        os.remove(downloaded_file)
+                        callback_query_logger.info(f"🧹 Cleaned up file: {downloaded_file}")
+                        
+                cleanup_time = time.time() - cleanup_start
+                performance_logger.info(f"[CLEANUP] {cleanup_time:.3f}s")
+                
+            except Exception as cleanup_error:
+                callback_query_logger.warning(f"⚠️ Cleanup failed: {cleanup_error}")
+    
+    except Exception as e:
+        total_error_time = time.time() - callback_start_time
+        callback_query_logger.error(f"❌ Callback handling failed after {total_error_time:.2f}s: {e}")
+        performance_logger.error(f"[CALLBACK_ERROR] Total time: {total_error_time:.2f}s, Error: {str(e)}")
+        
+        try:
+            await query.edit_message_text(
+                "❌ خطای غیرمنتظره\n\n"
+                "لطفاً دوباره تلاش کنید."
+            )
+        except:
+            pass  # Message might be too old to edit
+
+    else:
+        youtube_callback_logger.warning(f"callback_query.data ناشناخته: {callback_query.data}")
+        await callback_query.answer("❌ گزینه نامعتبر", show_alert=True)

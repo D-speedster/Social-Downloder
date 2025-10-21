@@ -5,11 +5,12 @@ import yt_dlp
 import shutil
 import sys
 import subprocess
-from plugins.logger_config import get_logger
+from plugins.logger_config import get_logger, get_performance_logger
 from plugins.cookie_manager import get_rotated_cookie_file, mark_cookie_used, get_cookie_file_with_fallback
 
 # Initialize logger
 youtube_helpers_logger = get_logger('youtube_helpers')
+performance_logger = get_performance_logger()
 
 async def download_youtube_file(url, format_id, progress_hook=None):
     """
