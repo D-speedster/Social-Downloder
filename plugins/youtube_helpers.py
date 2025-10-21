@@ -131,7 +131,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             ydl_opts['merge_output_format'] = 'mp4'
             ydl_opts['postprocessors'] = [
                 {'key': 'FFmpegMerger'},
-                {'key': 'FFmpegVideoConvertor', 'preferredformat': 'mp4'},
+                {'key': 'FFmpegVideoRemuxer', 'preferredformat': 'mp4'},
                 {'key': 'FFmpegMetadata'},
             ]
         
