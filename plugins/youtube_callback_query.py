@@ -382,14 +382,24 @@ async def answer(client: Client, callback_query: CallbackQuery):
         )
         stats = get_queue_stats()
         youtube_callback_logger.info(f"Queue stats after enqueue: pos={pos}, active={stats['active']}, waiting={stats['waiting']}, capacity={stats['capacity']}")
-        await safe_edit_text(
-            f"🕒 **در صف دانلود هستید** (نفر {pos})\n\n"
-            f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
-            f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-            f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
-            f"⏳ به‌محض شروع دانلود، پیشرفت به‌صورت زنده نمایش داده می‌شود",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if pos > 1:
+            await safe_edit_text(
+                f"🕒 **در صف دانلود هستید** (نفر {pos})\n\n"
+                f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+                f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                f"⏳ دانلود به‌زودی شروع می‌شود...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await safe_edit_text(
+                f"🚀 **شروع دانلود**\n\n"
+                f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
+                f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
+                f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                f"📥 در حال دانلود...",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
         # Initialize progress variables
         progress = 0

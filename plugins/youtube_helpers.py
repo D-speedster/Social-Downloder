@@ -61,20 +61,23 @@ async def download_youtube_file(url, format_id, progress_hook=None):
             'ignoreerrors': False,
             'quiet': True,
             'no_warnings': True,
-            'socket_timeout': 30,
-            'connect_timeout': 20,
+            'socket_timeout': 60,
             'retries': 5,
             'fragment_retries': 5,
-            'concurrent_fragments': 8,
+            'concurrent_fragments': 4,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
-                'DNT': '1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip,deflate',
+                'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7',
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
+                'Upgrade-Insecure-Requests': '1'
             },
+            'extractor_retries': 5,
+            'file_access_retries': 3,
+            'writesubtitles': False,
+            'writeautomaticsub': False
         }
         
         if env_proxy:

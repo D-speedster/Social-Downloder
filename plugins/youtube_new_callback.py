@@ -209,7 +209,11 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     try:
         stats = get_queue_stats()
         if stats['active'] >= stats['capacity']:
-            await call.edit_message_text(download_info + "\n\n⏳ ظرفیت دانلود مشغول است؛ شما در صف هستید...", parse_mode=ParseMode.MARKDOWN)
+            queue_position = stats['waiting'] + 1
+            await call.edit_message_text(
+                download_info + f"\n\n🕒 ظرفیت دانلود مشغول است (نفر {queue_position} در صف)\n⏳ دانلود به‌زودی شروع می‌شود...", 
+                parse_mode=ParseMode.MARKDOWN
+            )
         await acquire_slot()
         slot_acquired = True
         # Create output filename
