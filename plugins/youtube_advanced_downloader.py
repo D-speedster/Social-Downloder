@@ -294,10 +294,12 @@ class YouTubeAdvancedDownloader:
         
         mergeable_qualities = []
         
-        # Add combined formats first
+        # Add combined formats first (prefer H.264/AVC in MP4 only)
         for fmt in combined_formats:
             height = fmt.get('height', 0) or 0
-            if height >= 360:  # Only show reasonable qualities
+            vcodec_name = (fmt.get('vcodec', 'unknown') or 'unknown').lower()
+            ext = (fmt.get('ext', 'mp4') or 'mp4').lower()
+            if height >= 360 and ext == 'mp4' and ('h264' in vcodec_name or 'avc1' in vcodec_name):
                 quality_info = {
                     'format_id': fmt['format_id'],
                     'resolution': f"{height}p" if height else "Unknown",
@@ -305,7 +307,7 @@ class YouTubeAdvancedDownloader:
                     'vcodec': fmt.get('vcodec', 'unknown'),
                     'acodec': fmt.get('acodec', 'unknown'),
                     'filesize': fmt.get('filesize') or fmt.get('filesize_approx'),
-                    'ext': fmt.get('ext', 'mp4'),
+                    'ext': 'mp4',
                     'type': 'combined',
                     'video_format': fmt,
                     'audio_format': None,
@@ -313,11 +315,12 @@ class YouTubeAdvancedDownloader:
                 }
                 mergeable_qualities.append(quality_info)
         
-        # Add mergeable video formats (if we have audio to merge with)
+        # Add mergeable video formats (H.264/AVC only) when we have audio
         if best_audio:
             for fmt in video_formats:
                 height = fmt.get('height', 0) or 0
-                if height >= 360:  # Only show reasonable qualities
+                vcodec_name = (fmt.get('vcodec', 'unknown') or 'unknown').lower()
+                if height >= 360 and ('h264' in vcodec_name or 'avc1' in vcodec_name):
                     # Estimate merged file size
                     video_size = fmt.get('filesize') or fmt.get('filesize_approx') or 0
                     audio_size = best_audio.get('filesize') or best_audio.get('filesize_approx') or 0
@@ -330,7 +333,7 @@ class YouTubeAdvancedDownloader:
                         'vcodec': fmt.get('vcodec', 'unknown'),
                         'acodec': best_audio.get('acodec', 'unknown'),
                         'filesize': estimated_size,
-                        'ext': 'mp4',  # Output will be MP4
+                        'ext': 'mp4',
                         'type': 'mergeable',
                         'video_format': fmt,
                         'audio_format': best_audio,

@@ -9,6 +9,7 @@ import requests
 import shutil
 from typing import BinaryIO, Union, Optional
 from plugins.youtube_helpers import get_direct_download_url
+from plugins.universal_downloader import _extract_video_metadata
 from plugins.logger_config import get_logger, get_performance_logger
 import tempfile
 import time
@@ -349,7 +350,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         url_start = time.time()
         stream_utils_logger.info("🔍 Phase 1: Resolving direct download URL...")
         
-        direct_url = await get_direct_download_url(url, preferred_format_id=format_id)
+        direct_url = await get_direct_download_url(url, format_id)
         url_resolution_time = time.time() - url_start
         
         if not direct_url:
@@ -358,6 +359,59 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         
         stream_utils_logger.info(f"✅ URL resolved in {url_resolution_time:.2f}s")
         performance_logger.info(f"[URL_RESOLUTION_TIME] {url_resolution_time:.2f}s")
+        
+        # If video, skip direct streaming and use yt-dlp traditional path
+        if media_type == "video":
+            stream_utils_logger.info("🎬 Video detected; using yt-dlp traditional path for proper metadata.")
+            performance_logger.info("[DIRECT_UPLOAD_SKIP] Using traditional yt-dlp path for video")
+            
+            from plugins.youtube_helpers import download_youtube_file
+            downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+            
+            if not downloaded_file or not os.path.exists(downloaded_file):
+                return {"success": False, "error": "Download failed in traditional path"}
+            
+            # Extract robust metadata and thumbnail for better Telegram display
+            video_meta = _extract_video_metadata(downloaded_file)
+            duration = video_meta.get('duration', 0) or None
+            width = video_meta.get('width', 0) or None
+            height = video_meta.get('height', 0) or None
+            thumb_to_cleanup = video_meta.get('thumbnail')
+            
+            upload_kwargs = kwargs.copy()
+            upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+            upload_kwargs['supports_streaming'] = True
+            if duration:
+                upload_kwargs['duration'] = int(duration)
+            if width:
+                upload_kwargs['width'] = width
+            if height:
+                upload_kwargs['height'] = height
+            if thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
+                upload_kwargs['thumb'] = thumb_to_cleanup
+            
+            message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
+            
+            total_time = time.time() - start_time
+            performance_logger.info(f"[TOTAL_TRADITIONAL_VIDEO_TIME] {total_time:.2f}s")
+            
+            # Cleanup
+            try:
+                os.unlink(downloaded_file)
+                temp_dir = os.path.dirname(downloaded_file)
+                # Remove generated thumbnail if present
+                if 'thumb_to_cleanup' in locals() and thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
+                    try:
+                        os.unlink(thumb_to_cleanup)
+                    except Exception:
+                        pass
+                if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
+                    import shutil as _sh
+                    _sh.rmtree(temp_dir, ignore_errors=True)
+            except Exception as cleanup_err:
+                stream_utils_logger.warning(f"⚠️ Cleanup failed: {cleanup_err}")
+            
+            return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
         
         # Early decision: force traditional path for large/unsupported videos
         direct_fallback_threshold_mb = int(kwargs.pop('direct_fallback_threshold_mb', 100))
