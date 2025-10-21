@@ -161,6 +161,15 @@ class ErrorDetector:
         """بررسی پکیج‌های مورد نیاز"""
         missing_packages = []
         
+        # نگاشت نام پکیج به نام ماژول
+        package_to_module_map = {
+            "mysql-connector-python": "mysql.connector",
+            "python-dotenv": "dotenv",
+            "Pillow": "PIL",
+            "Pyrogram": "pyrogram",
+            "python-dateutil": "dateutil"
+        }
+        
         try:
             with open('requirements.txt', 'r', encoding='utf-8') as f:
                 requirements = f.read().splitlines()
@@ -168,8 +177,9 @@ class ErrorDetector:
             for requirement in requirements:
                 if requirement.strip() and not requirement.startswith('#'):
                     package_name = requirement.split('==')[0].split('>=')[0].split('<=')[0].strip()
+                    module_name = package_to_module_map.get(package_name, package_name.replace('-', '_'))
                     try:
-                        importlib.import_module(package_name.replace('-', '_'))
+                        importlib.import_module(module_name)
                     except ImportError:
                         missing_packages.append(package_name)
         
