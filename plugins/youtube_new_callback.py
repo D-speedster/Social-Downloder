@@ -192,14 +192,14 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     if selected_quality.get('fps', 0) > 0:
         quality_text += f"@{selected_quality['fps']}fps"
     
-    # اعمال ضریب تصحیح 0.5 برای هماهنگی با نمایش در لیست کیفیت
-    size_text = convert_size(2, int(selected_quality['filesize'] * 0.5)) if selected_quality.get('filesize') else "نامشخص"
+    # ✅ نمایش حجم واقعی بدون ضریب اشتباه
+    size_text = convert_size(2, selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
     
     download_info = (
         f"🚀 **شروع آپلود مستقیم**\n\n"
         f"🎬 **{quality_options['title']}**\n\n"
         f"📊 کیفیت: {quality_text}\n"
-        f"📦 حجم تقریبی: {size_text}\n"
+        f"📦 حجم تخمینی: {size_text}\n"
         f"🔧 نوع: {'ترکیبی' if selected_quality['type'] == 'combined' else 'نیاز به ترکیب' if selected_quality['type'] == 'mergeable' else 'فقط صدا'}\n\n"
         f"⏳ لطفاً صبر کنید..."
     )
