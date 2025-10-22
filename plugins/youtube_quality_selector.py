@@ -52,7 +52,13 @@ class YouTubeQualitySelector:
         filesize = quality.get('filesize', 0)
         
         fps_text = f"@{fps}fps" if fps > 0 else ""
-        size_text = convert_size(2, filesize) if filesize else "Unknown size"
+        # اعمال ضریب تصحیح 0.5 برای نمایش حجم واقعی (نصف حجم تخمینی اولیه)
+        if filesize:
+            correction_factor = 0.5
+            corrected_filesize = int(filesize * correction_factor)
+            size_text = convert_size(2, corrected_filesize)
+        else:
+            size_text = "Unknown size"
         codec_text = f"{vcodec}/{acodec}" if vcodec != 'unknown' and acodec != 'unknown' else ""
         
         info_text = f"{resolution}{fps_text}"
@@ -119,7 +125,10 @@ class YouTubeQualitySelector:
             
             # File size info
             if quality['filesize']:
-                size_text = convert_size(2, quality['filesize'])
+                # اعمال ضریب تصحیح 0.5 برای نمایش حجم واقعی (نصف حجم تخمینی اولیه)
+                correction_factor = 0.5
+                corrected_filesize = int(quality['filesize'] * correction_factor)
+                size_text = convert_size(2, corrected_filesize)
             else:
                 size_text = "~حجم"
             

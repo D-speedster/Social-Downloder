@@ -27,7 +27,7 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
         format_id_str = str(format_id)
         total_size = 0
         # ضریب تصحیح برای جبران فشرده‌سازی تلگرام و تخمین دقیق‌تر
-        correction_factor = 0.6
+        correction_factor = 0.5
 
         def _estimate_size(fmt):
             # تلاش برای خواندن اندازه واقعی
