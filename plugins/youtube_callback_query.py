@@ -52,8 +52,11 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
                         if duration and bitrate:
                             total_size += int((bitrate * 1000 / 8) * duration)
             
+            # ✅ تصحیح: فایل نهایی merge شده معمولاً 65-70% از مجموع ویدیو+صدا است
+            # به دلیل حذف overhead container و بهینه‌سازی yt-dlp
             if total_size > 0:
-                youtube_callback_logger.info(f"💾 حجم کل محاسبه شده (ترکیبی دستی): {total_size / (1024*1024):.2f} MB")
+                total_size = int(total_size * 0.68)  # ضریب واقعی‌تر
+                youtube_callback_logger.info(f"💾 حجم کل محاسبه شده (ترکیبی): {total_size / (1024*1024):.2f} MB")
                 return total_size
 
         else:
@@ -279,21 +282,19 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     seen_resolutions.add(resolution)
                     unique_formats.append(fmt)
             
-            # Create format buttons with proper size fallback (avoid 0B), estimate via tbr*duration when needed
+            # Create format buttons with proper size (no correction factor needed)
             formats = []
             duration = info.get('duration') or 0
             for fmt in unique_formats:
                 size_val = fmt.get('filesize') or fmt.get('filesize_approx')
                 if not size_val and duration and (fmt.get('tbr') or 0):
                     try:
-                        size_val = int((fmt.get('tbr') * 1000 / 8) * duration)  # tbr in kbps -> bytes
+                        size_val = int((fmt.get('tbr') * 1000 / 8) * duration)
                     except Exception:
                         size_val = None
-                # اعمال ضریب تصحیح برای نزدیک‌کردن نمایش حجم به مقدار نهایی تلگرام
+                # ✅ بدون ضریب تصحیح - نمایش حجم واقعی
                 if size_val:
-                    correction_factor = 0.5
-                    size_val_corrected = int(size_val * correction_factor)
-                    size_str = convert_size(2, size_val_corrected)
+                    size_str = convert_size(2, size_val)
                 else:
                     size_str = 'نامشخص'
                 btn_text = f"{fmt.get('height', 'N/A')}p - {size_str}"
@@ -329,7 +330,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     seen_bitrates.add(bitrate)
                     unique_formats.append(fmt)
             
-            # Create format buttons with proper size fallback (avoid 0B), estimate via tbr*duration when needed
+            # Create format buttons with proper size (no correction factor needed)
             formats = []
             duration = info.get('duration') or 0
             for fmt in unique_formats:
@@ -340,11 +341,9 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         size_val = int((kbps * 1000 / 8) * duration)
                     except Exception:
                         size_val = None
-                # اعمال ضریب تصحیح برای نزدیک‌کردن نمایش حجم به مقدار نهایی تلگرام
+                # ✅ بدون ضریب تصحیح - نمایش حجم واقعی
                 if size_val:
-                    correction_factor = 0.5
-                    size_val_corrected = int(size_val * correction_factor)
-                    size_str = convert_size(2, size_val_corrected)
+                    size_str = convert_size(2, size_val)
                 else:
                     size_str = 'نامشخص'
                 btn_text = f"{fmt.get('abr', fmt.get('tbr', 'N/A'))}kbps - {size_str}"
@@ -422,7 +421,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
             f"🚀 **شروع دانلود روی سرور**\n\n"
             f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
             f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-            f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+            f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
             f"⏳ در حال آماده‌سازی دانلود...",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -447,7 +446,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 f"🕒 **در صف دانلود هستید** (نفر {pos})\n\n"
                 f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
                 f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
                 f"⏳ دانلود به‌زودی شروع می‌شود...",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -456,7 +455,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 f"🚀 **شروع دانلود**\n\n"
                 f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
                 f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
                 f"📥 در حال دانلود...",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -502,7 +501,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         f"📊 پیشرفت: {progress}%\n"
                         f"⏱️ زمان سپری شده: {int(elapsed)}s\n"
                         f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                        f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                        f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
                         f"💡 پس از پایان دانلود، فایل به تلگرام آپلود می‌شود",
                         parse_mode=ParseMode.MARKDOWN
                     )
@@ -618,12 +617,17 @@ async def answer(client: Client, callback_query: CallbackQuery):
             if not downloaded_file or not os.path.exists(downloaded_file):
                 raise Exception("دانلود ناموفق بود")
             
-            # اطلاع‌رسانی شروع آپلود
+            # ✅ دریافت حجم واقعی فایل دانلود شده
+            actual_file_size = os.path.getsize(downloaded_file)
+            actual_size_str = f"{(actual_file_size/1024/1024):.2f} MB"
+            youtube_callback_logger.info(f"💾 حجم واقعی فایل دانلود شده: {actual_size_str}")
+            
+            # اطلاع‌رسانی شروع آپلود با حجم واقعی
             await safe_edit_text(
                 f"📤 **در حال آپلود به تلگرام**\n\n"
                 f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
                 f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                f"💾 حجم واقعی: {actual_size_str}\n\n"
                 f"⏳ لطفاً چند لحظه صبر کنید...",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -744,7 +748,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     f"🔗 **لینک دانلود مستقیم**\n\n"
                     f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
                     f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                    f"💾 حجم: {step.get('filesize', 'نامشخص')}\n\n"
+                    f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
                     f"🔗 لینک: {direct_url}\n\n"
                     f"⚠️ توجه: این لینک موقت است و ممکن است پس از مدتی منقضی شود.",
                     parse_mode=ParseMode.MARKDOWN
