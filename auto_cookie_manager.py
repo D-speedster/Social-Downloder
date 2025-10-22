@@ -357,7 +357,7 @@ class AutoCookieManager:
                     test_url
                 ]
                 
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30)
                 
                 if result.returncode == 0:
                     self.logger.info("✅ تست کوکی‌های Netscape موفق بود")

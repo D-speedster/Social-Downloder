@@ -14,7 +14,7 @@ from pathlib import Path
 def run_command(command, check=True):
     """اجرای دستور و بازگرداندن نتیجه"""
     try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, check=check)
+        result = subprocess.run(command, shell=True, capture_output=True, text=True, encoding='utf-8', errors='ignore', check=check)
         return result.returncode == 0, result.stdout, result.stderr
     except subprocess.CalledProcessError as e:
         return False, e.stdout, e.stderr

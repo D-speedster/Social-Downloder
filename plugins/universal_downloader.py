@@ -49,6 +49,71 @@ def _log(msg: str):
     except Exception:
         pass
 
+def get_user_friendly_error_message(api_response, platform):
+    """Convert API error responses to user-friendly Persian messages"""
+    try:
+        # If it's a string error message
+        if isinstance(api_response, str):
+            if "timeout" in api_response.lower():
+                return "⏰ درخواست بیش از حد طول کشید. لطفاً دوباره تلاش کنید."
+            elif "network" in api_response.lower() or "connection" in api_response.lower():
+                return "🌐 مشکل در اتصال به اینترنت. لطفاً اتصال خود را بررسی کنید."
+            else:
+                return f"❌ خطا در دریافت اطلاعات از {platform}"
+        
+        # If it's a dictionary (API response)
+        if isinstance(api_response, dict):
+            # Check for specific error patterns
+            if api_response.get("error") is True:
+                message = api_response.get("message", "")
+                data = api_response.get("data", {})
+                
+                # Handle "No medias found" error
+                if "No medias found" in message:
+                    if isinstance(data, dict) and "message" in data:
+                        data_message = data["message"]
+                        
+                        # Handle private URL error
+                        if "Private Url is not supported" in data_message:
+                            return f"🔒 این {platform} خصوصی است و نیاز به ورود دارد.\n\n💡 برای دانلود:\n• ابتدا وارد حساب خود شوید\n• سپس کوکی‌های مرورگر را استخراج کنید\n• یا از لینک عمومی استفاده کنید"
+                        
+                        # Handle restricted page
+                        elif "Restricted personal page" in data_message:
+                            return f"⛔ این صفحه محدود شده است.\n\n💡 برای دسترسی:\n• ابتدا این حساب را فالو کنید\n• منتظر تایید بمانید\n• سپس دوباره تلاش کنید"
+                        
+                        # Handle general private content
+                        elif "follow the account" in data_message:
+                            return f"👥 برای دسترسی به این محتوا باید حساب را فالو کنید.\n\n💡 مراحل:\n• حساب را فالو کنید\n• منتظر تایید بمانید\n• دوباره لینک را ارسال کنید"
+                    
+                    return f"📭 هیچ محتوای قابل دانلودی در این لینک {platform} یافت نشد."
+                
+                # Handle "data not found" error
+                elif "data not found" in message.lower() or "not found" in message.lower():
+                    return f"🔍 محتوای درخواستی در {platform} یافت نشد.\n\n💡 احتمالات:\n• لینک اشتباه است\n• محتوا حذف شده\n• دسترسی محدود شده"
+                
+                # Handle rate limiting
+                elif "rate limit" in message.lower() or "too many requests" in message.lower():
+                    return f"⏳ تعداد درخواست‌ها زیاد است. لطفاً چند دقیقه صبر کنید."
+                
+                # Handle API quota exceeded
+                elif "quota" in message.lower() or "limit exceeded" in message.lower():
+                    return f"📊 محدودیت API به پایان رسیده. لطفاً بعداً تلاش کنید."
+                
+                # Generic error with custom message
+                elif message:
+                    return f"❌ خطا در {platform}: {message}"
+            
+            # Handle successful response but no media
+            elif api_response.get("medias") is not None and len(api_response.get("medias", [])) == 0:
+                return f"📭 هیچ محتوای قابل دانلودی در این لینک {platform} یافت نشد."
+        
+        # Default fallback
+        return f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید."
+        
+    except Exception as e:
+        _log(f"Error in get_user_friendly_error_message: {e}")
+        return f"❌ خطا در دریافت اطلاعات از {platform}"
+
 # --- Bot API helpers to send media by URL (bypass MTProto upload) ---
 def _bot_api_send(method: str, payload: dict, timeout: float = 15.0) -> dict:
     """Synchronous call to Telegram Bot API. Returns response dict or {'ok': False, 'description': ...}."""
@@ -161,13 +226,14 @@ async def get_universal_data_from_api(url):
     """Get media data from the universal API for Spotify, TikTok, and SoundCloud with timeout"""
     try:
         # Use asyncio.wait_for with 6 second timeout (more robust)
-        return await asyncio.wait_for(_api_request_sync(url), timeout=6.0)
+        result = await asyncio.wait_for(_api_request_sync(url), timeout=6.0)
+        return result
     except asyncio.TimeoutError:
         universal_logger.warning(f"API timeout for URL: {url}")
-        return None
+        return {"error": True, "message": "timeout", "data": {}}
     except Exception as e:
         universal_logger.error(f"API Error for URL {url}: {e}")
-        return None
+        return {"error": True, "message": str(e), "data": {}}
 
 def _api_request_sync(url):
     """Synchronous API request wrapped for async execution"""
@@ -196,7 +262,7 @@ def _api_request_sync(url):
             return response_data
         except Exception as e:
             universal_logger.error(f"API request failed for URL {url}: {e}")
-            return None
+            return {"error": True, "message": f"network error: {str(e)}", "data": {}}
     
     # Run in thread pool to avoid blocking
     loop = asyncio.get_event_loop()
@@ -246,7 +312,7 @@ def _extract_video_metadata(video_path: str):
         # Probe streams and format
         try:
             cmd = [ffprobe_path, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', video_path]
-            res = subprocess.run(cmd, capture_output=True, text=True)
+            res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
             if res.returncode == 0 and res.stdout:
                 data = json.loads(res.stdout)
                 # Duration from format
@@ -270,7 +336,7 @@ def _extract_video_metadata(video_path: str):
             if ffmpeg_exe and isinstance(ffmpeg_exe, str):
                 thumb_path = video_path.rsplit('.', 1)[0] + '_thumb.jpg'
                 cmd = [ffmpeg_exe, '-ss', '00:00:01', '-i', video_path, '-vframes', '1', '-vf', 'scale=320:-2', '-y', thumb_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore')
                 if not os.path.exists(thumb_path):
                     thumb_path = None
         except Exception:
@@ -441,8 +507,8 @@ async def handle_universal_link(client: Client, message: Message):
                                         api_data = result
                                         _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
                                     else:
-                                        if result.get("message"):
-                                            last_api_error_message = result.get("message")
+                                        # Store the full API response for better error handling
+                                        last_api_error_message = result
 
                                 elif task_name == "fallback" and result:
                                     fallback_media = result
@@ -503,8 +569,13 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Check results
         if not api_data and not fallback_media:
-            error_msg = last_api_error_message or "خطا در دریافت اطلاعات"
-            await status_msg.edit_text(f"❌ {error_msg} از {platform}")
+            # Use user-friendly error message
+            if last_api_error_message:
+                error_msg = get_user_friendly_error_message(last_api_error_message, platform)
+            else:
+                error_msg = f"❌ خطا در دریافت اطلاعات از {platform}"
+            
+            await status_msg.edit_text(error_msg)
             try:
                 if user_reserved:
                     release_user(user_id)
@@ -539,8 +610,13 @@ async def handle_universal_link(client: Client, message: Message):
                     _log(f"[UNIV] Fallback error for {platform}: {e}")
             
             if not fallback_media:
-                err_msg = last_api_error_message or "لطفاً لینک را بررسی کنید."
-                await status_msg.edit_text(f"❌ خطا در دریافت اطلاعات از {platform}: {err_msg}")
+                # Use user-friendly error message for fallback failure
+                if last_api_error_message:
+                    err_msg = get_user_friendly_error_message(last_api_error_message, platform)
+                else:
+                    err_msg = f"❌ خطا در دریافت اطلاعات از {platform}. لطفاً لینک را بررسی کنید."
+                
+                await status_msg.edit_text(err_msg)
                 try:
                     if user_reserved:
                         release_user(user_id)

@@ -255,7 +255,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
                         '-of', 'json',
                         downloaded_file
                     ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+                    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=15)
                     
                     if result.returncode == 0:
                         metadata = json.loads(result.stdout)

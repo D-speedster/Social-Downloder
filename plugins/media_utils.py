@@ -98,7 +98,18 @@ def send_advertisement(client, user_id: int):
 async def download_file_simple(url, file_path):
     """Simple file download without progress updates for better performance (shared)."""
     try:
-        with urllib.request.urlopen(url) as response:
+        # Create request with proper headers to avoid 403 errors
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        })
+        
+        with urllib.request.urlopen(req) as response:
             total_size = int(response.headers.get('Content-Length', 0))
             with open(file_path, 'wb') as f:
                 shutil.copyfileobj(response, f)
@@ -113,9 +124,20 @@ async def download_stream_to_file(url, out_path, chunk_size=64*1024):
     Returns (file_path, total_size) for compatibility with download_file_simple.
     """
     try:
+        # Headers to mimic a real browser and avoid 403 errors
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+        
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(url) as response:
+            async with session.get(url, headers=headers) as response:
                 response.raise_for_status()
                 
                 # Get content length

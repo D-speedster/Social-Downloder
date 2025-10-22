@@ -1012,7 +1012,7 @@ class YouTubeAdvancedDownloader:
     def _run_ffmpeg_enhanced(self, cmd: List[str]) -> Dict[str, Any]:
         """اجرای ffmpeg در thread جداگانه با گزارش‌دهی بهتر"""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=600)
             
             return {
                 'success': result.returncode == 0,
@@ -1131,7 +1131,7 @@ class YouTubeAdvancedDownloader:
                 file_path
             ]
             
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30)
             if result.returncode == 0:
                 data = json.loads(result.stdout)
                 
@@ -1239,7 +1239,7 @@ class YouTubeAdvancedDownloader:
     def _run_ffprobe(self, cmd: List[str]) -> str:
         """اجرای ffprobe در thread جداگانه"""
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=30)
             if result.returncode == 0:
                 return result.stdout
             else:
