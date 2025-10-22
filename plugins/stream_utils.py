@@ -16,6 +16,7 @@ import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from config import TELEGRAM_THROTTLING
+from plugins.media_utils import send_advertisement
 
 
 class StreamBuffer(io.BytesIO):
@@ -480,186 +481,207 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
     url_resolution_time = None
     download_time = None
     upload_time = None
+    ad_enabled = False
+    ad_position = 'after'
+    try:
+        from .db_path_manager import db_path_manager
+        json_db_path = db_path_manager.get_json_db_path()
+        with open(json_db_path, 'r', encoding='utf-8') as f:
+            db_data = json.load(f)
+        ad = db_data.get('advertisement', {})
+        ad_enabled = ad.get('enabled', False)
+        ad_position = ad.get('position', 'after')
+    except Exception:
+        pass
+    
+    # Extract format_id and media_type from quality_info
+    format_id = quality_info.get('format_id', '')
+    media_type = 'audio' if quality_info.get('type') == 'audio_only' else 'video'
+    
+    stream_utils_logger.info(f"📋 Media type: {media_type}, Format ID: {format_id}")
+    
+    # Phase 1: Resolve direct download URL
+    url_start = time.time()
+    stream_utils_logger.info("🔍 Phase 1: Resolving direct download URL...")
+    
+    direct_url = await get_direct_download_url(url, format_id)
+    url_resolution_time = time.time() - url_start
+    
+    if not direct_url:
+        stream_utils_logger.error("❌ Failed to resolve direct download URL")
+        raise Exception("No direct URL found")
+    
+    stream_utils_logger.info(f"✅ URL resolved in {url_resolution_time:.2f}s")
+    performance_logger.info(f"[URL_RESOLUTION_TIME] {url_resolution_time:.2f}s")
+    
+    # If video, skip direct streaming and use yt-dlp traditional path
+    if media_type == "video":
+        stream_utils_logger.info("🎬 Video detected; using yt-dlp traditional path for proper metadata.")
+        performance_logger.info("[DIRECT_UPLOAD_SKIP] Using traditional yt-dlp path for video")
+        
+        from plugins.youtube_helpers import download_youtube_file
+        downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+        
+        if not downloaded_file or not os.path.exists(downloaded_file):
+            return {"success": False, "error": "Download failed in traditional path"}
+        
+        # Extract robust metadata and thumbnail for better Telegram display
+        from plugins.universal_downloader import _extract_video_metadata as _extract_video_metadata_local
+        video_meta = _extract_video_metadata_local(downloaded_file)
+        duration = video_meta.get('duration', 0) or None
+        width = video_meta.get('width', 0) or None
+        height = video_meta.get('height', 0) or None
+        thumb_to_cleanup = video_meta.get('thumbnail')
+        
+        upload_kwargs = kwargs.copy()
+        upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+        upload_kwargs['supports_streaming'] = True
+        if duration:
+            upload_kwargs['duration'] = int(duration)
+        if width:
+            upload_kwargs['width'] = width
+        if height:
+            upload_kwargs['height'] = height
+        if thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
+            upload_kwargs['thumb'] = thumb_to_cleanup
+
+        if ad_enabled and ad_position == 'before':
+            await send_advertisement(client, chat_id)
+            await asyncio.sleep(1)
+        message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
+
+        if ad_enabled and ad_position == 'after':
+            await asyncio.sleep(1)
+            await send_advertisement(client, chat_id)
+        
+        total_time = time.time() - start_time
+        performance_logger.info(f"[TOTAL_TRADITIONAL_VIDEO_TIME] {total_time:.2f}s")
+        
+        # Cleanup
+        try:
+            os.unlink(downloaded_file)
+            temp_dir = os.path.dirname(downloaded_file)
+            # Remove generated thumbnail if present
+            if 'thumb_to_cleanup' in locals() and thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
+                try:
+                    os.unlink(thumb_to_cleanup)
+                except Exception:
+                    pass
+            if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
+                import shutil as _sh
+                _sh.rmtree(temp_dir, ignore_errors=True)
+        except Exception as cleanup_err:
+            stream_utils_logger.warning(f"⚠️ Cleanup failed: {cleanup_err}")
+        
+        return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
+    
+    # Early decision: force traditional path for large/unsupported videos
+    direct_fallback_threshold_mb = int(kwargs.pop('direct_fallback_threshold_mb', 100))
+    force_traditional = bool(kwargs.pop('force_traditional', False))
+    if media_type == 'video':
+        # برای حفظ متادیتا و پیش‌نمایش، از مسیر سنتی استفاده شود
+        force_traditional = True
+    content_length = 0
+    content_type = ''
+    
+    # Phase 2: Check content headers
+    stream_utils_logger.info("📊 Phase 2: Checking content headers...")
+    header_check_start = time.time()
     
     try:
-        stream_utils_logger.info(f"🚀 Starting direct YouTube upload process for: {title[:50]}...")
-        performance_logger.info(f"[DIRECT_UPLOAD_START] URL: {url}, Quality: {quality_info.get('format_id', 'unknown')}")
+        timeout = aiohttp.ClientTimeout(total=8)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.request('HEAD', direct_url, headers={'User-Agent': 'Mozilla/5.0'}) as resp:
+                content_length = int(resp.headers.get('Content-Length') or 0)
+                content_type = resp.headers.get('Content-Type', '')
+                
+        header_check_time = time.time() - header_check_start
+        file_size_mb = content_length / (1024 * 1024) if content_length > 0 else 0
         
-        # Extract format_id and media_type from quality_info
-        format_id = quality_info.get('format_id', '')
-        media_type = 'audio' if quality_info.get('type') == 'audio_only' else 'video'
+        stream_utils_logger.info(f"📏 File size: {file_size_mb:.2f} MB, Content-Type: {content_type}")
+        stream_utils_logger.info(f"⏱️ Header check completed in {header_check_time:.2f}s")
+        performance_logger.info(f"[HEADER_CHECK_TIME] {header_check_time:.2f}s, Size: {file_size_mb:.2f}MB")
         
-        stream_utils_logger.info(f"📋 Media type: {media_type}, Format ID: {format_id}")
+    except Exception as e:
+        stream_utils_logger.warning(f"⚠️ Header check failed: {e}")
+    
+    # Determine strategy based on file size
+    memory_threshold_mb = 50
+    if file_size_mb > direct_fallback_threshold_mb or force_traditional:
+        stream_utils_logger.info(f"📁 File too large ({file_size_mb:.2f}MB > {direct_fallback_threshold_mb}MB), using temp file strategy")
+    else:
+        stream_utils_logger.info(f"💾 File size acceptable ({file_size_mb:.2f}MB), attempting memory streaming")
+    
+    # Phase 3: Attempt memory streaming first (for smaller files)
+    if file_size_mb <= memory_threshold_mb and not force_traditional:
+        stream_utils_logger.info("🧠 Phase 3a: Attempting memory streaming...")
+        memory_start = time.time()
         
-        # Phase 1: Resolve direct download URL
-        url_start = time.time()
-        stream_utils_logger.info("🔍 Phase 1: Resolving direct download URL...")
+        try:
+            memory_buffer = await download_to_memory_stream(direct_url, max_size_mb=memory_threshold_mb)
+        except Exception as e:
+            stream_utils_logger.warning(f"⚠️ aiohttp memory streaming failed: {e}")
+            memory_buffer = None
         
-        direct_url = await get_direct_download_url(url, format_id)
-        url_resolution_time = time.time() - url_start
+        if not memory_buffer:
+            try:
+                memory_buffer = await download_to_memory_stream_requests(direct_url, max_size_mb=memory_threshold_mb)
+            except Exception as e:
+                stream_utils_logger.warning(f"⚠️ requests memory streaming failed: {e}")
+                memory_buffer = None
         
-        if not direct_url:
-            stream_utils_logger.error("❌ Failed to resolve direct download URL")
-            raise Exception("No direct URL found")
-        
-        stream_utils_logger.info(f"✅ URL resolved in {url_resolution_time:.2f}s")
-        performance_logger.info(f"[URL_RESOLUTION_TIME] {url_resolution_time:.2f}s")
-        
-        # If video, skip direct streaming and use yt-dlp traditional path
-        if media_type == "video":
-            stream_utils_logger.info("🎬 Video detected; using yt-dlp traditional path for proper metadata.")
-            performance_logger.info("[DIRECT_UPLOAD_SKIP] Using traditional yt-dlp path for video")
+        if memory_buffer:
+            memory_download_time = time.time() - memory_start
+            stream_utils_logger.info(f"✅ Memory download completed in {memory_download_time:.2f}s")
+            performance_logger.info(f"[MEMORY_DOWNLOAD_TIME] {memory_download_time:.2f}s")
             
-            from plugins.youtube_helpers import download_youtube_file
-            downloaded_file = await download_youtube_file(url, format_id, progress_callback)
-            
-            if not downloaded_file or not os.path.exists(downloaded_file):
-                return {"success": False, "error": "Download failed in traditional path"}
-            
-            # Extract robust metadata and thumbnail for better Telegram display
-            from plugins.universal_downloader import _extract_video_metadata as _extract_video_metadata_local
-            video_meta = _extract_video_metadata_local(downloaded_file)
-            duration = video_meta.get('duration', 0) or None
-            width = video_meta.get('width', 0) or None
-            height = video_meta.get('height', 0) or None
-            thumb_to_cleanup = video_meta.get('thumbnail')
+            # Phase 4a: Memory upload
+            upload_start = time.time()
+            stream_utils_logger.info("📤 Phase 4a: Starting memory upload...")
             
             upload_kwargs = kwargs.copy()
             upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
-            upload_kwargs['supports_streaming'] = True
-            if duration:
-                upload_kwargs['duration'] = int(duration)
-            if width:
-                upload_kwargs['width'] = width
-            if height:
-                upload_kwargs['height'] = height
-            if thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
-                upload_kwargs['thumb'] = thumb_to_cleanup
-            
-            message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
-            
-            total_time = time.time() - start_time
-            performance_logger.info(f"[TOTAL_TRADITIONAL_VIDEO_TIME] {total_time:.2f}s")
-            
-            # Cleanup
-            try:
-                os.unlink(downloaded_file)
-                temp_dir = os.path.dirname(downloaded_file)
-                # Remove generated thumbnail if present
-                if 'thumb_to_cleanup' in locals() and thumb_to_cleanup and os.path.exists(thumb_to_cleanup):
-                    try:
-                        os.unlink(thumb_to_cleanup)
-                    except Exception:
-                        pass
-                if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
-                    import shutil as _sh
-                    _sh.rmtree(temp_dir, ignore_errors=True)
-            except Exception as cleanup_err:
-                stream_utils_logger.warning(f"⚠️ Cleanup failed: {cleanup_err}")
-            
-            return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
-        
-        # Early decision: force traditional path for large/unsupported videos
-        direct_fallback_threshold_mb = int(kwargs.pop('direct_fallback_threshold_mb', 100))
-        force_traditional = bool(kwargs.pop('force_traditional', False))
-        if media_type == 'video':
-            # برای حفظ متادیتا و پیش‌نمایش، از مسیر سنتی استفاده شود
-            force_traditional = True
-        content_length = 0
-        content_type = ''
-        
-        # Phase 2: Check content headers
-        stream_utils_logger.info("📊 Phase 2: Checking content headers...")
-        header_check_start = time.time()
-        
-        try:
-            timeout = aiohttp.ClientTimeout(total=8)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.request('HEAD', direct_url, headers={'User-Agent': 'Mozilla/5.0'}) as resp:
-                    content_length = int(resp.headers.get('Content-Length') or 0)
-                    content_type = resp.headers.get('Content-Type', '')
-                    
-            header_check_time = time.time() - header_check_start
-            file_size_mb = content_length / (1024 * 1024) if content_length > 0 else 0
-            
-            stream_utils_logger.info(f"📏 File size: {file_size_mb:.2f} MB, Content-Type: {content_type}")
-            stream_utils_logger.info(f"⏱️ Header check completed in {header_check_time:.2f}s")
-            performance_logger.info(f"[HEADER_CHECK_TIME] {header_check_time:.2f}s, Size: {file_size_mb:.2f}MB")
-            
-        except Exception as e:
-            stream_utils_logger.warning(f"⚠️ Header check failed: {e}")
-        
-        # Determine strategy based on file size
-        memory_threshold_mb = 50
-        if file_size_mb > direct_fallback_threshold_mb or force_traditional:
-            stream_utils_logger.info(f"📁 File too large ({file_size_mb:.2f}MB > {direct_fallback_threshold_mb}MB), using temp file strategy")
-        else:
-            stream_utils_logger.info(f"💾 File size acceptable ({file_size_mb:.2f}MB), attempting memory streaming")
-        
-        # Phase 3: Attempt memory streaming first (for smaller files)
-        if file_size_mb <= memory_threshold_mb and not force_traditional:
-            stream_utils_logger.info("🧠 Phase 3a: Attempting memory streaming...")
-            memory_start = time.time()
             
             try:
-                memory_buffer = await download_to_memory_stream(direct_url, max_size_mb=memory_threshold_mb)
-            except Exception as e:
-                stream_utils_logger.warning(f"⚠️ aiohttp memory streaming failed: {e}")
-                memory_buffer = None
-            
-            if not memory_buffer:
+                if ad_enabled and ad_position == 'before':
+                    await send_advertisement(client, chat_id)
+                    await asyncio.sleep(1)
+                if media_type == "video":
+                    upload_kwargs['supports_streaming'] = True
+                    message = await client.send_video(chat_id=chat_id, video=memory_buffer, **upload_kwargs)
+                elif media_type == "audio":
+                    message = await client.send_audio(chat_id=chat_id, audio=memory_buffer, **upload_kwargs)
+                else:
+                    message = await client.send_document(chat_id=chat_id, document=memory_buffer, **upload_kwargs)
+                    
+                upload_time = time.time() - upload_start
+                total_time = time.time() - start_time
+                
+                stream_utils_logger.info(f"✅ Memory upload completed in {upload_time:.2f}s")
+                stream_utils_logger.info(f"🎉 Total process completed in {total_time:.2f}s (Memory strategy)")
+                performance_logger.info(f"[MEMORY_UPLOAD_TIME] {upload_time:.2f}s")
+                performance_logger.info(f"[TOTAL_MEMORY_PROCESS_TIME] {total_time:.2f}s")
+                
+                if ad_enabled and ad_position == 'after':
+                    await asyncio.sleep(1)
+                    await send_advertisement(client, chat_id)
+                memory_buffer.close()
+                return {"success": True, "message": message, "in_memory": True, "total_time": total_time}
+                
+            except Exception as req_upload_err:
+                stream_utils_logger.error(f"❌ Memory upload failed: {req_upload_err}")
+                performance_logger.error(f"[MEMORY_UPLOAD_ERROR] {str(req_upload_err)}")
                 try:
-                    memory_buffer = await download_to_memory_stream_requests(direct_url, max_size_mb=memory_threshold_mb)
-                except Exception as e:
-                    stream_utils_logger.warning(f"⚠️ requests memory streaming failed: {e}")
-                    memory_buffer = None
-            
-            if memory_buffer:
-                memory_download_time = time.time() - memory_start
-                stream_utils_logger.info(f"✅ Memory download completed in {memory_download_time:.2f}s")
-                performance_logger.info(f"[MEMORY_DOWNLOAD_TIME] {memory_download_time:.2f}s")
-                
-                # Phase 4a: Memory upload
-                upload_start = time.time()
-                stream_utils_logger.info("📤 Phase 4a: Starting memory upload...")
-                
-                upload_kwargs = kwargs.copy()
-                upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
-                
-                try:
-                    if media_type == "video":
-                        upload_kwargs['supports_streaming'] = True
-                        message = await client.send_video(chat_id=chat_id, video=memory_buffer, **upload_kwargs)
-                    elif media_type == "audio":
-                        message = await client.send_audio(chat_id=chat_id, audio=memory_buffer, **upload_kwargs)
-                    else:
-                        message = await client.send_document(chat_id=chat_id, document=memory_buffer, **upload_kwargs)
-                    
-                    upload_time = time.time() - upload_start
-                    total_time = time.time() - start_time
-                    
-                    stream_utils_logger.info(f"✅ Memory upload completed in {upload_time:.2f}s")
-                    stream_utils_logger.info(f"🎉 Total process completed in {total_time:.2f}s (Memory strategy)")
-                    performance_logger.info(f"[MEMORY_UPLOAD_TIME] {upload_time:.2f}s")
-                    performance_logger.info(f"[TOTAL_MEMORY_PROCESS_TIME] {total_time:.2f}s")
-                    
                     memory_buffer.close()
-                    return {"success": True, "message": message, "in_memory": True, "total_time": total_time}
-                    
-                except Exception as req_upload_err:
-                    stream_utils_logger.error(f"❌ Memory upload failed: {req_upload_err}")
-                    performance_logger.error(f"[MEMORY_UPLOAD_ERROR] {str(req_upload_err)}")
-                    try:
-                        memory_buffer.close()
-                    except Exception:
-                        pass
+                except Exception:
+                    pass
 
-        # Phase 3b: Use temp file approach
-        stream_utils_logger.info("📁 Phase 3b: Using temporary file strategy...")
-        temp_file_start = time.time()
-        
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
-            temp_path = temp_file.name
+    # Phase 3b: Use temp file approach
+    stream_utils_logger.info("📁 Phase 3b: Using temporary file strategy...")
+    temp_file_start = time.time()
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.tmp') as temp_file:
+        temp_path = temp_file.name
         
         stream_utils_logger.info(f"📂 Created temp file: {temp_path}")
         
@@ -709,6 +731,9 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 except Exception as remux_err:
                     stream_utils_logger.warning(f"⚠️ Remux error, uploading original file: {remux_err}")
             
+            if ad_enabled and ad_position == 'before':
+                await send_advertisement(client, chat_id)
+                await asyncio.sleep(1)
             if media_type == "video":
                 upload_kwargs['supports_streaming'] = True
                 message = await client.send_video(chat_id=chat_id, video=upload_source_path, **upload_kwargs)
@@ -725,8 +750,88 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             performance_logger.info(f"[TEMP_UPLOAD_TIME] {upload_time:.2f}s")
             performance_logger.info(f"[TOTAL_TEMP_PROCESS_TIME] {total_time:.2f}s")
             
+            if ad_enabled and ad_position == 'after':
+                await asyncio.sleep(1)
+                await send_advertisement(client, chat_id)
+            
             return {"success": True, "message": message, "total_time": total_time}
             
+        except Exception as e:
+            error_time = time.time() - start_time
+            stream_utils_logger.error(f"❌ Direct YouTube upload failed after {error_time:.2f}s: {e}")
+            performance_logger.error(f"[DIRECT_UPLOAD_ERROR] Time: {error_time:.2f}s, Error: {str(e)}")
+            
+            # Fallback to traditional download method
+            try:
+                fallback_start = time.time()
+                stream_utils_logger.info("🔄 Falling back to traditional download method...")
+                performance_logger.info("[FALLBACK_START] Traditional download method")
+                
+                from plugins.youtube_helpers import download_youtube_file
+                
+                # Download using traditional method
+                downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+                
+                if downloaded_file and os.path.exists(downloaded_file):
+                    fallback_download_time = time.time() - fallback_start
+                    file_size = os.path.getsize(downloaded_file) / (1024 * 1024)
+                    
+                    stream_utils_logger.info(f"✅ Fallback download completed in {fallback_download_time:.2f}s, Size: {file_size:.2f}MB")
+                    performance_logger.info(f"[FALLBACK_DOWNLOAD_TIME] {fallback_download_time:.2f}s, Size: {file_size:.2f}MB")
+                    
+                    try:
+                        # Upload the downloaded file
+                        upload_start = time.time()
+                        stream_utils_logger.info("📤 Starting fallback upload...")
+                        
+                        upload_kwargs = kwargs.copy()
+                        upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
+                        
+                        if ad_enabled and ad_position == 'before':
+                            await send_advertisement(client, chat_id)
+                            await asyncio.sleep(1)
+                        if media_type == "video":
+                            upload_kwargs['supports_streaming'] = True
+                            message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
+                        elif media_type == "audio":
+                            message = await client.send_audio(chat_id=chat_id, audio=downloaded_file, **upload_kwargs)
+                        else:
+                            message = await client.send_document(chat_id=chat_id, document=downloaded_file, **upload_kwargs)
+                        
+                        upload_time = time.time() - upload_start
+                        total_time = time.time() - start_time
+                        
+                        stream_utils_logger.info(f"✅ Fallback upload completed in {upload_time:.2f}s")
+                        stream_utils_logger.info(f"🎉 Total fallback process completed in {total_time:.2f}s")
+                        performance_logger.info(f"[FALLBACK_UPLOAD_TIME] {upload_time:.2f}s")
+                        performance_logger.info(f"[TOTAL_FALLBACK_PROCESS_TIME] {total_time:.2f}s")
+                        
+                        if ad_enabled and ad_position == 'after':
+                            await asyncio.sleep(1)
+                            await send_advertisement(client, chat_id)
+                        
+                        return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
+                        
+                    finally:
+                        # Clean up downloaded file
+                        cleanup_start = time.time()
+                        try:
+                            os.unlink(downloaded_file)
+                            # Also clean up the temp directory if it exists
+                            temp_dir = os.path.dirname(downloaded_file)
+                            if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
+                                import shutil
+                                shutil.rmtree(temp_dir, ignore_errors=True)
+                            cleanup_time = time.time() - cleanup_start
+                            stream_utils_logger.info(f"🧹 Fallback cleanup completed in {cleanup_time:.3f}s")
+                        except Exception as cleanup_err:
+                            stream_utils_logger.warning(f"⚠️ Fallback cleanup failed: {cleanup_err}")
+                else:
+                    return {"success": False, "error": "Fallback download failed"}
+            except Exception as fb_err:
+                stream_utils_logger.error(f"❌ Fallback method failed: {fb_err}")
+                return {"success": False, "error": str(fb_err)}
+        
         finally:
             # Clean up temp file
             cleanup_start = time.time()
@@ -741,80 +846,6 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 stream_utils_logger.info(f"🧹 Temp file cleanup completed in {cleanup_time:.3f}s")
             except Exception as e:
                 stream_utils_logger.warning(f"⚠️ Temp file cleanup failed: {e}")
-
-    except Exception as e:
-        error_time = time.time() - start_time
-        stream_utils_logger.error(f"❌ Direct YouTube upload failed after {error_time:.2f}s: {e}")
-        performance_logger.error(f"[DIRECT_UPLOAD_ERROR] Time: {error_time:.2f}s, Error: {str(e)}")
-        
-        # Fallback to traditional download method
-        try:
-            fallback_start = time.time()
-            stream_utils_logger.info("🔄 Falling back to traditional download method...")
-            performance_logger.info("[FALLBACK_START] Traditional download method")
-            
-            from plugins.youtube_helpers import download_youtube_file
-            
-            # Download using traditional method
-            downloaded_file = await download_youtube_file(url, format_id, progress_callback)
-            
-            if downloaded_file and os.path.exists(downloaded_file):
-                fallback_download_time = time.time() - fallback_start
-                file_size = os.path.getsize(downloaded_file) / (1024 * 1024)
-                
-                stream_utils_logger.info(f"✅ Fallback download completed in {fallback_download_time:.2f}s, Size: {file_size:.2f}MB")
-                performance_logger.info(f"[FALLBACK_DOWNLOAD_TIME] {fallback_download_time:.2f}s, Size: {file_size:.2f}MB")
-                
-                try:
-                    # Upload the downloaded file
-                    upload_start = time.time()
-                    stream_utils_logger.info("📤 Starting fallback upload...")
-                    
-                    upload_kwargs = kwargs.copy()
-                    upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
-                    
-                    if media_type == "video":
-                        upload_kwargs['supports_streaming'] = True
-                        message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
-                    elif media_type == "audio":
-                        message = await client.send_audio(chat_id=chat_id, audio=downloaded_file, **upload_kwargs)
-                    else:
-                        message = await client.send_document(chat_id=chat_id, document=downloaded_file, **upload_kwargs)
-                    
-                    upload_time = time.time() - upload_start
-                    total_time = time.time() - start_time
-                    
-                    stream_utils_logger.info(f"✅ Fallback upload completed in {upload_time:.2f}s")
-                    stream_utils_logger.info(f"🎉 Total fallback process completed in {total_time:.2f}s")
-                    performance_logger.info(f"[FALLBACK_UPLOAD_TIME] {upload_time:.2f}s")
-                    performance_logger.info(f"[TOTAL_FALLBACK_PROCESS_TIME] {total_time:.2f}s")
-                    
-                    return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
-                    
-                finally:
-                    # Clean up downloaded file
-                    cleanup_start = time.time()
-                    try:
-                        os.unlink(downloaded_file)
-                        # Also clean up the temp directory if it exists
-                        temp_dir = os.path.dirname(downloaded_file)
-                        if os.path.exists(temp_dir) and os.path.basename(temp_dir).startswith('tmp'):
-                            import shutil
-                            shutil.rmtree(temp_dir, ignore_errors=True)
-                        cleanup_time = time.time() - cleanup_start
-                        stream_utils_logger.info(f"🧹 Fallback cleanup completed in {cleanup_time:.3f}s")
-                    except Exception as cleanup_err:
-                        stream_utils_logger.warning(f"⚠️ Fallback cleanup failed: {cleanup_err}")
-            else:
-                stream_utils_logger.error("❌ Fallback download failed - no file downloaded")
-                performance_logger.error("[FALLBACK_DOWNLOAD_FAILED] No file downloaded")
-                return {"success": False, "error": "Fallback download failed - no file downloaded"}
-                
-        except Exception as fallback_error:
-            fallback_time = time.time() - start_time
-            stream_utils_logger.error(f"❌ Fallback download also failed after {fallback_time:.2f}s: {fallback_error}")
-            performance_logger.error(f"[FALLBACK_ERROR] Time: {fallback_time:.2f}s, Error: {str(fallback_error)}")
-            return {"success": False, "error": f"Both direct upload and fallback failed. Direct: {str(e)}, Fallback: {str(fallback_error)}"}
 
 
 async def concurrent_download_upload(client, chat_id: int, download_url: str, file_name: str, 

@@ -9,6 +9,15 @@ import asyncio
 from plugins import constant
 
 PATH = constant.PATH
+AUTO_DELETE_SECONDS = 120
+
+async def _delete_after_delay(msg, delay: int = AUTO_DELETE_SECONDS):
+    try:
+        await asyncio.sleep(delay)
+        await msg.delete()
+    except Exception:
+        # Silent ignore if message already deleted or deletion fails
+        pass
 
 async def send_advertisement(client, user_id: int):
     """Send advertisement to user based on database settings (shared utility)."""
@@ -29,7 +38,8 @@ async def send_advertisement(client, user_id: int):
         caption = ad_settings.get('caption', '')
 
         if content_type == 'text' and content:
-            await client.send_message(chat_id=user_id, text=content)
+            msg = await client.send_message(chat_id=user_id, text=content)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'photo' and file_id:
             try:
                 if isinstance(file_id, str) and (file_id.startswith('http://') or file_id.startswith('https://')):
@@ -43,7 +53,8 @@ async def send_advertisement(client, user_id: int):
                                     if chunk:
                                         f.write(chunk)
                             if os.path.getsize(temp_path) > 0:
-                                await client.send_photo(chat_id=user_id, photo=temp_path, caption=caption)
+                                msg = await client.send_photo(chat_id=user_id, photo=temp_path, caption=caption)
+                                asyncio.create_task(_delete_after_delay(msg))
                             else:
                                 raise Exception("Downloaded advertisement photo is empty")
                         else:
@@ -55,16 +66,21 @@ async def send_advertisement(client, user_id: int):
                         except Exception:
                             pass
                 else:
-                    await client.send_photo(chat_id=user_id, photo=file_id, caption=caption)
+                    msg = await client.send_photo(chat_id=user_id, photo=file_id, caption=caption)
+                    asyncio.create_task(_delete_after_delay(msg))
             except Exception:
                 if caption:
-                    await client.send_message(chat_id=user_id, text=f"📢 تبلیغ\n\n{caption}")
+                    msg = await client.send_message(chat_id=user_id, text=f"📢 تبلیغ\n\n{caption}")
+                    asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'video' and file_id:
-            await client.send_video(chat_id=user_id, video=file_id, caption=caption)
+            msg = await client.send_video(chat_id=user_id, video=file_id, caption=caption)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'gif' and file_id:
-            await client.send_animation(chat_id=user_id, animation=file_id, caption=caption)
+            msg = await client.send_animation(chat_id=user_id, animation=file_id, caption=caption)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'sticker' and file_id:
-            await client.send_sticker(chat_id=user_id, sticker=file_id)
+            msg = await client.send_sticker(chat_id=user_id, sticker=file_id)
+            asyncio.create_task(_delete_after_delay(msg))
     except Exception:
         # Silent fail to avoid interrupting main flow
         pass

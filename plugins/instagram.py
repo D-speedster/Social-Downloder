@@ -35,7 +35,7 @@ instagram_logger.addHandler(instagram_handler)
 
 # Advertisement function
 async def send_advertisement(client: Client, user_id: int):
-    """Send advertisement to user based on database settings"""
+    """Send advertisement to user based on database settings with auto-delete after 2 minutes."""
     try:
         # Load advertisement settings from database
         from .db_path_manager import db_path_manager
@@ -55,12 +55,17 @@ async def send_advertisement(client: Client, user_id: int):
         file_id = ad_settings.get('file_id', '')
         caption = ad_settings.get('caption', '')
         
-        # Send advertisement based on content type
+        async def _delete_after_delay(msg, delay: int = 120):
+            try:
+                await asyncio.sleep(delay)
+                await msg.delete()
+            except Exception:
+                pass
+        
+        # Send advertisement based on content type, scheduling auto-delete
         if content_type == 'text' and content:
-            await client.send_message(
-                chat_id=user_id,
-                text=content
-            )
+            msg = await client.send_message(chat_id=user_id, text=content)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'photo' and file_id:
             try:
                 # If the file_id is a URL, download locally to avoid WEBPAGE_MEDIA_EMPTY
@@ -75,11 +80,8 @@ async def send_advertisement(client: Client, user_id: int):
                                     if chunk:
                                         f.write(chunk)
                             if os.path.getsize(temp_path) > 0:
-                                await client.send_photo(
-                                    chat_id=user_id,
-                                    photo=temp_path,
-                                    caption=caption
-                                )
+                                msg = await client.send_photo(chat_id=user_id, photo=temp_path, caption=caption)
+                                asyncio.create_task(_delete_after_delay(msg))
                             else:
                                 raise Exception("Downloaded advertisement photo is empty")
                         else:
@@ -92,42 +94,26 @@ async def send_advertisement(client: Client, user_id: int):
                             pass
                 else:
                     # Telegram file_id or local path
-                    await client.send_photo(
-                        chat_id=user_id,
-                        photo=file_id,
-                        caption=caption
-                    )
+                    msg = await client.send_photo(chat_id=user_id, photo=file_id, caption=caption)
+                    asyncio.create_task(_delete_after_delay(msg))
             except Exception as photo_error:
                 print(f"Error sending photo: {photo_error}")
                 # Fallback to text message if photo fails
                 if caption:
-                    await client.send_message(
-                        chat_id=user_id,
-                        text=f"📢 تبلیغ\n\n{caption}"
-                    )
+                    msg = await client.send_message(chat_id=user_id, text=f"📢 تبلیغ\n\n{caption}")
+                    asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'video' and file_id:
-            await client.send_video(
-                chat_id=user_id,
-                video=file_id,
-                caption=caption
-            )
+            msg = await client.send_video(chat_id=user_id, video=file_id, caption=caption)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'gif' and file_id:
-            await client.send_animation(
-                chat_id=user_id,
-                animation=file_id,
-                caption=caption
-            )
+            msg = await client.send_animation(chat_id=user_id, animation=file_id, caption=caption)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'sticker' and file_id:
-            await client.send_sticker(
-                chat_id=user_id,
-                sticker=file_id
-            )
+            msg = await client.send_sticker(chat_id=user_id, sticker=file_id)
+            asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'audio' and file_id:
-            await client.send_audio(
-                chat_id=user_id,
-                audio=file_id,
-                caption=caption
-            )
+            msg = await client.send_audio(chat_id=user_id, audio=file_id, caption=caption)
+            asyncio.create_task(_delete_after_delay(msg))
         
     except Exception as e:
         print(f"Advertisement send error: {e}")
