@@ -9,10 +9,10 @@
   "rate_limit": "لطفاً {seconds} ثانیه دیگر تلاش کنید.",
   "telegram_file": "فایل تلگرام",
   "download_link": "لینک دانلود",
-  "file_or_link": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nنحوه دریافت را انتخاب کنید:",
-  "file_or_link2": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nلینک مستقیم: <a href=\"{link}\">دانلود</a>",
-  "file_or_link3": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nوضعیت: {status}\nپیشرفت: {sending}",
-  "file_or_link4": "عنوان: {name}\nنوع: {sort}\nحجم: {size}\n\nوضعیت: {status}\nپیشرفت: {sending}",
+  "file_or_link": "عنوان: {name}\nنوع: {sort}\n\nنحوه دریافت را انتخاب کنید:",
+  "file_or_link2": "عنوان: {name}\nنوع: {sort}\n\nلینک مستقیم: <a href=\"{link}\">دانلود</a>",
+  "file_or_link3": "عنوان: {name}\nنوع: {sort}\n\nوضعیت: {status}\nپیشرفت: {sending}",
+  "file_or_link4": "عنوان: {name}\nنوع: {sort}\n\nوضعیت: {status}\nپیشرفت: {sending}",
   "dashboard_title": "داشبورد دانلودها",
   "dashboard_pending": "در صف (تا ۵ مورد اخیر)",
   "dashboard_ready": "آماده (تا ۵ مورد اخیر)",
@@ -22,7 +22,7 @@
   "close": "بستن",
 
   "main_youtube": "دانلود یوتیوب",
-  "main_instagram": "دانلود اینستاگرام",
+
   "main_dashboard": "داشبورد",
   "main_settings": "تنظیمات",
 

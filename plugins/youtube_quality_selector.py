@@ -50,26 +50,12 @@ class YouTubeQualitySelector:
         fps = quality.get('fps', 0)
         vcodec = quality.get('vcodec', 'unknown')
         acodec = quality.get('acodec', 'unknown')
-        filesize = quality.get('filesize', 0)
-        
+        # حذف نمایش حجم از متن کیفیت
         fps_text = f"@{fps}fps" if fps > 0 else ""
-        
-        # ✅ نمایش حجم با ضریب تصحیح - هماهنگ با محاسبات دانلود
-        if filesize:
-            # حجم از get_mergeable_qualities قبلاً تصحیح شده است
-            # پس مستقیماً استفاده می‌کنیم
-            size_text = convert_size(2, filesize)
-        else:
-            size_text = "Unknown size"
-            
         codec_text = f"{vcodec}/{acodec}" if vcodec != 'unknown' and acodec != 'unknown' else ""
-        
         info_text = f"{resolution}{fps_text}"
-        if size_text:
-            info_text += f" • {size_text}"
         if codec_text:
             info_text += f" • {codec_text}"
-        
         return info_text
 
     async def get_quality_options(self, url: str) -> Optional[Dict]:
@@ -112,62 +98,46 @@ class YouTubeQualitySelector:
     def create_quality_keyboard(self, qualities: List[Dict], page: int = 0, per_page: int = 8) -> InlineKeyboardMarkup:
         """ایجاد کیبورد انتخاب کیفیت"""
         quality_selector_logger.debug(f"Creating quality keyboard - page {page}, per_page {per_page}")
-        
         # Calculate pagination
         start_idx = page * per_page
         end_idx = start_idx + per_page
         page_qualities = qualities[start_idx:end_idx]
-        
         buttons = []
-        
-        # Quality buttons
+        # Quality buttons (دو‌تایی در هر ردیف)
+        row = []
         for i, quality in enumerate(page_qualities):
-            # Format quality info for display
             resolution = quality['resolution']
             fps_text = f"@{quality['fps']}fps" if quality['fps'] > 0 else ""
-            
-            # File size info - ✅ نمایش حجم واقعی بدون دستکاری
-            if quality['filesize']:
-                size_text = convert_size(2, quality['filesize'])
-            else:
-                size_text = "~حجم"
-            
-            # Format type indicator
+            # حذف کامل نمایش حجم از دکمه‌ها
             type_indicator = "🔗" if quality['type'] == 'combined' else "🔀"
-            
-            # Codec info (shortened)
             vcodec = quality['vcodec'][:4] if quality['vcodec'] != 'unknown' else ""
             acodec = quality['acodec'][:4] if quality['acodec'] != 'unknown' else ""
             codec_text = f"{vcodec}/{acodec}" if vcodec and acodec else ""
-            
-            button_text = f"{type_indicator} {resolution}{fps_text} - {size_text}"
+            button_text = f"{type_indicator} {resolution}{fps_text}"
             if codec_text:
                 button_text += f" • {codec_text}"
-            
             callback_data = f"dl_quality_{start_idx + i}"
-            buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
-        
+            row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
+            if len(row) == 2:
+                buttons.append(row)
+                row = []
+        if row:
+            buttons.append(row)
         # Navigation buttons
         nav_buttons = []
         total_pages = (len(qualities) + per_page - 1) // per_page
-        
         if page > 0:
             nav_buttons.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"quality_page_{page-1}"))
-        
         if page < total_pages - 1:
             nav_buttons.append(InlineKeyboardButton("بعدی ➡️", callback_data=f"quality_page_{page+1}"))
-        
         if nav_buttons:
             buttons.append(nav_buttons)
-        
         # Additional options
         additional_buttons = [
             [InlineKeyboardButton("🎵 فقط صدا (بهترین کیفیت)", callback_data="dl_audio_best")],
             [InlineKeyboardButton("❌ لغو", callback_data="cancel_download")]
         ]
-        
         buttons.extend(additional_buttons)
-        
         quality_selector_logger.debug(f"Created keyboard with {len(buttons)} button rows")
         return InlineKeyboardMarkup(buttons)
     

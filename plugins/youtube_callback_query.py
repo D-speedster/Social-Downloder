@@ -316,12 +316,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         size_val = int((fmt.get('tbr') * 1000 / 8) * duration)
                     except Exception:
                         size_val = None
-                # ✅ بدون ضریب تصحیح - نمایش حجم واقعی
-                if size_val:
-                    size_str = convert_size(2, size_val)
-                else:
-                    size_str = 'نامشخص'
-                btn_text = f"{fmt.get('height', 'N/A')}p - {size_str}"
+                # حذف نمایش حجم از متن دکمه کیفیت ویدیو
+                btn_text = f"{fmt.get('height', 'N/A')}p"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vd")])
         
         if not formats:
@@ -365,12 +361,8 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         size_val = int((kbps * 1000 / 8) * duration)
                     except Exception:
                         size_val = None
-                # ✅ بدون ضریب تصحیح - نمایش حجم واقعی
-                if size_val:
-                    size_str = convert_size(2, size_val)
-                else:
-                    size_str = 'نامشخص'
-                btn_text = f"{fmt.get('abr', fmt.get('tbr', 'N/A'))}kbps - {size_str}"
+                # حذف نمایش حجم از متن دکمه کیفیت صوت
+                btn_text = f"{fmt.get('abr', fmt.get('tbr', 'N/A'))}kbps"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vc")])
         
         if not formats:
