@@ -421,7 +421,7 @@ async def download_instagram(_: Client, message: Message):
         
         # Send advertisement before content if position is 'before' and enabled
         if ad_enabled and ad_position == 'before':
-            await send_advertisement(_, user_id)
+            send_advertisement(_, user_id)
         
         # Handle multiple media (carousel/gallery)
         if post_type == 'multiple' and len(medias) > 1:
@@ -435,7 +435,7 @@ async def download_instagram(_: Client, message: Message):
         # Send advertisement after content if position is 'after' and enabled
         if ad_enabled and ad_position == 'after':
             instagram_logger.debug("ارسال تبلیغ بعد از محتوا")
-            await send_advertisement(_, user_id)
+            send_advertisement(_, user_id)
         
         # Update user download count
         db.increment_request(user_id, datetime.now().isoformat())

@@ -550,13 +550,13 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             upload_kwargs['thumb'] = thumb_to_cleanup
 
         if ad_enabled and ad_position == 'before':
-            await send_advertisement(client, chat_id)
+            send_advertisement(client, chat_id)
             await asyncio.sleep(1)
         message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
 
         if ad_enabled and ad_position == 'after':
             await asyncio.sleep(1)
-            await send_advertisement(client, chat_id)
+            send_advertisement(client, chat_id)
         
         total_time = time.time() - start_time
         performance_logger.info(f"[TOTAL_TRADITIONAL_VIDEO_TIME] {total_time:.2f}s")
@@ -668,7 +668,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 
                 if ad_enabled and ad_position == 'after':
                     await asyncio.sleep(1)
-                    await send_advertisement(client, chat_id)
+                    send_advertisement(client, chat_id)
                 memory_buffer.close()
                 return {"success": True, "message": message, "in_memory": True, "total_time": total_time}
                 
@@ -736,7 +736,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                     stream_utils_logger.warning(f"⚠️ Remux error, uploading original file: {remux_err}")
             
             if ad_enabled and ad_position == 'before':
-                await send_advertisement(client, chat_id)
+                send_advertisement(client, chat_id)
                 await asyncio.sleep(1)
             if media_type == "video":
                 upload_kwargs['supports_streaming'] = True
@@ -756,14 +756,13 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
             
             if ad_enabled and ad_position == 'after':
                 await asyncio.sleep(1)
-                await send_advertisement(client, chat_id)
+                send_advertisement(client, chat_id)
             
             return {"success": True, "message": message, "total_time": total_time}
             
         except Exception as e:
             error_time = time.time() - start_time
             stream_utils_logger.error(f"❌ Direct YouTube upload failed after {error_time:.2f}s: {e}")
-            performance_logger.error(f"[DIRECT_UPLOAD_ERROR] Time: {error_time:.2f}s, Error: {str(e)}")
             
             # Fallback to traditional download method
             try:
@@ -792,7 +791,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                         upload_kwargs['caption'] = f"🎬 {title}" if title else "🎬 Video"
                         
                         if ad_enabled and ad_position == 'before':
-                            await send_advertisement(client, chat_id)
+                            send_advertisement(client, chat_id)
                             await asyncio.sleep(1)
                         if media_type == "video":
                             upload_kwargs['supports_streaming'] = True
@@ -812,7 +811,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                         
                         if ad_enabled and ad_position == 'after':
                             await asyncio.sleep(1)
-                            await send_advertisement(client, chat_id)
+                            send_advertisement(client, chat_id)
                         
                         return {"success": True, "message": message, "fallback_used": True, "total_time": total_time}
                         

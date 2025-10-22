@@ -783,7 +783,7 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Send advertisement before content if enabled and position is 'before'
         if ad_enabled and ad_position == 'before':
-            await send_advertisement(client, message.chat.id)
+            send_advertisement(client, message.chat.id)
             await asyncio.sleep(1)  # Wait 1 second after advertisement
         
         # Upload file(s) based on type
@@ -1106,7 +1106,7 @@ async def handle_universal_link(client: Client, message: Message):
             pass
         if ad_enabled and ad_position == 'after':
             await asyncio.sleep(1)  # Wait 1 second after upload
-            await send_advertisement(client, message.chat.id)
+            send_advertisement(client, message.chat.id)
         
         # Run cleanup and stats in background to avoid blocking user
         async def cleanup_and_stats():
