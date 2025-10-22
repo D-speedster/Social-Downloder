@@ -8,6 +8,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from plugins.logger_config import get_logger
 from plugins.youtube_advanced_downloader import youtube_downloader
 from utils.util import convert_size
+from config import YOUTUBE_FILESIZE_CORRECTION_FACTOR
 
 # Initialize logger
 quality_selector_logger = get_logger('quality_selector')
@@ -53,8 +54,10 @@ class YouTubeQualitySelector:
         
         fps_text = f"@{fps}fps" if fps > 0 else ""
         
-        # ✅ نمایش حجم واقعی - بدون ضریب اشتباه
+        # ✅ نمایش حجم با ضریب تصحیح - هماهنگ با محاسبات دانلود
         if filesize:
+            # حجم از get_mergeable_qualities قبلاً تصحیح شده است
+            # پس مستقیماً استفاده می‌کنیم
             size_text = convert_size(2, filesize)
         else:
             size_text = "Unknown size"

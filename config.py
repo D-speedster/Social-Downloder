@@ -86,3 +86,8 @@ TELEGRAM_THROTTLING = {
     'retry_attempts': int(os.environ.get("TELEGRAM_RETRY_ATTEMPTS", "3")),
     'base_retry_delay': float(os.environ.get("TELEGRAM_BASE_RETRY_DELAY", "1.0")),  # 1 second
 }
+
+# YouTube file size correction factor
+# با توجه به نتایج عملی، فایل نهایی معمولاً حدود 30-35% از مجموع ویدیو+صدا است
+# این مقدار برای تخمین دقیق‌تر اندازه نهایی خروجی پس از merge/encode تنظیم شد
+YOUTUBE_FILESIZE_CORRECTION_FACTOR = float(os.environ.get("YOUTUBE_FILESIZE_CORRECTION_FACTOR", "0.30"))

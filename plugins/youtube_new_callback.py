@@ -20,6 +20,7 @@ from plugins.youtube_advanced_downloader import youtube_downloader
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user
 from utils.util import convert_size
 from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload
+# YOUTUBE_FILESIZE_CORRECTION_FACTOR حذف شد - تصحیح در get_mergeable_qualities انجام می‌شود
 
 # Initialize loggers
 callback_new_logger = get_logger('youtube_callback_new')
@@ -192,8 +193,13 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     if selected_quality.get('fps', 0) > 0:
         quality_text += f"@{selected_quality['fps']}fps"
     
-    # ✅ نمایش حجم واقعی بدون ضریب اشتباه
-    size_text = convert_size(2, selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
+    # ✅ نمایش حجم - قبلاً در get_mergeable_qualities تصحیح شده
+    if selected_quality.get('filesize'):
+        # حجم قبلاً در get_mergeable_qualities با ضریب تصحیح محاسبه شده
+        # پس مستقیماً استفاده می‌کنیم
+        size_text = convert_size(2, selected_quality['filesize'])
+    else:
+        size_text = "نامشخص"
     
     download_info = (
         f"🚀 **شروع آپلود مستقیم**\n\n"

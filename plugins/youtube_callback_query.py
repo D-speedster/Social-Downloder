@@ -21,6 +21,7 @@ from utils.util import convert_size
 from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload, concurrent_download_upload
 import random
 import subprocess
+from config import YOUTUBE_FILESIZE_CORRECTION_FACTOR
 
 # Initialize logger
 youtube_callback_logger = get_logger('youtube_callback')
@@ -55,7 +56,30 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
             # ✅ تصحیح: فایل نهایی merge شده معمولاً 65-70% از مجموع ویدیو+صدا است
             # به دلیل حذف overhead container و بهینه‌سازی yt-dlp
             if total_size > 0:
-                total_size = int(total_size * 0.68)  # ضریب واقعی‌تر
+                # ضریب تصحیح بر اساس کیفیت ویدیو
+                correction_factor = YOUTUBE_FILESIZE_CORRECTION_FACTOR
+                
+                # تلاش برای تشخیص کیفیت از format_id
+                try:
+                    video_fmt = None
+                    for fid in str(format_id).split('+'):
+                        part_fmt = next((f for f in info_dict.get('formats', []) if str(f.get('format_id')) == str(fid)), None)
+                        if part_fmt and part_fmt.get('vcodec', 'none') != 'none':
+                            video_fmt = part_fmt
+                            break
+                    
+                    if video_fmt:
+                        height = video_fmt.get('height', 0) or 0
+                        if height >= 1080:
+                            correction_factor = min(0.75, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.05)
+                        elif height >= 720:
+                            correction_factor = min(0.72, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.03)
+                        
+                        youtube_callback_logger.debug(f"کیفیت تشخیص داده شده: {height}p، ضریب: {correction_factor}")
+                except:
+                    pass  # در صورت خطا، از ضریب پیش‌فرض استفاده کن
+                
+                total_size = int(total_size * correction_factor)
                 youtube_callback_logger.info(f"💾 حجم کل محاسبه شده (ترکیبی): {total_size / (1024*1024):.2f} MB")
                 return total_size
 

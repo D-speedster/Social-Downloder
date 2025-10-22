@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import yt_dlp
 from plugins.logger_config import get_logger
+from config import YOUTUBE_FILESIZE_CORRECTION_FACTOR
 
 # Initialize logger
 advanced_logger = get_logger('youtube_advanced')
@@ -300,13 +301,25 @@ class YouTubeAdvancedDownloader:
             vcodec_name = (fmt.get('vcodec', 'unknown') or 'unknown').lower()
             ext = (fmt.get('ext', 'mp4') or 'mp4').lower()
             if height >= 360 and ext == 'mp4' and ('h264' in vcodec_name or 'avc1' in vcodec_name):
+                # برای فرمت‌های combined نیز ضریب تصحیح اعمال کن
+                original_size = fmt.get('filesize') or fmt.get('filesize_approx')
+                corrected_size = original_size
+                if original_size:
+                    correction_factor = YOUTUBE_FILESIZE_CORRECTION_FACTOR
+                    if height >= 1080:
+                        correction_factor = min(0.75, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.05)
+                    elif height >= 720:
+                        correction_factor = min(0.72, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.03)
+                    corrected_size = int(original_size * correction_factor)
+                    advanced_logger.debug(f"فرمت combined {height}p: حجم اصلی {original_size}, تصحیح شده {corrected_size}")
+                
                 quality_info = {
                     'format_id': fmt['format_id'],
                     'resolution': f"{height}p" if height else "Unknown",
                     'fps': fmt.get('fps', 0) or 0,
                     'vcodec': fmt.get('vcodec', 'unknown'),
                     'acodec': fmt.get('acodec', 'unknown'),
-                    'filesize': fmt.get('filesize') or fmt.get('filesize_approx'),
+                    'filesize': corrected_size,
                     'ext': 'mp4',
                     'type': 'combined',
                     'video_format': fmt,
@@ -326,8 +339,20 @@ class YouTubeAdvancedDownloader:
                     audio_size = best_audio.get('filesize') or best_audio.get('filesize_approx')
                     
                     if video_size and audio_size:
-                        # جمع ساده حجم‌ها بدون ضریب اضافی
-                        estimated_size = video_size + audio_size
+                        # محاسبه حجم با اعمال ضریب تصحیح برای دقت بیشتر
+                        raw_size = video_size + audio_size
+                        
+                        # ضریب تصحیح بر اساس نوع فرمت و کیفیت
+                        correction_factor = YOUTUBE_FILESIZE_CORRECTION_FACTOR
+                        
+                        # برای کیفیت‌های بالاتر، ضریب کمی بهتر (کمتر compression overhead)
+                        if height >= 1080:
+                            correction_factor = min(0.75, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.05)
+                        elif height >= 720:
+                            correction_factor = min(0.72, YOUTUBE_FILESIZE_CORRECTION_FACTOR + 0.03)
+                        
+                        estimated_size = int(raw_size * correction_factor)
+                        advanced_logger.debug(f"حجم خام: {raw_size}, ضریب: {correction_factor}, حجم تصحیح شده: {estimated_size}")
                     else:
                         # اگر حجم دقیق در دسترس نیست، None برگردان
                         estimated_size = None
