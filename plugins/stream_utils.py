@@ -484,7 +484,10 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
     ad_enabled = False
     ad_position = 'after'
     try:
-        from .db_path_manager import db_path_manager
+        try:
+            from plugins.db_path_manager import db_path_manager
+        except Exception:
+            from .db_path_manager import db_path_manager
         json_db_path = db_path_manager.get_json_db_path()
         with open(json_db_path, 'r', encoding='utf-8') as f:
             db_data = json.load(f)
@@ -492,6 +495,7 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         ad_enabled = ad.get('enabled', False)
         ad_position = ad.get('position', 'after')
     except Exception:
+        stream_utils_logger.warning("⚠️ Failed to load advertisement settings; skipping ads.")
         pass
     
     # Extract format_id and media_type from quality_info

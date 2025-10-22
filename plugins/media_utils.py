@@ -22,7 +22,10 @@ async def _delete_after_delay(msg, delay: int = AUTO_DELETE_SECONDS):
 async def send_advertisement(client, user_id: int):
     """Send advertisement to user based on database settings (shared utility)."""
     try:
-        from .db_path_manager import db_path_manager
+        try:
+            from plugins.db_path_manager import db_path_manager
+        except Exception:
+            from .db_path_manager import db_path_manager
         json_db_path = db_path_manager.get_json_db_path()
         
         with open(json_db_path, 'r', encoding='utf-8') as f:
@@ -80,6 +83,9 @@ async def send_advertisement(client, user_id: int):
             asyncio.create_task(_delete_after_delay(msg))
         elif content_type == 'sticker' and file_id:
             msg = await client.send_sticker(chat_id=user_id, sticker=file_id)
+            asyncio.create_task(_delete_after_delay(msg))
+        elif content_type == 'audio' and file_id:
+            msg = await client.send_audio(chat_id=user_id, audio=file_id, caption=caption)
             asyncio.create_task(_delete_after_delay(msg))
     except Exception:
         # Silent fail to avoid interrupting main flow

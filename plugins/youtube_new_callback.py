@@ -192,7 +192,8 @@ async def start_download_process(client: Client, call: CallbackQuery, url: str,
     if selected_quality.get('fps', 0) > 0:
         quality_text += f"@{selected_quality['fps']}fps"
     
-    size_text = convert_size(2, selected_quality['filesize']) if selected_quality.get('filesize') else "نامشخص"
+    # اعمال ضریب تصحیح 0.5 برای هماهنگی با نمایش در لیست کیفیت
+    size_text = convert_size(2, int(selected_quality['filesize'] * 0.5)) if selected_quality.get('filesize') else "نامشخص"
     
     download_info = (
         f"🚀 **شروع آپلود مستقیم**\n\n"
