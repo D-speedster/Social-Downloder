@@ -277,7 +277,13 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         size_val = int((fmt.get('tbr') * 1000 / 8) * duration)  # tbr in kbps -> bytes
                     except Exception:
                         size_val = None
-                size_str = convert_size(2, size_val) if size_val else 'نامشخص'
+                # اعمال ضریب تصحیح برای نزدیک‌کردن نمایش حجم به مقدار نهایی تلگرام
+                if size_val:
+                    correction_factor = 0.5
+                    size_val_corrected = int(size_val * correction_factor)
+                    size_str = convert_size(2, size_val_corrected)
+                else:
+                    size_str = 'نامشخص'
                 btn_text = f"{fmt.get('height', 'N/A')}p - {size_str}"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vd")])
         
@@ -322,7 +328,13 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         size_val = int((kbps * 1000 / 8) * duration)
                     except Exception:
                         size_val = None
-                size_str = convert_size(2, size_val) if size_val else 'نامشخص'
+                # اعمال ضریب تصحیح برای نزدیک‌کردن نمایش حجم به مقدار نهایی تلگرام
+                if size_val:
+                    correction_factor = 0.5
+                    size_val_corrected = int(size_val * correction_factor)
+                    size_str = convert_size(2, size_val_corrected)
+                else:
+                    size_str = 'نامشخص'
                 btn_text = f"{fmt.get('abr', fmt.get('tbr', 'N/A'))}kbps - {size_str}"
                 formats.append([InlineKeyboardButton(btn_text, callback_data=f"{fmt['format_id']}vc")])
         
