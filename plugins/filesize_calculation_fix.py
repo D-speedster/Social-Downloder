@@ -13,6 +13,7 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
     - اگر `filesize` / `filesize_approx` موجود باشد، از همان استفاده می‌شود.
     - در غیر این‌صورت، اگر مدت‌زمان (`duration`) و بیت‌ریت (`tbr`/`abr`) موجود باشد، حجم تخمینی محاسبه می‌گردد.
     - برای فرمت‌های ترکیبی مثل `137+251`، حجم هر بخش جداگانه محاسبه و سپس جمع می‌شود.
+    - ضریب تصحیح 0.6 برای جبران فشرده‌سازی تلگرام و تخمین دقیق‌تر اعمال می‌شود.
 
     پارامترها:
     - format_id: شناسه فرمت انتخاب‌شده (ممکن است شامل "+" باشد)
@@ -25,12 +26,15 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
     try:
         format_id_str = str(format_id)
         total_size = 0
+        # ضریب تصحیح برای جبران فشرده‌سازی تلگرام و تخمین دقیق‌تر
+        correction_factor = 0.6
 
         def _estimate_size(fmt):
             # تلاش برای خواندن اندازه واقعی
             size = fmt.get("filesize") or fmt.get("filesize_approx")
             if size:
-                return int(size)
+                # اعمال ضریب تصحیح روی اندازه واقعی
+                return int(int(size) * correction_factor)
 
             # اگر اندازه موجود نبود، از مدت‌زمان و بیت‌ریت تخمین می‌زنیم
             duration = info_dict.get("duration") or 0
@@ -38,7 +42,8 @@ def calculate_total_filesize(format_id, formats_list, info_dict):
             if duration and bitrate:
                 try:
                     # bitrate به kbps است؛ تبدیل به Bytes: (kbps * 1000 / 8) * seconds
-                    return int((bitrate * 1000 / 8) * duration)
+                    # اعمال ضریب تصحیح روی تخمین بیت‌ریت
+                    return int((bitrate * 1000 / 8) * duration * correction_factor)
                 except Exception:
                     return None
             return None
