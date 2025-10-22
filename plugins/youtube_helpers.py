@@ -234,6 +234,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         
         youtube_helpers_logger.info(f"✅ دانلود موفق: {os.path.basename(downloaded_file)}")
         youtube_helpers_logger.info(f"📦 حجم فایل دانلود شده: {file_size / (1024*1024):.2f} MB")
+        youtube_helpers_logger.info(f"💾 حجم دقیق به بایت: {file_size} bytes")
         
         # 🔍 بررسی دقیق metadata
         if ffmpeg_path:
