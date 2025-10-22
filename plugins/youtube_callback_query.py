@@ -27,36 +27,69 @@ youtube_callback_logger = get_logger('youtube_callback')
 
 # ✅ محاسبه حجم کل برای فرمت‌های ترکیبی (video+audio)
 def calculate_total_filesize(format_id, formats_list, info_dict):
+    """محاسبه دقیق حجم فایل با در نظر گیری فرمت‌های ترکیبی و تک"""
     total_size = 0
     try:
         if '+' in str(format_id):
+            # فرمت ترکیبی (ویدیو + صدا)
+            youtube_callback_logger.debug(f"محاسبه حجم فرمت ترکیبی: {format_id}")
             for fid in str(format_id).split('+'):
                 fmt = next((f for f in formats_list if str(f.get('format_id')) == str(fid)), None)
                 if fmt:
-                    size = fmt.get('filesize') or fmt.get('filesize_approx')
+                    # اولویت با filesize دقیق، سپس filesize_approx
+                    size = fmt.get('filesize')
+                    if not size:
+                        size = fmt.get('filesize_approx')
+                    
+                    # اگر هنوز حجم نداریم، از bitrate و duration محاسبه کن
                     if not size:
                         duration = info_dict.get('duration') or 0
                         bitrate = fmt.get('tbr') or fmt.get('abr') or 0
                         if duration and bitrate:
+                            # محاسبه دقیق‌تر: bitrate به kbps، تبدیل به bytes
                             size = int((bitrate * 1000 / 8) * duration)
+                            youtube_callback_logger.debug(f"محاسبه از bitrate برای {fid}: {bitrate}kbps × {duration}s = {size/1024/1024:.2f}MB")
+                    
                     if size:
                         total_size += int(size)
                         youtube_callback_logger.debug(f"Format {fid}: {int(size) / (1024*1024):.2f} MB")
-            youtube_callback_logger.info(f"💾 حجم کل محاسبه شده: {total_size / (1024*1024):.2f} MB")
-            return total_size if total_size > 0 else None
+                    else:
+                        youtube_callback_logger.warning(f"نتوانستم حجم فرمت {fid} را محاسبه کنم")
+            
+            if total_size > 0:
+                youtube_callback_logger.info(f"💾 حجم کل محاسبه شده (ترکیبی): {total_size / (1024*1024):.2f} MB")
+                return total_size
+            else:
+                youtube_callback_logger.warning("حجم کل صفر محاسبه شد")
+                return None
         else:
+            # فرمت تک (فقط ویدیو یا فقط صدا)
+            youtube_callback_logger.debug(f"محاسبه حجم فرمت تک: {format_id}")
             fmt = next((f for f in formats_list if str(f.get('format_id')) == str(format_id)), None)
             if fmt:
-                size = fmt.get('filesize') or fmt.get('filesize_approx')
+                # اولویت با filesize دقیق، سپس filesize_approx
+                size = fmt.get('filesize')
+                if not size:
+                    size = fmt.get('filesize_approx')
+                
+                # اگر هنوز حجم نداریم، از bitrate و duration محاسبه کن
                 if not size:
                     duration = info_dict.get('duration') or 0
-                    bitrate = fmt.get('tbr') or 0
+                    bitrate = fmt.get('tbr') or fmt.get('abr') or 0
                     if duration and bitrate:
                         size = int((bitrate * 1000 / 8) * duration)
-                return int(size) if size else None
+                        youtube_callback_logger.debug(f"محاسبه از bitrate: {bitrate}kbps × {duration}s = {size/1024/1024:.2f}MB")
+                
+                if size:
+                    youtube_callback_logger.info(f"💾 حجم محاسبه شده (تک): {int(size) / (1024*1024):.2f} MB")
+                    return int(size)
+                else:
+                    youtube_callback_logger.warning(f"نتوانستم حجم فرمت {format_id} را محاسبه کنم")
+            else:
+                youtube_callback_logger.warning(f"فرمت {format_id} یافت نشد")
         return None
     except Exception as e:
-        youtube_callback_logger.warning(f"خطا در calculate_total_filesize: {e}")
+        youtube_callback_logger.error(f"خطا در calculate_total_filesize: {e}")
         return None
 
 previousprogress_download = 0

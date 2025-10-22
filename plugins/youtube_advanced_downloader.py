@@ -321,10 +321,32 @@ class YouTubeAdvancedDownloader:
                 height = fmt.get('height', 0) or 0
                 vcodec_name = (fmt.get('vcodec', 'unknown') or 'unknown').lower()
                 if height >= 360 and ('h264' in vcodec_name or 'avc1' in vcodec_name):
-                    # Estimate merged file size
-                    video_size = fmt.get('filesize') or fmt.get('filesize_approx') or 0
-                    audio_size = best_audio.get('filesize') or best_audio.get('filesize_approx') or 0
-                    estimated_size = video_size + audio_size if video_size and audio_size else None
+                    # Estimate merged file size more accurately
+                    video_size = fmt.get('filesize') or fmt.get('filesize_approx')
+                    audio_size = best_audio.get('filesize') or best_audio.get('filesize_approx')
+                    
+                    if video_size and audio_size:
+                        # Use actual sizes but apply a more realistic merge factor (0.95 instead of 1.0)
+                        estimated_size = int((video_size + audio_size) * 0.95)
+                    elif video_size:
+                        # If only video size is available, estimate audio size from bitrate
+                        duration = info.get('duration', 0) or 0
+                        audio_bitrate = best_audio.get('abr', 0) or best_audio.get('tbr', 0) or 128
+                        if duration > 0:
+                            estimated_audio_size = int((audio_bitrate * 1000 * duration) / 8)
+                            estimated_size = int((video_size + estimated_audio_size) * 0.95)
+                        else:
+                            estimated_size = video_size
+                    else:
+                        # Fallback to bitrate-based estimation
+                        duration = info.get('duration', 0) or 0
+                        video_bitrate = fmt.get('vbr', 0) or fmt.get('tbr', 0) or 1000
+                        audio_bitrate = best_audio.get('abr', 0) or best_audio.get('tbr', 0) or 128
+                        if duration > 0:
+                            total_bitrate = video_bitrate + audio_bitrate
+                            estimated_size = int((total_bitrate * 1000 * duration) / 8)
+                        else:
+                            estimated_size = None
                     
                     quality_info = {
                         'format_id': f"{fmt['format_id']}+{best_audio['format_id']}",
