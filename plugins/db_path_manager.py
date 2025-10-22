@@ -21,8 +21,11 @@ class DatabasePathManager:
             # Default for other systems (macOS, etc.)
             base_path = os.environ.get('DB_BASE_PATH_DEFAULT', './data/database')
         
+        if not os.environ.get('DB_BASE_PATH_WINDOWS') and not os.environ.get('DB_BASE_PATH_LINUX') and not os.environ.get('DB_BASE_PATH_DEFAULT'):
+            print("Warning: No database path environment variable set. Using default path.")
+
         return base_path
-    
+
     def get_sqlite_db_path(self):
         """Get full path for SQLite database file"""
         base_path = self.get_database_base_path()

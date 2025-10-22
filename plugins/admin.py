@@ -12,7 +12,7 @@ import instaloader
 from instaloader import InstaloaderException
 from datetime import datetime as _dt
 from plugins import constant
-from plugins.sqlite_db_wrapper import DB
+from plugins.db_wrapper import DB
 
 import shutil, platform, asyncio, os as _os
 import psutil
