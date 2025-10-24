@@ -28,22 +28,23 @@ class StreamBuffer(io.BytesIO):
         self.name = name
 
 
-async def download_to_memory_stream(url: str, max_size_mb: int = 50) -> Optional[StreamBuffer]:
+async def download_to_memory_stream(url: str, max_size_mb: int = 50, headers=None) -> Optional[StreamBuffer]:
     """
     Download file directly to memory for small files (< max_size_mb)
     Returns a StreamBuffer that can be used directly with Pyrogram send methods
     """
     try:
-        # Headers to mimic a real browser and avoid 403 errors
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        }
+        # Use custom headers if provided, otherwise use default
+        if headers is None:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
         
         # Dynamic timeout based on expected file size
         timeout_seconds = min(60, max(15, max_size_mb * 2))

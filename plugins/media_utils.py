@@ -118,22 +118,23 @@ async def download_file_simple(url, file_path):
         print(f"Download error: {e}")
         raise e
 
-async def download_stream_to_file(url, out_path, chunk_size=64*1024):
+async def download_stream_to_file(url, out_path, chunk_size=64*1024, headers=None):
     """
     Async file download using aiohttp for better performance and non-blocking I/O.
     Returns (file_path, total_size) for compatibility with download_file_simple.
     """
     try:
-        # Headers to mimic a real browser and avoid 403 errors
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'DNT': '1',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        }
+        # Use custom headers if provided, otherwise use default
+        if headers is None:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'DNT': '1',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
         
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:

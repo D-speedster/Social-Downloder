@@ -367,69 +367,81 @@ async def show_video(client: Client, message: Message):
         youtube_logger.error(f"خطا در استخراج اطلاعات: {err_text}")
         print(f"Error processing YouTube link: {err_text}")
 
-        # منطق تلاش‌های جایگزین: ابتدا بدون کوکی/پراکسی، سپس بر اساس نیاز
+        # Helper to determine if a cookie might be needed
         def _needs_cookie(msg: str) -> bool:
             msg_l = (msg or '').lower()
-            hints = ['login required', 'sign in', 'age', 'restricted', 'private', 'consent']
+            hints = ['login required', 'sign in', 'age', 'restricted', 'private', 'consent', 'unavailable']
             return any(h in msg_l for h in hints)
 
-        cookiefile = None
-        cookie_id_used = None
-        # اجرای تلاش‌های جایگزین بدون بلاک try بیرونی که لازم نیست
-        # Attempt 1: فقط کوکی اگر لازم باشد
-        info = None
-        if _needs_cookie(err_text):
-            try:
-                    cookiefile, cookie_id_used = get_rotated_cookie_file(None)
-                    if cookiefile:
+        # Helper function for cookie-based extraction with retries
+        async def _extract_info_with_cookie_retry(url, ydl_opts, env_proxy, user_id, max_retries=3):
+            info = None
+            last_error = None
+            
+            for attempt in range(max_retries):
+                current_cookiefile = None
+                current_cookie_id = None
+                try:
+                    # Always try to get a new rotated cookie for each attempt
+                    current_cookiefile, current_cookie_id = get_rotated_cookie_file(None)
+                    
+                    if current_cookiefile:
                         opts = dict(ydl_opts)
-                        opts['cookiefile'] = cookiefile
-                        # ست کردن پروکسی از محیط در صورت وجود
+                        opts['cookiefile'] = current_cookiefile
                         if env_proxy:
                             opts['proxy'] = env_proxy
-                        performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
-                        youtube_logger.debug("تلاش مجدد با کوکی")
+                        
+                        performance_logger.info(f"[USER:{user_id}] Retrying with cookie (attempt {attempt+1}/{max_retries}), cookie_id={current_cookie_id}...")
+                        youtube_logger.debug(f"تلاش مجدد با کوکی (تلاش {attempt+1}/{max_retries})")
+                        
                         info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
-                        if cookie_id_used:
-                            mark_cookie_used(cookie_id_used, True)
-            except Exception as ce:
-                    youtube_logger.error(f"خطا در تلاش با کوکی: {ce}")
-                    if cookie_id_used:
+                        
+                        if info:
+                            mark_cookie_used(current_cookie_id, True)
+                            youtube_logger.debug(f"استخراج اطلاعات با کوکی موفق: عنوان={info.get('title', 'نامشخص')}")
+                            return info # Success, return info
+                        else:
+                            # If info is None but no exception, mark cookie as bad
+                            mark_cookie_used(current_cookie_id, False)
+                            last_error = "اطلاعاتی از yt-dlp دریافت نشد با کوکی"
+                    else:
+                        last_error = "کوکی معتبری برای تلاش مجدد یافت نشد"
+                        youtube_logger.warning(f"کوکی معتبری برای تلاش مجدد یافت نشد در تلاش {attempt+1}")
+
+                except Exception as ce:
+                    last_error = str(ce)
+                    youtube_logger.error(f"خطا در تلاش با کوکی (تلاش {attempt+1}): {ce}")
+                    if current_cookie_id:
                         try:
-                            mark_cookie_used(cookie_id_used, False)
+                            mark_cookie_used(current_cookie_id, False)
                         except Exception:
                             pass
+                
+                # Small delay before next retry
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(1.0 * (attempt + 1)) # Exponential backoff
 
-        # Attempt 2: تلاش مجدد با کوکی اگر قبلاً موفق نبوده
-        if not info:
+            # If all retries fail
+            if last_error:
+                raise RuntimeError(f"تمام تلاش‌ها برای استخراج با کوکی شکست خورد: {last_error}")
+            return None # Should not reach here if max_retries > 0 and no info found
+
+        info = None
+        
+        # If the initial error suggests a cookie is needed, or if it's a general failure, try with rotated cookies.
+        # We will try up to 3 times with different cookies if available.
+        if _needs_cookie(err_text) or "اطلاعاتی از yt-dlp دریافت نشد" in err_text or "HTTP Error 403" in err_text or "HTTP Error 401" in err_text:
             try:
-                if not cookiefile:
-                    cookiefile, cookie_id_used = get_rotated_cookie_file(None)
-                if cookiefile:
-                    opts = dict(ydl_opts)
-                    opts['cookiefile'] = cookiefile
-                    # ست کردن پروکسی از محیط در صورت وجود
-                    if env_proxy:
-                        opts['proxy'] = env_proxy
-                    performance_logger.info(f"[USER:{user_id}] Retrying with cookie...")
-                    youtube_logger.debug("تلاش مجدد با کوکی")
-                    info = await asyncio.to_thread(lambda: YoutubeDL(opts).extract_info(url, download=False))
+                info = await _extract_info_with_cookie_retry(url, ydl_opts, env_proxy, user_id, max_retries=3)
+            except RuntimeError as re:
+                youtube_logger.error(f"خطا در تلاش‌های جایگزین با کوکی: {re}")
+                err_text = str(re) # Update error text for final message
             except Exception as ce:
-                youtube_logger.error(f"خطا در تلاش مجدد با کوکی: {ce}")
-                    
-                    
-                if info and cookie_id_used:
-                     mark_cookie_used(cookie_id_used, True)
-            except Exception as cpe:
-                youtube_logger.error(f"خطا در تلاش ترکیبی: {cpe}")
-                if cookie_id_used:
-                    try:
-                        mark_cookie_used(cookie_id_used, False)
-                    except Exception:
-                        pass
+                youtube_logger.error(f"خطا در تابع _extract_info_with_cookie_retry: {ce}")
+                err_text = str(ce) # Update error text for final message
 
         if info:
-            # موفقیت در fallback
+            # Successful fallback
             with open("yt_dlp_info_fallback.json", "w", encoding="utf-8") as f:
                 json.dump(info, f, ensure_ascii=False, indent=4)
             print("Fallback extracted info written to yt_dlp_info_fallback.json")
@@ -446,15 +458,15 @@ async def show_video(client: Client, message: Message):
             if total_time > 8.0:
                 performance_logger.warning(f"[USER:{user_id}] ⚠️ SLOW FALLBACK: {total_time:.2f}s (Target: <8s)")
             else:
-                performance_logger.info(f"[USER:{user_id}] ✅ GOOD FALLBACK: {total_time:.2f}s (Target: <8s)")
+                performance_logger.info(f"[USER:{user_id}] ✅ GOOD PERFORMANCE: {total_time:.2f}s (Target: <8s)")
         else:
-            # شکست همراه با پیام شفاف و بدون دسترسی به info.get از None
+            # Fallback also failed
             performance_logger.error(f"[USER:{user_id}] Fallback extraction also failed: {err_text}")
             youtube_logger.error("استخراج جایگزین نیز ناکام ماند؛ info=None")
             try:
                 await processing_message.edit_text(
                     "❌ **خطا در پردازش لینک یوتیوب**\n\n"
-                    "امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
+                    f"امکان دریافت اطلاعات ویدیو وجود ندارد. جزئیات: {err_text}\n"
                     "راهکارها: استفاده از کوکی معتبر، بررسی پراکسی سیستم، یا تلاش دوباره.",
                     parse_mode=ParseMode.MARKDOWN
                 )

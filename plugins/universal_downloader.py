@@ -22,7 +22,7 @@ import requests
 import time
 from PIL import Image
 import subprocess
-from config import BOT_TOKEN
+from config import BOT_TOKEN, RAPIDAPI_KEY
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user, get_user_active
 
 # Configure Universal Downloader logger
@@ -246,7 +246,7 @@ def _api_request_sync(url):
             payload = json.dumps({"url": url})
             
             headers = {
-                'x-rapidapi-key': "d51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf",
+                'x-rapidapi-key': RAPIDAPI_KEY,
                 'x-rapidapi-host': "social-download-all-in-one.p.rapidapi.com",
                 'Content-Type': "application/json"
             }

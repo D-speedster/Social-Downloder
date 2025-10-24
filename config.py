@@ -91,3 +91,9 @@ TELEGRAM_THROTTLING = {
 # با توجه به نتایج عملی، فایل نهایی معمولاً حدود 30-35% از مجموع ویدیو+صدا است
 # این مقدار برای تخمین دقیق‌تر اندازه نهایی خروجی پس از merge/encode تنظیم شد
 YOUTUBE_FILESIZE_CORRECTION_FACTOR = float(os.environ.get("YOUTUBE_FILESIZE_CORRECTION_FACTOR", "0.30"))
+
+# RapidAPI Key for Universal Downloader (security: load from environment)
+RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
+
+if not RAPIDAPI_KEY:
+    print("WARNING: RAPIDAPI_KEY environment variable is not set. Universal downloader might not function correctly.")
