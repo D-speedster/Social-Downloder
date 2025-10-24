@@ -260,6 +260,7 @@ async def show_video(client: Client, message: Message):
         ydl_opts = {
             'quiet': True,
             'simulate': True,
+            'cookies': 'cookie_youtube.txt',
             'extractor_retries': 0,  # No retries for maximum speed
             'fragment_retries': 0,   # No retries for maximum speed
             'socket_timeout': 8,     # Aggressive timeout for speed
