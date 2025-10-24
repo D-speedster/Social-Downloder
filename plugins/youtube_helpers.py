@@ -1,4 +1,4 @@
-# youtube_helpers.py - نسخه فیکس شده نهایی با حل مشکل merge
+# youtube_helpers.py - نسخه بهینه شده برای سرعت بالا
 
 import os
 import asyncio
@@ -17,7 +17,7 @@ performance_logger = get_performance_logger()
 
 async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None):
     """
-    دانلود فایل از یوتیوب با فرمت مشخص شده
+    دانلود فایل از یوتیوب با فرمت مشخص شده - نسخه بهینه شده
     """
     try:
         # بهینه‌سازی مسیر temp برای سرعت بالا
@@ -28,7 +28,6 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             # تلاش برای استفاده از سریع‌ترین مسیر temp موجود
             fast_temp_paths = []
             
-            # در ویندوز، تلاش برای استفاده از RAM disk یا SSD
             if os.name == 'nt':  # Windows
                 for drive in ['R:', 'Z:', 'T:']:
                     if os.path.exists(drive + '\\'):
@@ -42,7 +41,6 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
                     fast_temp_paths.append('/dev/shm')
                 fast_temp_paths.append('/tmp')
             
-            # انتخاب اولین مسیر قابل دسترس
             temp_dir = None
             for path in fast_temp_paths:
                 try:
@@ -61,12 +59,12 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         
         youtube_helpers_logger.info(f"استفاده از temp directory: {temp_dir}")
         youtube_helpers_logger.info(f"🚀 شروع دانلود: {url}")
-        youtube_helpers_logger.info(f"📋 Format ID: '{format_id}' (Type: {type(format_id).__name__})")
+        youtube_helpers_logger.info(f"📋 Format ID: '{format_id}'")
         
-        # 🔍 چک کردن اینکه format_id شامل + هست یا نه
         is_combined_format = '+' in str(format_id)
-        youtube_helpers_logger.info(f"🔀 Combined format (video+audio): {is_combined_format}")
+        youtube_helpers_logger.info(f"🔀 Combined format: {is_combined_format}")
         
+        # 🔥 پیدا کردن ffmpeg
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
         
         if ffmpeg_path and (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
@@ -104,7 +102,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             'socket_timeout': 60,
             'retries': 5,
             'fragment_retries': 5,
-            'concurrent_fragments': 8,
+            'concurrent_fragments': 8,  # دانلود همزمان چند قطعه
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -114,43 +112,50 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             'extractor_retries': 5,
             'file_access_retries': 3,
             'writesubtitles': False,
-            'writeautomaticsub': False
+            'writeautomaticsub': False,
+            'writethumbnail': False,  # 🔥 غیرفعال کردن دانلود thumbnail
+            'writeinfojson': False,   # 🔥 غیرفعال کردن نوشتن info.json
         }
         
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
         
-        # 🔥 فیکس اصلی: تنظیمات صحیح برای merge
+        # 🔥 تنظیمات بهینه FFmpeg - فقط merge بدون re-encode
         if ffmpeg_path and (shutil.which(ffmpeg_path) or os.path.exists(ffmpeg_path)):
             ydl_opts['ffmpeg_location'] = ffmpeg_path
             
-            # ✅ حتماً merge_output_format تنظیم کن
+            # ✅ فقط MP4 برای merge
             ydl_opts['merge_output_format'] = 'mp4'
             
-            # ✅ postprocessors صحیح با ترتیب درست
-            ydl_opts['postprocessors'] = [
-                # اول: Merge کردن video+audio (اگه جدا باشن)
-                {
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4',
-                },
-                # دوم: اضافه کردن metadata
-                {
-                    'key': 'FFmpegMetadata',
-                    'add_metadata': True,
-                },
-            ]
+            # ✅ فقط یک postprocessor: FFmpegVideoRemuxer (بدون re-encode)
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegVideoRemuxer',  # 🔥 تغییر از VideoConvertor به VideoRemuxer
+                'preferedformat': 'mp4',
+            }]
             
-            # ✅ postprocessor_args برای جلوگیری از re-encode
+            # ✅ آرگومان‌های FFmpeg: copy بدون re-encode + faststart
             ydl_opts['postprocessor_args'] = {
-                'ffmpeg': ['-c:v', 'copy', '-c:a', 'copy', '-movflags', '+faststart']
+                'ffmpeg': [
+                    '-c:v', 'copy',      # کپی ویدیو بدون re-encode
+                    '-c:a', 'copy',      # کپی صدا بدون re-encode
+                    '-movflags', '+faststart',  # بهینه‌سازی برای streaming
+                ]
             }
             
-            youtube_helpers_logger.debug("✅ تنظیمات FFmpeg: merge + metadata + faststart (بدون re-encode)")
+            youtube_helpers_logger.debug("✅ FFmpeg: remux only (NO re-encode) + faststart")
         
-        # Add progress hook
+        # Add progress hook با throttling
         if progress_hook:
-            ydl_opts['progress_hooks'] = [progress_hook]
+            # 🔥 Throttle progress updates (هر 500ms یک بار)
+            last_call = {'time': 0}
+            def throttled_progress_hook(d):
+                import time
+                now = time.time()
+                if now - last_call['time'] >= 0.5:  # حداکثر 2 بار در ثانیه
+                    last_call['time'] = now
+                    progress_hook(d)
+            
+            ydl_opts['progress_hooks'] = [throttled_progress_hook]
         
         cookie_id_used = None
 
@@ -218,7 +223,10 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         downloaded_files = [f for f in os.listdir(temp_dir) 
                           if os.path.isfile(os.path.join(temp_dir, f)) 
                           and not f.endswith('.part')
-                          and not f.endswith('.ytdl')]
+                          and not f.endswith('.ytdl')
+                          and not f.endswith('.json')  # 🔥 حذف فایل‌های json
+                          and not f.endswith('.webp')  # 🔥 حذف thumbnail
+                          and not f.endswith('.jpg')]
         
         if not downloaded_files:
             youtube_helpers_logger.error("هیچ فایل دانلود شده‌ای یافت نشد")
@@ -233,100 +241,33 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         file_size = os.path.getsize(downloaded_file)
         
         youtube_helpers_logger.info(f"✅ دانلود موفق: {os.path.basename(downloaded_file)}")
-        youtube_helpers_logger.info(f"📦 حجم فایل دانلود شده: {file_size / (1024*1024):.2f} MB")
-        youtube_helpers_logger.info(f"💾 حجم دقیق به بایت: {file_size} bytes")
+        youtube_helpers_logger.info(f"📦 حجم: {file_size / (1024*1024):.2f} MB ({file_size} bytes)")
         
-        # 🔍 بررسی دقیق metadata
-        if ffmpeg_path:
+        # 🔥 حذف بررسی metadata برای صرفه‌جویی در زمان
+        # فقط در صورت debug mode فعال می‌شود
+        if os.environ.get('DEBUG_MODE') == '1' and ffmpeg_path:
             try:
                 ffprobe_path = ffmpeg_path.replace('ffmpeg', 'ffprobe')
-                if not os.path.exists(ffprobe_path):
-                    ffprobe_path = shutil.which('ffprobe')
-                
-                if ffprobe_path:
-                    youtube_helpers_logger.info("="*60)
-                    youtube_helpers_logger.info("🔍 بررسی دقیق فایل با ffprobe")
-                    youtube_helpers_logger.info("="*60)
+                if os.path.exists(ffprobe_path) or shutil.which('ffprobe'):
+                    if not os.path.exists(ffprobe_path):
+                        ffprobe_path = shutil.which('ffprobe')
                     
                     cmd = [
                         ffprobe_path, '-v', 'error',
-                        '-show_entries', 'format=size,duration,bit_rate,format_name',
-                        '-show_entries', 'stream=index,codec_type,codec_name,width,height,bit_rate',
+                        '-show_entries', 'stream=codec_type',
                         '-of', 'json',
                         downloaded_file
                     ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=15)
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
                     
                     if result.returncode == 0:
                         metadata = json.loads(result.stdout)
-                        fmt = metadata.get('format', {})
                         streams = metadata.get('streams', [])
-                        
-                        # اطلاعات format
-                        youtube_helpers_logger.info(f"🎞️  Format: {fmt.get('format_name', 'N/A')}")
-                        duration = float(fmt.get('duration', 0) or 0)
-                        youtube_helpers_logger.info(f"⏱️  Duration: {duration:.1f}s ({duration/60:.1f} min)")
-                        
-                        total_bitrate = int(fmt.get('bit_rate', 0) or 0) // 1000
-                        youtube_helpers_logger.info(f"📊 Total Bitrate: {total_bitrate} kbps")
-                        
-                        size_meta = int(fmt.get('size', 0) or 0)
-                        youtube_helpers_logger.info(f"📦 Size (metadata): {size_meta / (1024*1024):.2f} MB")
-                        
-                        # تعداد streams
-                        youtube_helpers_logger.info(f"🎬 تعداد streams: {len(streams)}")
-                        
-                        video_count = 0
-                        audio_count = 0
-                        
-                        # جزئیات هر stream
-                        for i, s in enumerate(streams):
-                            stype = s.get('codec_type', 'unknown')
-                            codec = s.get('codec_name', 'unknown')
-                            
-                            if stype == 'video':
-                                video_count += 1
-                                w = s.get('width', 0)
-                                h = s.get('height', 0)
-                                vbr = int(s.get('bit_rate', 0) or 0) // 1000
-                                youtube_helpers_logger.info(
-                                    f"  📺 Video Stream #{video_count}: "
-                                    f"codec={codec}, resolution={w}x{h}, bitrate={vbr}kbps"
-                                )
-                            elif stype == 'audio':
-                                audio_count += 1
-                                abr = int(s.get('bit_rate', 0) or 0) // 1000
-                                youtube_helpers_logger.info(
-                                    f"  🔊 Audio Stream #{audio_count}: "
-                                    f"codec={codec}, bitrate={abr}kbps"
-                                )
-                        
-                        # نتیجه نهایی
-                        youtube_helpers_logger.info("")
-                        youtube_helpers_logger.info(f"✅ خلاصه: {video_count} video + {audio_count} audio streams")
-                        
-                        # هشدارها
-                        if video_count == 0:
-                            youtube_helpers_logger.error("❌ هیچ stream ویدیویی یافت نشد!")
-                        if audio_count == 0:
-                            youtube_helpers_logger.warning("⚠️ هیچ stream صوتی یافت نشد!")
-                        
-                        # مقایسه حجم
-                        if size_meta > 0:
-                            diff_mb = abs(file_size - size_meta) / (1024*1024)
-                            if diff_mb > 1:
-                                youtube_helpers_logger.warning(
-                                    f"⚠️ اختلاف حجم: {diff_mb:.2f} MB "
-                                    f"(file={file_size/(1024*1024):.2f}MB vs meta={size_meta/(1024*1024):.2f}MB)"
-                                )
-                        
-                        youtube_helpers_logger.info("="*60)
-                        
-                    else:
-                        youtube_helpers_logger.warning(f"⚠️ ffprobe failed: {result.stderr}")
-                        
+                        video_count = sum(1 for s in streams if s.get('codec_type') == 'video')
+                        audio_count = sum(1 for s in streams if s.get('codec_type') == 'audio')
+                        youtube_helpers_logger.debug(f"Streams: {video_count}V + {audio_count}A")
             except Exception as e:
-                youtube_helpers_logger.debug(f"خطا در بررسی metadata: {e}")
+                youtube_helpers_logger.debug(f"خطا در بررسی سریع metadata: {e}")
         
         return downloaded_file
         
@@ -341,7 +282,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
 
 
 async def get_direct_download_url(url, format_id):
-    """دریافت لینک مستقیم دانلود"""
+    """دریافت لینک مستقیم دانلود - بهینه شده"""
     try:
         youtube_helpers_logger.info(f"دریافت لینک مستقیم: {url} با فرمت {format_id}")
         
@@ -351,8 +292,12 @@ async def get_direct_download_url(url, format_id):
             'simulate': True,
             'noplaylist': True,
             'extract_flat': False,
-            'proxy': 'socks5h://127.0.0.1:1084',
+            'socket_timeout': 10,  # 🔥 کاهش timeout
         }
+        
+        env_proxy = os.environ.get('PROXY') or os.environ.get('HTTP_PROXY') or os.environ.get('HTTPS_PROXY')
+        if env_proxy:
+            ydl_opts['proxy'] = env_proxy
         
         cookie_id_used = None
         
@@ -430,4 +375,4 @@ async def safe_edit_text(message, text, parse_mode=None, reply_markup=None):
     try:
         await message.edit_text(text=text, parse_mode=parse_mode, reply_markup=reply_markup)
     except Exception as e:
-        youtube_helpers_logger.error(f"خطا در ویرایش پیام: {e}")
+        youtube_helpers_logger.debug(f"خطا در ویرایش پیام: {e}")
