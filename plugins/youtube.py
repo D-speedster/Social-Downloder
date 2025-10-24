@@ -275,7 +275,14 @@ async def show_video(client: Client, message: Message):
             'writeautomaticsub': False, # Skip auto subtitles
             'writethumbnail': True, # Skip thumbnail download
             'writeinfojson': False,  # Skip info json writing
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
+            # استفاده از کلاینت mweb که به PO Token نیاز دارد
+            'extractor_args': {
+                'player_client': ['mweb'],
+            },
+            # تنظیمات اضافی برای مدیریت rate limit
+            'sleep_interval': 5,     # تأخیر 5 ثانیه بین درخواست‌ها
+            'max_sleep_interval': 10,
+            'sleep_interval_requests': 1,
         }
         if env_proxy:
             ydl_opts['proxy'] = env_proxy
