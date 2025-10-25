@@ -140,12 +140,12 @@ async def main():
             "api_id": API_ID,
             "api_hash": API_HASH,
             "plugins": plugins,
-            "workers": 16,  # افزایش workers برای سرعت بالا
-            "sleep_threshold": 60,  # کاهش sleep threshold
-            "max_concurrent_transmissions": 8,  # افزایش همزمانی
+            "workers": 32,  # افزایش بیشتر workers
+            "sleep_threshold": 30,  # کاهش بیشتر sleep threshold
+            "max_concurrent_transmissions": 16,  # افزایش بیشتر همزمانی
             "test_mode": False,
             "ipv6": False,
-            "no_updates": False,  # فعال کردن updates
+            "no_updates": False,
             "takeout": False,
         }
         

@@ -19,7 +19,6 @@ from plugins.concurrency import get_queue_stats
 from plugins import constant
 from utils.util import convert_size
 from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload, concurrent_download_upload
-from plugins.ultra_fast_upload import ultra_fast_upload, smart_upload_selector
 import random
 import subprocess
 from config import YOUTUBE_FILESIZE_CORRECTION_FACTOR
@@ -492,7 +491,7 @@ async def answer(client: Client, callback_query: CallbackQuery):
         youtube_callback_logger.info(f"ایجاد job با ID: {job_id}")
 
         def status_hook(d):
-            nonlocal progress, start_time
+            nonlocal progress
             if d['status'] == 'downloading':
                 try:
                     if 'total_bytes' in d:
@@ -501,35 +500,28 @@ async def answer(client: Client, callback_query: CallbackQuery):
                         progress = int((d['downloaded_bytes'] / d['total_bytes_estimate']) * 100)
                     else:
                         progress = 0
-                    
-                    # Update job status
-                    DB().update_job_progress(job_id, progress)
-                    youtube_callback_logger.debug(f"پیشرفت دانلود: {progress}%")
-                except Exception as e:
-                    youtube_callback_logger.error(f"خطا در محاسبه پیشرفت: {e}")
+                except Exception:
+                    pass  # نادیده گرفتن خطاها
 
         async def progress_display():
             last_progress = -1
             while progress < 100:
                 try:
-                    # فقط در صورت تغییر قابل توجه پیشرفت، پیام را به‌روزرسانی کن
-                    if progress - last_progress >= 5 or progress == 0:  # هر 5% یا شروع
-                        elapsed = time.time() - start_time
-                        # ایجاد نوار پیشرفت بصری
+                    # به‌روزرسانی فقط هر 10% یا شروع
+                    if progress - last_progress >= 10 or (progress > 0 and last_progress == -1):
+                        # نوار پیشرفت ساده
                         progress_bar = "█" * (progress // 5) + "░" * (20 - progress // 5)
                         
                         await safe_edit_text(
                             f"📥 **در حال دانلود** {progress}%\n\n"
-                            f"🏷️ {info.get('title', 'نامشخص')[:50]}{'...' if len(info.get('title', '')) > 50 else ''}\n"
                             f"📊 [{progress_bar}] {progress}%\n"
-                            f"⏱️ {int(elapsed)}s | 🎛️ {step.get('sort', 'نامشخص')} | 💾 {step.get('filesize', 'نامشخص')}\n\n"
+                            f"💾 {step.get('filesize', 'نامشخص')}\n\n"
                             f"💡 پس از دانلود، آپلود شروع می‌شود",
                             parse_mode=ParseMode.MARKDOWN
                         )
                         last_progress = progress
-                    await asyncio.sleep(3)  # کاهش فرکانس به‌روزرسانی
-                except Exception as e:
-                    youtube_callback_logger.error(f"خطا در نمایش پیشرفت: {e}")
+                    await asyncio.sleep(5)  # کاهش بیشتر فرکانس
+                except Exception:
                     break
 
         # Start progress display task
@@ -663,51 +655,66 @@ async def answer(client: Client, callback_query: CallbackQuery):
             upload_progress = {'current': 0, 'total': 0, 'last_update': 0}
             
             async def upload_progress_callback(current, total):
-                upload_progress['current'] = current
-                upload_progress['total'] = total
-                
-                # به‌روزرسانی هر 3 ثانیه یا در 10% پیشرفت
+                # به‌روزرسانی فقط هر 5 ثانیه یا در 15% پیشرفت
                 now = time.time()
                 progress_percent = (current / total * 100) if total > 0 else 0
                 
-                if (now - upload_progress['last_update'] >= 3.0 or 
-                    progress_percent - (upload_progress.get('last_percent', 0)) >= 10):
+                if (now - upload_progress.get('last_update', 0) >= 5.0 or 
+                    progress_percent - upload_progress.get('last_percent', 0) >= 15):
                     
                     upload_progress['last_update'] = now
                     upload_progress['last_percent'] = progress_percent
                     
                     try:
-                        # ایجاد نوار پیشرفت بصری
+                        # نوار پیشرفت ساده
                         progress_bar = "█" * int(progress_percent // 5) + "░" * (20 - int(progress_percent // 5))
-                        speed = current / max(1, now - t_ul_start)
                         
                         await safe_edit_text(
                             f"📤 **در حال آپلود** {progress_percent:.0f}%\n\n"
-                            f"🏷️ {info.get('title', 'نامشخص')[:50]}{'...' if len(info.get('title', '')) > 50 else ''}\n"
                             f"📊 [{progress_bar}] {progress_percent:.0f}%\n"
-                            f"📁 {convert_size(current)} / {convert_size(total)} | ⚡ {convert_size(speed)}/s\n\n"
+                            f"📁 {convert_size(current)} / {convert_size(total)}\n\n"
                             f"⏳ لطفاً صبر کنید...",
                             parse_mode=ParseMode.MARKDOWN
                         )
-                    except Exception as e:
-                        youtube_callback_logger.debug(f"خطا در نمایش پیشرفت آپلود: {e}")
+                    except Exception:
+                        pass  # نادیده گرفتن خطاهای نمایش
             
-            # 🚀 استفاده از آپلود فوق سریع جدید
+            # 🚀 آپلود مستقیم بدون هیچ واسطه‌ای
             t_ul_start = time.perf_counter()
-            upload_ok = await smart_upload_selector(
-                client=client,
-                chat_id=callback_query.message.chat.id,
-                file_path=downloaded_file,
-                media_type=media_type,
-                caption=caption,
-                progress_callback=upload_progress_callback,
-                reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
-            )
-            t_ul_end = time.perf_counter()
-            youtube_callback_logger.info(f"⏱️ زمان آپلود: {t_ul_end - t_ul_start:.2f}s")
             
-            if not upload_ok:
-                raise Exception("آپلود ناموفق بود")
+            try:
+                if media_type == "video":
+                    await client.send_video(
+                        chat_id=callback_query.message.chat.id,
+                        video=downloaded_file,
+                        caption=caption,
+                        progress=upload_progress_callback,
+                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+                    )
+                elif media_type == "audio":
+                    await client.send_audio(
+                        chat_id=callback_query.message.chat.id,
+                        audio=downloaded_file,
+                        caption=caption,
+                        progress=upload_progress_callback,
+                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+                    )
+                else:
+                    await client.send_document(
+                        chat_id=callback_query.message.chat.id,
+                        document=downloaded_file,
+                        caption=caption,
+                        progress=upload_progress_callback,
+                        reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
+                    )
+                    
+                t_ul_end = time.perf_counter()
+                youtube_callback_logger.info(f"⏱️ زمان آپلود: {t_ul_end - t_ul_start:.2f}s")
+                
+            except Exception as upload_error:
+                t_ul_end = time.perf_counter()
+                youtube_callback_logger.error(f"❌ خطا در آپلود: {upload_error}")
+                raise Exception(f"آپلود ناموفق بود: {upload_error}")
             
             # آپلود موفق
             DB().update_job_status(job_id, 'completed')
