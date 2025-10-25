@@ -127,20 +127,8 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
             # ✅ فقط MP4 برای merge
             ydl_opts['merge_output_format'] = 'mp4'
             
-            # ✅ فقط یک postprocessor: FFmpegVideoRemuxer (بدون re-encode)
-            ydl_opts['postprocessors'] = [{
-                'key': 'FFmpegVideoRemuxer',  # 🔥 تغییر از VideoConvertor به VideoRemuxer
-                'preferedformat': 'mp4',
-            }]
-            
-            # ✅ آرگومان‌های FFmpeg: copy بدون re-encode + faststart
-            ydl_opts['postprocessor_args'] = {
-                'ffmpeg': [
-                    '-c:v', 'copy',      # کپی ویدیو بدون re-encode
-                    '-c:a', 'copy',      # کپی صدا بدون re-encode
-                    '-movflags', '+faststart',  # بهینه‌سازی برای streaming
-                ]
-            }
+            # 🔥 حذف postprocessors برای سرعت بالا - فقط merge ساده
+            # yt-dlp خودش merge می‌کند بدون نیاز به FFmpeg اضافی
             
             youtube_helpers_logger.debug("✅ FFmpeg: remux only (NO re-encode) + faststart")
         
@@ -243,31 +231,7 @@ async def download_youtube_file(url, format_id, progress_hook=None, out_dir=None
         youtube_helpers_logger.info(f"✅ دانلود موفق: {os.path.basename(downloaded_file)}")
         youtube_helpers_logger.info(f"📦 حجم: {file_size / (1024*1024):.2f} MB ({file_size} bytes)")
         
-        # 🔥 حذف بررسی metadata برای صرفه‌جویی در زمان
-        # فقط در صورت debug mode فعال می‌شود
-        if os.environ.get('DEBUG_MODE') == '1' and ffmpeg_path:
-            try:
-                ffprobe_path = ffmpeg_path.replace('ffmpeg', 'ffprobe')
-                if os.path.exists(ffprobe_path) or shutil.which('ffprobe'):
-                    if not os.path.exists(ffprobe_path):
-                        ffprobe_path = shutil.which('ffprobe')
-                    
-                    cmd = [
-                        ffprobe_path, '-v', 'error',
-                        '-show_entries', 'stream=codec_type',
-                        '-of', 'json',
-                        downloaded_file
-                    ]
-                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-                    
-                    if result.returncode == 0:
-                        metadata = json.loads(result.stdout)
-                        streams = metadata.get('streams', [])
-                        video_count = sum(1 for s in streams if s.get('codec_type') == 'video')
-                        audio_count = sum(1 for s in streams if s.get('codec_type') == 'audio')
-                        youtube_helpers_logger.debug(f"Streams: {video_count}V + {audio_count}A")
-            except Exception as e:
-                youtube_helpers_logger.debug(f"خطا در بررسی سریع metadata: {e}")
+        # 🔥 حذف کامل بررسی metadata برای سرعت بالا
         
         return downloaded_file
         

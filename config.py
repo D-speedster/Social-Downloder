@@ -74,17 +74,17 @@ youtube_next_fetch = 1  # time in minute
 
 EDIT_TIME = 5
 
-# Telegram throttling configuration
+# Telegram throttling configuration - بهینه شده برای سرعت بالا
 TELEGRAM_THROTTLING = {
-    'sleep_threshold': int(os.environ.get("TELEGRAM_SLEEP_THRESHOLD", "300")),  # 5 minutes
-    'flood_sleep_threshold': int(os.environ.get("TELEGRAM_FLOOD_SLEEP_THRESHOLD", "120")),  # 2 minutes
-    'max_concurrent_transmissions': int(os.environ.get("TELEGRAM_MAX_CONCURRENT", "2")),
-    'max_workers': min(4, int(os.environ.get("TELEGRAM_MAX_WORKERS", "4"))),  # Reduced workers
-    'upload_delay_small': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_SMALL", "0.1")),  # 100ms
-    'upload_delay_medium': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_MEDIUM", "0.2")),  # 200ms
-    'upload_delay_large': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_LARGE", "0.5")),  # 500ms
-    'retry_attempts': int(os.environ.get("TELEGRAM_RETRY_ATTEMPTS", "3")),
-    'base_retry_delay': float(os.environ.get("TELEGRAM_BASE_RETRY_DELAY", "1.0")),  # 1 second
+    'sleep_threshold': int(os.environ.get("TELEGRAM_SLEEP_THRESHOLD", "600")),  # 10 minutes
+    'flood_sleep_threshold': int(os.environ.get("TELEGRAM_FLOOD_SLEEP_THRESHOLD", "60")),  # 1 minute
+    'max_concurrent_transmissions': int(os.environ.get("TELEGRAM_MAX_CONCURRENT", "4")),  # افزایش همزمانی
+    'max_workers': min(8, int(os.environ.get("TELEGRAM_MAX_WORKERS", "8"))),  # افزایش workers
+    'upload_delay_small': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_SMALL", "0.0")),  # حذف تأخیر
+    'upload_delay_medium': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_MEDIUM", "0.0")),  # حذف تأخیر
+    'upload_delay_large': float(os.environ.get("TELEGRAM_UPLOAD_DELAY_LARGE", "0.1")),  # کاهش تأخیر
+    'retry_attempts': int(os.environ.get("TELEGRAM_RETRY_ATTEMPTS", "2")),  # کاهش تلاش‌ها
+    'base_retry_delay': float(os.environ.get("TELEGRAM_BASE_RETRY_DELAY", "0.5")),  # کاهش تأخیر
 }
 
 # YouTube file size correction factor
