@@ -133,18 +133,20 @@ async def main():
     try:
         print("🚀 در حال راه‌اندازی کلاینت ربات...")
         
-        # Prepare client configuration with optimized throttling settings
+        # 🔥 تنظیمات بهینه شده برای سرعت بالای آپلود
         client_config = {
             "name": "ytdownloader3_dev2",
             "bot_token": BOT_TOKEN,
             "api_id": API_ID,
             "api_hash": API_HASH,
             "plugins": plugins,
-            "workers": TELEGRAM_THROTTLING['max_workers'],
-            "sleep_threshold": TELEGRAM_THROTTLING['sleep_threshold'],
-            "max_concurrent_transmissions": TELEGRAM_THROTTLING['max_concurrent_transmissions'],
-            "test_mode": False,  # Use production servers
-            "ipv6": False,       # Disable IPv6 to avoid connection issues
+            "workers": 16,  # افزایش workers برای سرعت بالا
+            "sleep_threshold": 60,  # کاهش sleep threshold
+            "max_concurrent_transmissions": 8,  # افزایش همزمانی
+            "test_mode": False,
+            "ipv6": False,
+            "no_updates": False,  # فعال کردن updates
+            "takeout": False,
         }
         
         # Add proxy configuration if available

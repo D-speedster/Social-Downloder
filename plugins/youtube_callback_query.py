@@ -19,6 +19,7 @@ from plugins.concurrency import get_queue_stats
 from plugins import constant
 from utils.util import convert_size
 from plugins.stream_utils import smart_upload_strategy, direct_youtube_upload, concurrent_download_upload
+from plugins.ultra_fast_upload import ultra_fast_upload, smart_upload_selector
 import random
 import subprocess
 from config import YOUTUBE_FILESIZE_CORRECTION_FACTOR
@@ -508,20 +509,25 @@ async def answer(client: Client, callback_query: CallbackQuery):
                     youtube_callback_logger.error(f"خطا در محاسبه پیشرفت: {e}")
 
         async def progress_display():
+            last_progress = -1
             while progress < 100:
                 try:
-                    elapsed = time.time() - start_time
-                    await safe_edit_text(
-                        f"📥 **دانلود روی سرور در حال انجام**\n\n"
-                        f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
-                        f"📊 پیشرفت: {progress}%\n"
-                        f"⏱️ زمان سپری شده: {int(elapsed)}s\n"
-                        f"🎛️ نوع: {step.get('sort', 'نامشخص')}\n"
-                        f"💾 حجم تخمینی: {step.get('filesize', 'نامشخص')}\n\n"
-                        f"💡 پس از پایان دانلود، فایل به تلگرام آپلود می‌شود",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    await asyncio.sleep(2)
+                    # فقط در صورت تغییر قابل توجه پیشرفت، پیام را به‌روزرسانی کن
+                    if progress - last_progress >= 5 or progress == 0:  # هر 5% یا شروع
+                        elapsed = time.time() - start_time
+                        # ایجاد نوار پیشرفت بصری
+                        progress_bar = "█" * (progress // 5) + "░" * (20 - progress // 5)
+                        
+                        await safe_edit_text(
+                            f"📥 **در حال دانلود** {progress}%\n\n"
+                            f"🏷️ {info.get('title', 'نامشخص')[:50]}{'...' if len(info.get('title', '')) > 50 else ''}\n"
+                            f"📊 [{progress_bar}] {progress}%\n"
+                            f"⏱️ {int(elapsed)}s | 🎛️ {step.get('sort', 'نامشخص')} | 💾 {step.get('filesize', 'نامشخص')}\n\n"
+                            f"💡 پس از دانلود، آپلود شروع می‌شود",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        last_progress = progress
+                    await asyncio.sleep(3)  # کاهش فرکانس به‌روزرسانی
                 except Exception as e:
                     youtube_callback_logger.error(f"خطا در نمایش پیشرفت: {e}")
                     break
@@ -660,41 +666,41 @@ async def answer(client: Client, callback_query: CallbackQuery):
                 upload_progress['current'] = current
                 upload_progress['total'] = total
                 
-                # به‌روزرسانی هر 2 ثانیه یا در 10% پیشرفت
+                # به‌روزرسانی هر 3 ثانیه یا در 10% پیشرفت
                 now = time.time()
                 progress_percent = (current / total * 100) if total > 0 else 0
                 
-                if (now - upload_progress['last_update'] >= 2.0 or 
+                if (now - upload_progress['last_update'] >= 3.0 or 
                     progress_percent - (upload_progress.get('last_percent', 0)) >= 10):
                     
                     upload_progress['last_update'] = now
                     upload_progress['last_percent'] = progress_percent
                     
                     try:
+                        # ایجاد نوار پیشرفت بصری
+                        progress_bar = "█" * int(progress_percent // 5) + "░" * (20 - int(progress_percent // 5))
+                        speed = current / max(1, now - t_ul_start)
+                        
                         await safe_edit_text(
-                            callback_query.message,
-                            f"📤 **آپلود به تلگرام در حال انجام**\n\n"
-                            f"🏷️ عنوان: {info.get('title', 'نامشخص')}\n"
-                            f"📊 پیشرفت آپلود: {progress_percent:.1f}%\n"
-                            f"📁 آپلود شده: {convert_size(current)} از {convert_size(total)}\n"
-                            f"⚡ سرعت: {convert_size(current / max(1, now - t_ul_start))}/s\n\n"
+                            f"📤 **در حال آپلود** {progress_percent:.0f}%\n\n"
+                            f"🏷️ {info.get('title', 'نامشخص')[:50]}{'...' if len(info.get('title', '')) > 50 else ''}\n"
+                            f"📊 [{progress_bar}] {progress_percent:.0f}%\n"
+                            f"📁 {convert_size(current)} / {convert_size(total)} | ⚡ {convert_size(speed)}/s\n\n"
                             f"⏳ لطفاً صبر کنید...",
                             parse_mode=ParseMode.MARKDOWN
                         )
                     except Exception as e:
                         youtube_callback_logger.debug(f"خطا در نمایش پیشرفت آپلود: {e}")
             
-            # آپلود همیشه به‌صورت ویدیو برای حفظ thumbnail و مدت‌زمان
+            # 🚀 استفاده از آپلود فوق سریع جدید
             t_ul_start = time.perf_counter()
-            upload_ok = await smart_upload_strategy(
+            upload_ok = await smart_upload_selector(
                 client=client,
                 chat_id=callback_query.message.chat.id,
                 file_path=downloaded_file,
                 media_type=media_type,
                 caption=caption,
-                duration=info.get('duration'),
-                supports_streaming=True,
-                progress=upload_progress_callback,
+                progress_callback=upload_progress_callback,
                 reply_to_message_id=callback_query.message.reply_to_message.message_id if callback_query.message.reply_to_message else None
             )
             t_ul_end = time.perf_counter()
