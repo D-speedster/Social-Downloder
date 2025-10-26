@@ -261,6 +261,16 @@ async def start_download(
         # Prepare caption
         caption = f"🎬 {video_info['title']}"
         
+        # Download thumbnail for video
+        thumbnail_path = None
+        if media_type == 'video' and video_info.get('thumbnail'):
+            try:
+                from plugins.youtube_handler import download_thumbnail
+                thumbnail_path = await download_thumbnail(video_info['thumbnail'])
+                logger.info(f"Thumbnail downloaded: {thumbnail_path}")
+            except Exception as e:
+                logger.warning(f"Failed to download thumbnail: {e}")
+        
         # Upload file
         upload_start = time.time()
         success = await youtube_uploader.upload_with_streaming(
@@ -272,6 +282,7 @@ async def start_download(
             duration=video_info['duration'],
             title=video_info['title'],
             performer=video_info['uploader'],
+            thumbnail=thumbnail_path,  # Add thumbnail
             progress_callback=upload_progress_callback,
             reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
         )
@@ -326,9 +337,17 @@ async def start_download(
         except:
             pass
         
-        # Clean up downloaded file
+        # Clean up downloaded file and thumbnail
         if downloaded_file:
             try:
                 youtube_downloader.cleanup(downloaded_file)
             except:
                 pass
+        
+        # Clean up thumbnail
+        if 'thumbnail_path' in locals() and thumbnail_path and os.path.exists(thumbnail_path):
+            try:
+                os.unlink(thumbnail_path)
+                logger.info(f"Thumbnail cleaned up: {thumbnail_path}")
+            except Exception as e:
+                logger.warning(f"Thumbnail cleanup error: {e}")

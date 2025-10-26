@@ -4,6 +4,7 @@ YouTube Uploader - آپلود بهینه با streaming و chunking
 """
 
 import os
+import time
 import asyncio
 from typing import Optional, Callable
 from pyrogram import Client
@@ -12,8 +13,8 @@ from plugins.logger_config import get_logger
 
 logger = get_logger('youtube_uploader')
 
-# Optimal chunk size for Telegram (512KB - 1MB works best)
-CHUNK_SIZE = 524288  # 512KB
+# Optimal chunk size for high-speed servers (larger chunks for better throughput)
+CHUNK_SIZE = 1048576  # 1MB for high-speed connections
 
 class YouTubeUploader:
     """کلاس آپلود بهینه به تلگرام"""
@@ -50,17 +51,26 @@ class YouTubeUploader:
             
             # Get file size
             file_size = os.path.getsize(file_path)
-            logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
+            file_size_mb = file_size / (1024*1024)
+            logger.info(f"File size: {file_size_mb:.2f} MB")
             
-            # Wrapper for progress callback
+            # Optimize progress callback frequency for large files
+            progress_update_interval = 2.0 if file_size_mb > 100 else 1.0
+            last_progress_time = 0
+            
+            # Wrapper for progress callback with throttling
             async def progress_wrapper(current, total):
+                nonlocal last_progress_time
                 if progress_callback:
                     try:
-                        await progress_callback(current, total)
+                        current_time = time.time()
+                        if current_time - last_progress_time >= progress_update_interval:
+                            last_progress_time = current_time
+                            await progress_callback(current, total)
                     except Exception as e:
                         logger.debug(f"Progress callback error: {e}")
             
-            # Upload video
+            # Upload video with optimized settings
             await client.send_video(
                 chat_id=chat_id,
                 video=file_path,
@@ -69,7 +79,10 @@ class YouTubeUploader:
                 thumb=thumbnail,
                 supports_streaming=True,
                 progress=progress_wrapper,
-                reply_to_message_id=reply_to_message_id
+                reply_to_message_id=reply_to_message_id,
+                # Optimizations for speed
+                disable_notification=False,
+                parse_mode=None
             )
             
             logger.info("Video upload completed successfully")
