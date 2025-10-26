@@ -67,6 +67,18 @@ async def extract_video_info(url: str) -> dict:
                 and f.get('ext') in ['mp4', 'webm']
             ]
             
+            # For Shorts and some videos, try more flexible height matching
+            if not combined_formats:
+                # Try with height tolerance (±10 pixels)
+                combined_formats = [
+                    f for f in formats
+                    if f.get('vcodec') != 'none' 
+                    and f.get('acodec') != 'none'
+                    and f.get('height') is not None
+                    and abs(f.get('height') - height) <= 10
+                    and f.get('ext') in ['mp4', 'webm']
+                ]
+            
             if combined_formats:
                 # Sort by quality (fps, bitrate)
                 combined_formats.sort(
@@ -84,8 +96,10 @@ async def extract_video_info(url: str) -> dict:
                     'filesize': best_format.get('filesize', 0) or 0,
                     'fps': best_format.get('fps', 30),
                     'ext': best_format.get('ext', 'mp4'),
-                    'type': 'combined'
+                    'type': 'combined',
+                    'actual_height': best_format.get('height')
                 }
+                logger.info(f"Found combined format for {quality}p: {best_format['format_id']} (actual: {best_format.get('height')}p)")
             else:
                 # Fallback: try separate video + audio formats
                 video_formats = [
@@ -95,6 +109,17 @@ async def extract_video_info(url: str) -> dict:
                     and f.get('height') == height
                     and f.get('ext') in ['mp4', 'webm']
                 ]
+                
+                # Try flexible height matching for video formats too
+                if not video_formats:
+                    video_formats = [
+                        f for f in formats
+                        if f.get('vcodec') != 'none' 
+                        and f.get('acodec') == 'none'
+                        and f.get('height') is not None
+                        and abs(f.get('height') - height) <= 10
+                        and f.get('ext') in ['mp4', 'webm']
+                    ]
                 
                 if video_formats:
                     # Find best audio format
@@ -129,8 +154,10 @@ async def extract_video_info(url: str) -> dict:
                             'filesize': (best_video.get('filesize', 0) or 0) + (best_audio.get('filesize', 0) or 0),
                             'fps': best_video.get('fps', 30),
                             'ext': 'mp4',
-                            'type': 'separate'
+                            'type': 'separate',
+                            'actual_height': best_video.get('height')
                         }
+                        logger.info(f"Found separate formats for {quality}p: video={best_video['format_id']}, audio={best_audio['format_id']} (actual: {best_video.get('height')}p)")
         
         # Also add audio-only option
         audio_formats = [
@@ -156,6 +183,21 @@ async def extract_video_info(url: str) -> dict:
                 'ext': best_audio.get('ext', 'm4a'),
                 'type': 'audio_only'
             }
+            logger.info(f"Found audio format: {best_audio['format_id']}")
+        
+        # Debug logging for troubleshooting
+        logger.info(f"Total formats found: {len(formats)}")
+        logger.info(f"Available qualities: {list(available_qualities.keys())}")
+        
+        # If no video qualities found, log format details for debugging
+        if not any(q in available_qualities for q in SUPPORTED_QUALITIES):
+            logger.warning("No video qualities found! Format details:")
+            for i, fmt in enumerate(formats[:5]):  # Log first 5 formats
+                logger.warning(f"  Format {i+1}: ID={fmt.get('format_id')}, "
+                             f"Height={fmt.get('height')}, "
+                             f"VCodec={fmt.get('vcodec')}, "
+                             f"ACodec={fmt.get('acodec')}, "
+                             f"Ext={fmt.get('ext')}")
         
         return {
             'title': info.get('title', 'Unknown'),

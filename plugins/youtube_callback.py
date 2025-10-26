@@ -236,14 +236,20 @@ async def start_download(
                     f"💾 {format_size(current)} / {format_size(total)}"
                 )
         
-        # Download thumbnail (فقط برای ویدیو)
+        # Download thumbnail (برای همه ویدیوها)
         thumbnail_path = None
         if media_type == 'video' and video_info.get('thumbnail'):
             try:
                 from plugins.youtube_handler import download_thumbnail
                 thumbnail_path = await download_thumbnail(video_info['thumbnail'])
+                if thumbnail_path and os.path.exists(thumbnail_path):
+                    logger.info(f"✅ Thumbnail downloaded: {thumbnail_path}")
+                else:
+                    logger.warning("❌ Thumbnail download failed: file not found")
+                    thumbnail_path = None
             except Exception as e:
-                logger.warning(f"Thumbnail download failed: {e}")
+                logger.warning(f"❌ Thumbnail download failed: {e}")
+                thumbnail_path = None
         
         # Caption
         caption = f"🎬 {video_info['title']}"
