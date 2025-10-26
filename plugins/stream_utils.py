@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import json
 from typing import BinaryIO, Union, Optional
-from plugins.youtube_helpers import get_direct_download_url
+# youtube_helpers removed - using new system
 from plugins.logger_config import get_logger, get_performance_logger
 import tempfile
 import time
@@ -435,8 +435,10 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
         stream_utils_logger.info("🎬 Video detected; using yt-dlp traditional path for proper metadata.")
         performance_logger.info("[DIRECT_UPLOAD_SKIP] Using traditional yt-dlp path for video")
         
-        from plugins.youtube_helpers import download_youtube_file
-        downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+        from plugins.youtube_downloader import youtube_downloader
+        safe_title = "".join(c for c in (title or "video") if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+        filename = f"{safe_title}.mp4"
+        downloaded_file = await youtube_downloader.download(url, format_id, filename, None)
         
         if not downloaded_file or not os.path.exists(downloaded_file):
             return {"success": False, "error": "Download failed in traditional path"}
@@ -682,10 +684,12 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
                 stream_utils_logger.info("🔄 Falling back to traditional download method...")
                 performance_logger.info("[FALLBACK_START] Traditional download method")
                 
-                from plugins.youtube_helpers import download_youtube_file
+                from plugins.youtube_downloader import youtube_downloader
                 
                 # Download using traditional method
-                downloaded_file = await download_youtube_file(url, format_id, progress_callback)
+                safe_title = "".join(c for c in (title or "video") if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+                filename = f"{safe_title}.mp4"
+                downloaded_file = await youtube_downloader.download(url, format_id, filename, None)
                 
                 if downloaded_file and os.path.exists(downloaded_file):
                     fallback_download_time = time.time() - fallback_start

@@ -7,8 +7,8 @@ from typing import Optional, Deque
 from pyrogram.types import Message
 from plugins.logger_config import get_logger
 from plugins.sqlite_db_wrapper import DB
-from plugins.youtube_helpers import download_youtube_file
-from plugins.stream_utils import smart_upload_strategy
+from plugins.youtube_downloader import youtube_downloader
+from plugins.youtube_uploader import youtube_uploader
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, MAX_CONCURRENT_DOWNLOADS
 from plugins.concurrency import reserve_user, release_user
 from config import RECOVER_JOBS_ON_STARTUP, RECOVERY_NOTIFY_USERS
@@ -165,7 +165,17 @@ class JobQueue:
                             break
 
                 progress_task = asyncio.create_task(progress_display())
-                downloaded_file = await download_youtube_file(job.url, job.format_id, status_hook)
+                
+                # Download with new system
+                safe_title = "".join(c for c in job.title if c.isalnum() or c in (' ', '-', '_')).strip()[:50]
+                filename = f"{safe_title}.mp4" if job.media_type == 'video' else f"{safe_title}.m4a"
+                
+                downloaded_file = await youtube_downloader.download(
+                    url=job.url,
+                    format_string=job.format_id,
+                    output_filename=filename,
+                    progress_callback=None
+                )
                 progress_task.cancel()
 
                 if not downloaded_file or not os.path.exists(downloaded_file):
@@ -178,12 +188,23 @@ class JobQueue:
                     f"⏳ لطفاً چند لحظه صبر کنید..."
                 )
 
-                ok = await smart_upload_strategy(job.client, job.user_id, downloaded_file, job.media_type, caption=job.caption)
+                # Upload with new system
+                ok = await youtube_uploader.upload_with_streaming(
+                    client=job.client,
+                    chat_id=job.user_id,
+                    file_path=downloaded_file,
+                    media_type=job.media_type,
+                    caption=job.caption,
+                    title=job.title,
+                    progress_callback=None
+                )
+                
                 if not ok:
                     raise Exception("آپلود ناموفق بود")
 
+                # Cleanup
                 try:
-                    os.remove(downloaded_file)
+                    youtube_downloader.cleanup(downloaded_file)
                 except Exception:
                     pass
 

@@ -9,7 +9,8 @@ import atexit
 import signal
 import asyncio
 from dotenv import load_dotenv
-
+import plugins.youtube_handler
+import plugins.youtube_callback
 # وارد کردن سیستم تشخیص خطا
 try:
     from error_detector import setup_crash_handler, quick_environment_check, get_error_detector
