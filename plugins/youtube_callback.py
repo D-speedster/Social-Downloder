@@ -165,13 +165,14 @@ async def start_download(
         await acquire_slot()
         slot_acquired = True
         
-        # Update message
+        # Update message with simple progress indicator
         await safe_edit_text(
             call,
             f"📥 **در حال دانلود**\n\n"
             f"🎬 {video_info['title'][:50]}...\n"
             f"📊 کیفیت: {quality_text}\n\n"
-            f"⏳ دانلود از یوتیوب..."
+            f"⏳ دانلود از یوتیوب...\n"
+            f"💡 لطفاً صبر کنید، این ممکن است چند دقیقه طول بکشد"
         )
         
         # Prepare filename
@@ -191,34 +192,27 @@ async def start_download(
         download_progress = {'current': 0, 'total': 0, 'last_update': 0}
         
         def download_progress_callback(current, total):
-            """Callback برای نمایش پیشرفت دانلود"""
+            """Callback برای نمایش پیشرفت دانلود (sync version)"""
             download_progress['current'] = current
             download_progress['total'] = total
             
             now = time.time()
-            if now - download_progress['last_update'] >= 3.0:  # Update every 3 seconds
+            if now - download_progress['last_update'] >= 5.0:  # Update every 5 seconds to reduce overhead
                 download_progress['last_update'] = now
                 
                 if total > 0:
                     percent = (current / total) * 100
-                    progress_bar = "█" * int(percent / 5) + "░" * (20 - int(percent / 5))
-                    
-                    asyncio.create_task(safe_edit_text(
-                        call,
-                        f"📥 **در حال دانلود** {percent:.0f}%\n\n"
-                        f"🎬 {video_info['title'][:50]}...\n"
-                        f"📊 کیفیت: {quality_text}\n\n"
-                        f"[{progress_bar}]\n"
-                        f"📦 {format_size(current)} / {format_size(total)}"
-                    ))
+                    # Store progress info for later use, don't update UI here
+                    download_progress['percent'] = percent
+                    logger.info(f"Download progress: {percent:.1f}% ({format_size(current)}/{format_size(total)})")
         
-        # Download file
+        # Download file (without progress callback to avoid warnings)
         download_start = time.time()
         downloaded_file = await youtube_downloader.download(
             url=video_info['url'],
             format_string=quality_info['format_string'],
             output_filename=filename,
-            progress_callback=download_progress_callback
+            progress_callback=None  # Disable progress callback to avoid async warnings
         )
         download_time = time.time() - download_start
         
