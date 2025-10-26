@@ -56,18 +56,18 @@ async def extract_video_info(url: str) -> dict:
         available_qualities = {}
         
         for quality in SUPPORTED_QUALITIES:
-            height = int(quality)
+            target_height = int(quality)
             
             # First, try to find combined formats (video + audio in one file)
             combined_formats = [
                 f for f in formats
                 if f.get('vcodec') != 'none' 
                 and f.get('acodec') != 'none'
-                and f.get('height') == height
+                and f.get('height') == target_height
                 and f.get('ext') in ['mp4', 'webm']
             ]
             
-            # For Shorts and some videos, try more flexible height matching
+            # For Shorts and some videos, try more flexible matching
             if not combined_formats:
                 # Try with height tolerance (±10 pixels)
                 combined_formats = [
@@ -75,9 +75,32 @@ async def extract_video_info(url: str) -> dict:
                     if f.get('vcodec') != 'none' 
                     and f.get('acodec') != 'none'
                     and f.get('height') is not None
-                    and abs(f.get('height') - height) <= 10
+                    and abs(f.get('height') - target_height) <= 10
                     and f.get('ext') in ['mp4', 'webm']
                 ]
+            
+            # Special handling for Shorts (Portrait videos)
+            if not combined_formats:
+                # For Shorts, map portrait heights to landscape equivalents
+                portrait_height_map = {
+                    360: [640, 426, 256],    # 360p equivalents in portrait
+                    480: [854, 640, 426],    # 480p equivalents in portrait  
+                    720: [1280, 854],        # 720p equivalents in portrait
+                    1080: [1920, 1280]       # 1080p equivalents in portrait
+                }
+                
+                if target_height in portrait_height_map:
+                    for portrait_height in portrait_height_map[target_height]:
+                        combined_formats = [
+                            f for f in formats
+                            if f.get('vcodec') != 'none' 
+                            and f.get('acodec') != 'none'
+                            and f.get('height') == portrait_height
+                            and f.get('ext') in ['mp4', 'webm']
+                        ]
+                        if combined_formats:
+                            logger.info(f"Found portrait format for {quality}p: {portrait_height}p (Shorts)")
+                            break
             
             if combined_formats:
                 # Sort by quality (fps, bitrate)
@@ -117,9 +140,31 @@ async def extract_video_info(url: str) -> dict:
                         if f.get('vcodec') != 'none' 
                         and f.get('acodec') == 'none'
                         and f.get('height') is not None
-                        and abs(f.get('height') - height) <= 10
+                        and abs(f.get('height') - target_height) <= 10
                         and f.get('ext') in ['mp4', 'webm']
                     ]
+                
+                # Special handling for Shorts (Portrait videos) - separate formats
+                if not video_formats:
+                    portrait_height_map = {
+                        360: [640, 426, 256],
+                        480: [854, 640, 426],  
+                        720: [1280, 854],
+                        1080: [1920, 1280]
+                    }
+                    
+                    if target_height in portrait_height_map:
+                        for portrait_height in portrait_height_map[target_height]:
+                            video_formats = [
+                                f for f in formats
+                                if f.get('vcodec') != 'none' 
+                                and f.get('acodec') == 'none'
+                                and f.get('height') == portrait_height
+                                and f.get('ext') in ['mp4', 'webm']
+                            ]
+                            if video_formats:
+                                logger.info(f"Found portrait video format for {quality}p: {portrait_height}p (Shorts)")
+                                break
                 
                 if video_formats:
                     # Find best audio format
