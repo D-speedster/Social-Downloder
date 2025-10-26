@@ -1,5 +1,9 @@
 """
-YouTube Callback Handler - مدیریت انتخاب کیفیت و شروع دانلود
+YouTube Callback Handler - نسخه فوق بهینه شده
+تغییرات:
+- کاهش update های پیام (overhead کمتر)
+- حذف progress callback برای دانلود (سرعت بیشتر)
+- بهینه‌سازی memory
 """
 
 import os
@@ -61,7 +65,6 @@ async def handle_quality_selection(client: Client, call: CallbackQuery):
         # Handle cancel
         if data == 'yt_cancel':
             await call.edit_message_text("❌ دانلود لغو شد.")
-            # Clean up cache
             if user_id in video_cache:
                 del video_cache[user_id]
             return
@@ -70,7 +73,6 @@ async def handle_quality_selection(client: Client, call: CallbackQuery):
         if data == 'yt_dl_audio':
             selected_quality = 'audio'
         else:
-            # Extract quality (e.g., "yt_dl_360" -> "360")
             selected_quality = data.replace('yt_dl_', '')
         
         # Get quality info
@@ -120,7 +122,6 @@ async def handle_quality_selection(client: Client, call: CallbackQuery):
         except:
             await call.answer("❌ خطا در پردازش.", show_alert=True)
         
-        # Release user reservation
         try:
             if 'user_reserved' in locals() and user_reserved:
                 release_user(user_id)
@@ -135,14 +136,14 @@ async def start_download(
     quality_info: dict,
     user_id: int
 ):
-    """شروع فرآیند دانلود و آپلود"""
+    """شروع فرآیند دانلود و آپلود - نسخه بهینه شده"""
     slot_acquired = False
     downloaded_file = None
     
     try:
-        # Display initial message
         quality_text = f"{quality}p" if quality != 'audio' else "فقط صدا"
         
+        # پیام اولیه
         initial_msg = (
             f"🚀 **شروع دانلود**\n\n"
             f"🎬 {video_info['title'][:50]}...\n"
@@ -152,27 +153,27 @@ async def start_download(
         
         await safe_edit_text(call, initial_msg)
         
-        # Check queue status
+        # Check queue
         stats = get_queue_stats()
         if stats['active'] >= stats['capacity']:
             queue_position = stats['waiting'] + 1
             await safe_edit_text(
                 call,
-                initial_msg + f"\n\n🕒 در صف (نفر {queue_position})\n⏳ لطفاً صبر کنید..."
+                initial_msg + f"\n\n🕐 در صف (نفر {queue_position})\n⏳ لطفاً صبر کنید..."
             )
         
-        # Acquire download slot
+        # Acquire slot
         await acquire_slot()
         slot_acquired = True
         
-        # Update message with simple progress indicator
+        # 🔥 پیام ساده بدون progress برای دانلود
         await safe_edit_text(
             call,
             f"📥 **در حال دانلود**\n\n"
             f"🎬 {video_info['title'][:50]}...\n"
             f"📊 کیفیت: {quality_text}\n\n"
-            f"⏳ دانلود از یوتیوب...\n"
-            f"💡 لطفاً صبر کنید، این ممکن است چند دقیقه طول بکشد"
+            f"⏳ دانلود از یوتیوب در حال انجام است...\n"
+            f"💡 این مرحله ممکن است 1-2 دقیقه طول بکشد"
         )
         
         # Prepare filename
@@ -188,31 +189,13 @@ async def start_download(
             filename = f"{safe_title}_{quality}p.mp4"
             media_type = 'video'
         
-        # Progress tracking
-        download_progress = {'current': 0, 'total': 0, 'last_update': 0}
-        
-        def download_progress_callback(current, total):
-            """Callback برای نمایش پیشرفت دانلود (sync version)"""
-            download_progress['current'] = current
-            download_progress['total'] = total
-            
-            now = time.time()
-            if now - download_progress['last_update'] >= 5.0:  # Update every 5 seconds to reduce overhead
-                download_progress['last_update'] = now
-                
-                if total > 0:
-                    percent = (current / total) * 100
-                    # Store progress info for later use, don't update UI here
-                    download_progress['percent'] = percent
-                    logger.info(f"Download progress: {percent:.1f}% ({format_size(current)}/{format_size(total)})")
-        
-        # Download file (without progress callback to avoid warnings)
+        # 🔥 دانلود بدون progress callback (سرعت بیشتر)
         download_start = time.time()
         downloaded_file = await youtube_downloader.download(
             url=video_info['url'],
             format_string=quality_info['format_string'],
             output_filename=filename,
-            progress_callback=None  # Disable progress callback to avoid async warnings
+            progress_callback=None  # بدون callback برای سرعت بیشتر
         )
         download_time = time.time() - download_start
         
@@ -220,9 +203,9 @@ async def start_download(
             raise Exception("دانلود ناموفق بود")
         
         file_size = os.path.getsize(downloaded_file)
-        logger.info(f"Download completed in {download_time:.2f}s - Size: {format_size(file_size)}")
+        logger.info(f"✅ Download: {download_time:.2f}s - {format_size(file_size)}")
         
-        # Update message for upload
+        # پیام آپلود
         await safe_edit_text(
             call,
             f"📤 **در حال آپلود**\n\n"
@@ -232,46 +215,38 @@ async def start_download(
             f"⏳ آپلود به تلگرام..."
         )
         
-        # Progress tracking for upload
-        upload_progress = {'current': 0, 'total': 0, 'last_update': 0}
+        # 🔥 Progress callback بهینه شده - فقط برای فایل‌های بزرگ
+        upload_progress = {'last_update': 0}
         
-        async def upload_progress_callback(current, total):
-            """Callback برای نمایش پیشرفت آپلود"""
-            upload_progress['current'] = current
-            upload_progress['total'] = total
-            
+        async def optimized_upload_progress(current, total):
+            """Progress با حداقل overhead"""
             now = time.time()
-            if now - upload_progress['last_update'] >= 3.0:  # Update every 3 seconds
+            
+            # فقط هر 5 ثانیه یک بار و فقط برای فایل‌های > 20MB
+            if file_size > 20 * 1024 * 1024 and now - upload_progress['last_update'] >= 5.0:
                 upload_progress['last_update'] = now
+                percent = (current / total) * 100
                 
-                if total > 0:
-                    percent = (current / total) * 100
-                    progress_bar = "█" * int(percent / 5) + "░" * (20 - int(percent / 5))
-                    
-                    await safe_edit_text(
-                        call,
-                        f"📤 **در حال آپلود** {percent:.0f}%\n\n"
-                        f"🎬 {video_info['title'][:50]}...\n"
-                        f"📊 کیفیت: {quality_text}\n"
-                        f"💾 حجم: {format_size(file_size)}\n\n"
-                        f"[{progress_bar}]\n"
-                        f"📦 {format_size(current)} / {format_size(total)}"
-                    )
+                # پیام خیلی ساده
+                await safe_edit_text(
+                    call,
+                    f"📤 **آپلود** {percent:.0f}%\n\n"
+                    f"💾 {format_size(current)} / {format_size(total)}"
+                )
         
-        # Prepare caption
-        caption = f"🎬 {video_info['title']}"
-        
-        # Download thumbnail for video
+        # Download thumbnail (فقط برای ویدیو)
         thumbnail_path = None
         if media_type == 'video' and video_info.get('thumbnail'):
             try:
                 from plugins.youtube_handler import download_thumbnail
                 thumbnail_path = await download_thumbnail(video_info['thumbnail'])
-                logger.info(f"Thumbnail downloaded: {thumbnail_path}")
             except Exception as e:
-                logger.warning(f"Failed to download thumbnail: {e}")
+                logger.warning(f"Thumbnail download failed: {e}")
         
-        # Upload file
+        # Caption
+        caption = f"🎬 {video_info['title']}"
+        
+        # 🔥 آپلود با تنظیمات بهینه
         upload_start = time.time()
         success = await youtube_uploader.upload_with_streaming(
             client=client,
@@ -282,8 +257,8 @@ async def start_download(
             duration=video_info['duration'],
             title=video_info['title'],
             performer=video_info['uploader'],
-            thumbnail=thumbnail_path,  # Add thumbnail
-            progress_callback=upload_progress_callback,
+            thumbnail=thumbnail_path,
+            progress_callback=optimized_upload_progress,  # Progress بهینه شده
             reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
         )
         upload_time = time.time() - upload_start
@@ -291,9 +266,9 @@ async def start_download(
         if not success:
             raise Exception("آپلود ناموفق بود")
         
-        logger.info(f"Upload completed in {upload_time:.2f}s")
+        logger.info(f"✅ Upload: {upload_time:.2f}s")
         
-        # Delete progress message
+        # حذف پیام progress
         try:
             await call.message.delete()
         except:
@@ -311,7 +286,7 @@ async def start_download(
             del video_cache[user_id]
         
         total_time = time.time() - download_start
-        logger.info(f"Total process time: {total_time:.2f}s (Download: {download_time:.2f}s, Upload: {upload_time:.2f}s)")
+        logger.info(f"🎯 Total: {total_time:.2f}s (DL: {download_time:.2f}s, UL: {upload_time:.2f}s)")
         
     except Exception as e:
         logger.error(f"Download/Upload error: {e}")
@@ -331,23 +306,21 @@ async def start_download(
             except:
                 pass
         
-        # Release user reservation
+        # Release user
         try:
             release_user(user_id)
         except:
             pass
         
-        # Clean up downloaded file and thumbnail
+        # Clean up files
         if downloaded_file:
             try:
                 youtube_downloader.cleanup(downloaded_file)
             except:
                 pass
         
-        # Clean up thumbnail
         if 'thumbnail_path' in locals() and thumbnail_path and os.path.exists(thumbnail_path):
             try:
                 os.unlink(thumbnail_path)
-                logger.info(f"Thumbnail cleaned up: {thumbnail_path}")
-            except Exception as e:
-                logger.warning(f"Thumbnail cleanup error: {e}")
+            except:
+                pass
