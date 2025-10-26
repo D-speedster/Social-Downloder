@@ -70,7 +70,25 @@ class YouTubeUploader:
                     except Exception as e:
                         logger.debug(f"Progress callback error: {e}")
             
-            # Upload video with optimized settings
+            # Try ultra-fast upload for large files
+            if file_size_mb > 50:
+                logger.info("Using ultra-fast upload method for large file")
+                try:
+                    # Use document upload for faster speed on large files
+                    await client.send_document(
+                        chat_id=chat_id,
+                        document=file_path,
+                        caption=f"🎬 {caption}\n\n📹 ویدیو (آپلود سریع)",
+                        progress=progress_wrapper,
+                        reply_to_message_id=reply_to_message_id,
+                        force_document=True
+                    )
+                    logger.info("Ultra-fast document upload completed")
+                    return True
+                except Exception as e:
+                    logger.warning(f"Ultra-fast upload failed, falling back to video: {e}")
+            
+            # Standard video upload with optimized settings
             await client.send_video(
                 chat_id=chat_id,
                 video=file_path,
