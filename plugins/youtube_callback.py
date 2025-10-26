@@ -178,11 +178,20 @@ async def start_download(
             f"💡 این مرحله ممکن است 1-2 دقیقه طول بکشد"
         )
         
-        # Prepare filename
+        # Prepare filename (کوتاه و ساده برای جلوگیری از ارسال به عنوان document)
         safe_title = "".join(
             c for c in video_info['title'] 
             if c.isalnum() or c in (' ', '-', '_')
-        ).strip()[:50]
+        ).strip()
+        
+        # محدود کردن طول نام فایل برای جلوگیری از مشکل Telegram
+        max_title_length = 30  # کاهش از 50 به 30
+        if len(safe_title) > max_title_length:
+            safe_title = safe_title[:max_title_length].strip()
+        
+        # اگر نام خیلی کوتاه شد، از نام پیش‌فرض استفاده کن
+        if len(safe_title) < 5:
+            safe_title = "YouTube_Video"
         
         if quality == 'audio':
             filename = f"{safe_title}.{quality_info['ext']}"
@@ -190,6 +199,8 @@ async def start_download(
         else:
             filename = f"{safe_title}_{quality}p.mp4"
             media_type = 'video'
+        
+        logger.info(f"📁 Generated filename: {filename}")
         
         # 🔥 دانلود بدون progress callback (سرعت بیشتر)
         download_start = time.time()

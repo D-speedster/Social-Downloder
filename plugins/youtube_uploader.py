@@ -75,9 +75,9 @@ class YouTubeUploader:
                         pass  # Ignore errors
             
             # 🔥 استراتژی هوشمند بر اساس حجم
-            if file_size_mb > 100:
+            if file_size_mb > 500:  # افزایش threshold از 100 به 500 MB
                 # فایل‌های خیلی بزرگ: Document با force
-                logger.info("📄 Using DOCUMENT mode for ultra-large file")
+                logger.info("📄 Using DOCUMENT mode for ultra-large file (>500MB)")
                 
                 sent = await client.send_document(
                     chat_id=chat_id,
@@ -90,9 +90,9 @@ class YouTubeUploader:
                     file_name=os.path.basename(file_path)
                 )
             
-            elif file_size_mb > 50:
+            elif file_size_mb > 100:  # افزایش threshold از 50 به 100 MB
                 # فایل‌های بزرگ: ویدیو بدون thumbnail
-                logger.info("🎥 Using VIDEO mode without thumbnail")
+                logger.info("🎥 Using VIDEO mode without thumbnail (100-500MB)")
                 
                 sent = await client.send_video(
                     chat_id=chat_id,
