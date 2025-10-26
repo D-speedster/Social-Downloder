@@ -9,6 +9,7 @@ YouTube Callback Handler - نسخه فوق بهینه شده
 import os
 import time
 import asyncio
+import json
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery
 from pyrogram.enums import ParseMode
@@ -18,6 +19,7 @@ from plugins.youtube_downloader import youtube_downloader
 from plugins.youtube_uploader import youtube_uploader
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user
 from plugins.sqlite_db_wrapper import DB
+from plugins.media_utils import send_advertisement
 
 logger = get_logger('youtube_callback')
 
@@ -246,6 +248,28 @@ async def start_download(
         # Caption
         caption = f"🎬 {video_info['title']}"
         
+        # Check advertisement settings
+        ad_enabled = False
+        ad_position = 'after'  # default
+        try:
+            from plugins.db_path_manager import db_path_manager
+            json_db_path = db_path_manager.get_json_db_path()
+            
+            with open(json_db_path, 'r', encoding='utf-8') as f:
+                db_data = json.load(f)
+            ad_settings = db_data.get('advertisement', {})
+            ad_enabled = ad_settings.get('enabled', False)
+            ad_position = ad_settings.get('position', 'after')
+            logger.info(f"Advertisement settings: enabled={ad_enabled}, position={ad_position}")
+        except Exception as e:
+            logger.warning(f"Failed to load advertisement settings: {e}")
+        
+        # Send advertisement before content if enabled and position is 'before'
+        if ad_enabled and ad_position == 'before':
+            logger.info("Sending advertisement before YouTube content")
+            send_advertisement(client, call.message.chat.id)
+            await asyncio.sleep(1)  # Wait 1 second after advertisement
+        
         # 🔥 آپلود با تنظیمات بهینه
         upload_start = time.time()
         success = await youtube_uploader.upload_with_streaming(
@@ -273,6 +297,12 @@ async def start_download(
             await call.message.delete()
         except:
             pass
+        
+        # Send advertisement after content if enabled and position is 'after'
+        if ad_enabled and ad_position == 'after':
+            logger.info("Sending advertisement after YouTube content")
+            await asyncio.sleep(1)  # Wait 1 second after upload
+            send_advertisement(client, call.message.chat.id)
         
         # Update database
         try:

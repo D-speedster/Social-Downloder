@@ -98,15 +98,20 @@ def send_advertisement(client, user_id: int):
 async def download_file_simple(url, file_path):
     """Simple file download without progress updates for better performance (shared)."""
     try:
-        # Create request with proper headers to avoid 403 errors
+        # Create request with Instagram-optimized headers to avoid 403 errors
         req = urllib.request.Request(url, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': '*/*',
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'no-cors',
+            'Sec-Fetch-Site': 'cross-site',
+            'Referer': 'https://www.instagram.com/',
+            'Origin': 'https://www.instagram.com'
         })
         
         with urllib.request.urlopen(req) as response:
@@ -124,16 +129,21 @@ async def download_stream_to_file(url, out_path, chunk_size=64*1024, headers=Non
     Returns (file_path, total_size) for compatibility with download_file_simple.
     """
     try:
-        # Use custom headers if provided, otherwise use default
+        # Use custom headers if provided, otherwise use Instagram-optimized headers
         if headers is None:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
                 'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'DNT': '1',
                 'Connection': 'keep-alive',
                 'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'video',
+                'Sec-Fetch-Mode': 'no-cors',
+                'Sec-Fetch-Site': 'cross-site',
+                'Referer': 'https://www.instagram.com/',
+                'Origin': 'https://www.instagram.com'
             }
         
         timeout = aiohttp.ClientTimeout(total=30, connect=10)
