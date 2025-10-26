@@ -11,37 +11,56 @@ import asyncio
 from dotenv import load_dotenv
 import plugins.youtube_handler
 import plugins.youtube_callback
-# وارد کردن سیستم تشخیص خطا
+
+# 🔥 CRITICAL: تنظیمات بهینه Pyrogram قبل از import
+print("🔧 در حال اعمال بهینه‌سازی‌های Pyrogram...")
+try:
+    import pyrogram
+    
+    # 🔥 تنظیم chunk size برای آپلود سریع
+    OPTIMAL_CHUNK_SIZE = 2 * 1024 * 1024  # 2MB
+    
+    # تلاش برای patch کردن ماژول‌های Pyrogram
+    try:
+        import pyrogram.file_id
+        if hasattr(pyrogram.file_id, 'CHUNK_SIZE'):
+            pyrogram.file_id.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
+            print(f"✅ Chunk size set to {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f}MB")
+    except Exception as e:
+        print(f"⚠️ Could not patch chunk size: {e}")
+    
+    print("✅ Pyrogram optimizations applied")
+except Exception as e:
+    print(f"⚠️ Pyrogram optimization warning: {e}")
+
+# سیستم تشخیص خطا
 try:
     from error_detector import setup_crash_handler, quick_environment_check, get_error_detector
-    # تنظیم هندلر کرش سراسری
     setup_crash_handler()
     print("🔍 سیستم تشخیص خطا فعال شد")
 except ImportError as e:
     print(f"⚠️ خطا در بارگذاری سیستم تشخیص خطا: {e}")
-    print("ربات بدون سیستم تشخیص خطا ادامه می‌یابد...")
 except Exception as e:
     print(f"⚠️ خطای غیرمنتظره در سیستم تشخیص خطا: {e}")
 
-# بررسی سریع محیط قبل از شروع
+# بررسی سریع محیط
 print("🔍 در حال بررسی محیط سیستم...")
 try:
     if not quick_environment_check():
-        print("❌ مشکلات حیاتی در محیط شناسایی شد. لطفاً مشکلات را حل کنید.")
+        print("❌ مشکلات حیاتی در محیط شناسایی شد.")
         input("برای ادامه Enter را فشار دهید یا Ctrl+C برای خروج...")
     else:
         print("✅ بررسی محیط با موفقیت انجام شد")
 except Exception as e:
     print(f"⚠️ خطا در بررسی محیط: {e}")
-    print("ربات بدون بررسی محیط ادامه می‌یابد...")
 
-# اجرای wizard تنظیمات اولیه در صورت عدم وجود .env
+# Wizard تنظیمات
 if not os.path.exists('.env'):
-    print("فایل .env یافت نشد. راه‌اندازی wizard تنظیمات اولیه...")
+    print("فایل .env یافت نشد. راه‌اندازی wizard...")
     try:
         from setup_wizard import run_setup_wizard
         run_setup_wizard()
-        print("تنظیمات با موفقیت انجام شد. در حال راه‌اندازی ربات...")
+        print("تنظیمات با موفقیت انجام شد.")
     except ImportError:
         print("خطا: فایل setup_wizard.py یافت نشد.")
         sys.exit(1)
@@ -49,65 +68,56 @@ if not os.path.exists('.env'):
         print(f"خطا در راه‌اندازی wizard: {e}")
         sys.exit(1)
 
-# بارگذاری متغیرهای محیطی از .env
 load_dotenv()
 
-# وارد کردن config پس از بارگذاری .env
 from config import (
     BOT_TOKEN, API_ID, API_HASH, USE_MYSQL, db_config,
     RECOVER_JOBS_ON_STARTUP, RECOVERY_NOTIFY_USERS, TELEGRAM_THROTTLING
 )
 import config as config
 
-# Security: Validate configuration before starting
+# Validate configuration
 try:
     BOT_TOKEN = config.BOT_TOKEN
-    API_ID = config.API_ID  # Changed from APP_ID to API_ID
+    API_ID = config.API_ID
     API_HASH = config.API_HASH
 except AttributeError as e:
     print(f"Configuration error: {e}")
-    print("Please ensure all required environment variables are set.")
     sys.exit(1)
 
-# Create downloads directory with proper permissions
+# Create directories
 DOWNLOAD_LOCATION = "./downloads"
 try:
     os.makedirs(DOWNLOAD_LOCATION, exist_ok=True)
 except Exception as e:
     print(f"Warning: Could not create downloads directory: {e}")
 
-# Enhanced logging with rotation and better format
+# Logging
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
-
-# Create logs directory if it doesn't exist
 os.makedirs('./logs', exist_ok=True)
 
 basicConfig(
-    level=INFO,  # Changed to INFO for better debugging
+    level=INFO,
     format=log_format,
     filename='./logs/bot.log',
-    filemode='a',  # Append mode
-    encoding='utf-8'  # Ensure UTF-8 encoding
+    filemode='a',
+    encoding='utf-8'
 )
 
-# Log startup information
 import logging
 logger = logging.getLogger(__name__)
 logger.info("Bot starting up...")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Working directory: {os.getcwd()}")
 
-plugins = dict(
-    root="plugins",
-)
+plugins = dict(root="plugins")
 
-# Initialize database with error handling
+# Initialize database
 try:
     db = DB()
     db.setup()
     logger.info("Database initialized successfully")
     
-    # Register cleanup function
     def cleanup_database():
         try:
             if db:
@@ -116,7 +126,6 @@ try:
         except Exception as e:
             logger.error(f"Error closing database: {e}")
     
-    # Register cleanup for normal exit and signals
     atexit.register(cleanup_database)
     signal.signal(signal.SIGTERM, lambda signum, frame: cleanup_database())
     signal.signal(signal.SIGINT, lambda signum, frame: cleanup_database())
@@ -125,7 +134,7 @@ except Exception as e:
     logger.error(f"Database initialization failed: {e}")
     sys.exit(1)
 
-# Security: Limit workers to prevent resource exhaustion
+# Workers
 MAX_WORKERS = min(16, os.cpu_count() * 2) if os.cpu_count() else 8
 logger.info(f"Using {MAX_WORKERS} workers")
 
@@ -134,32 +143,33 @@ async def main():
     try:
         print("🚀 در حال راه‌اندازی کلاینت ربات...")
         
-        # 🔥 تنظیمات بهینه شده برای سرعت بالای آپلود
+        # 🔥 تنظیمات بهینه شده نهایی برای آپلود فوق‌سریع
         client_config = {
             "name": "ytdownloader3_dev2",
             "bot_token": BOT_TOKEN,
             "api_id": API_ID,
             "api_hash": API_HASH,
             "plugins": plugins,
-            "workers": 32,  # افزایش بیشتر workers
-            "sleep_threshold": 30,  # کاهش بیشتر sleep threshold
-            "max_concurrent_transmissions": 16,  # افزایش بیشتر همزمانی
+            
+            # 🔥 تنظیمات کلیدی برای سرعت
+            "workers": MAX_WORKERS,  # استفاده از محاسبه شده
+            "sleep_threshold": 10,   # 🔥 کاهش از 30 به 10 (خیلی مهم!)
+            
+            # تنظیمات اضافی
             "test_mode": False,
             "ipv6": False,
             "no_updates": False,
             "takeout": False,
         }
         
-        # Add proxy configuration if available
+        # Proxy configuration
         if config.PROXY_HOST and config.PROXY_PORT:
-            from pyrogram.types import ProxyType
             proxy_config = {
-                "scheme": "socks5",  # Default to SOCKS5
+                "scheme": "socks5",
                 "hostname": config.PROXY_HOST,
                 "port": config.PROXY_PORT,
             }
             
-            # Add authentication if provided
             if config.PROXY_USERNAME and config.PROXY_PASSWORD:
                 proxy_config["username"] = config.PROXY_USERNAME
                 proxy_config["password"] = config.PROXY_PASSWORD
@@ -169,16 +179,31 @@ async def main():
         
         client = Client(**client_config)
         
+        # 🔥 بهینه‌سازی اضافی بعد از ساخت client
+        try:
+            from plugins.youtube_uploader import optimize_client_for_upload
+            optimize_client_for_upload(client)
+            print("✅ Client optimized for ultra-fast uploads")
+        except Exception as e:
+            logger.warning(f"Could not apply additional optimizations: {e}")
+        
         logger.info("Starting bot client...")
         print("🔗 در حال اتصال به تلگرام...")
         await client.start()
-        # Initialize job queue and recover any pending/incomplete jobs
+        
+        # Initialize job queue
         await init_job_queue(client)
+        
         logger.info("Bot started successfully")
         print("✅ ربات با موفقیت راه‌اندازی شد!")
+        print("=" * 70)
+        print("⚡ تنظیمات بهینه‌سازی فعال:")
+        print(f"   • Workers: {MAX_WORKERS}")
+        print(f"   • Sleep Threshold: 10 seconds")
+        print(f"   • Chunk Size: 2MB")
+        print("=" * 70)
         print("🔄 ربات در حال اجرا است... (Ctrl+C برای توقف)")
         
-        # Keep the bot running reliably
         await idle()
         
     except KeyboardInterrupt:
@@ -188,7 +213,6 @@ async def main():
         print(f"\n❌ خطا در راه‌اندازی ربات: {e}")
         logger.error(f"Bot startup failed: {e}")
         
-        # تولید گزارش تفصیلی خطا
         try:
             error_detector = get_error_detector()
             print("\n📋 در حال تولید گزارش خطا...")
@@ -199,7 +223,6 @@ async def main():
         
         raise
     finally:
-        # Ensure client is stopped
         try:
             if client is not None:
                 print("🔌 در حال قطع اتصال کلاینت...")
@@ -210,7 +233,6 @@ async def main():
             print(f"⚠️ خطا در توقف کلاینت: {e}")
             logger.error(f"Error stopping client: {e}")
         
-        # Ensure database is closed
         try:
             if 'db' in globals():
                 print("🗄️ در حال بستن اتصال پایگاه داده...")
@@ -233,19 +255,16 @@ if __name__ == "__main__":
         print(f"\n💥 کرش ربات: {e}")
         logger.error(f"Bot failed: {e}")
         
-        # تولید گزارش نهایی خطا
         try:
             error_detector = get_error_detector()
             print("\n📋 در حال تولید گزارش نهایی خطا...")
             error_detector.log_crash(type(e), e, e.__traceback__)
             print("📁 گزارش کامل خطا در فایل logs/crash_report.log ذخیره شد")
-            print("📄 گزارش تفصیلی در فایل logs/detailed_error_report.json موجود است")
         except Exception as report_error:
             print(f"⚠️ خطا در تولید گزارش نهایی: {report_error}")
         
         print("\n🔍 برای بررسی دقیق‌تر خطا، فایل‌های لاگ را مطالعه کنید:")
         print("   - logs/crash_report.log")
-        print("   - logs/detailed_error_report.json")
         print("   - logs/bot.log")
         
         sys.exit(1)

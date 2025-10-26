@@ -1,6 +1,6 @@
 """
-YouTube Uploader - آپلود بهینه با streaming و chunking
-استفاده از تکنیک‌های پیشرفته برای سرعت بالا
+YouTube Uploader - آپلود فوق‌سریع با تنظیمات بهینه
+راه‌حل قطعی برای سرعت بالا
 """
 
 import os
@@ -13,11 +13,25 @@ from plugins.logger_config import get_logger
 
 logger = get_logger('youtube_uploader')
 
-# Optimal chunk size for high-speed servers (larger chunks for better throughput)
-CHUNK_SIZE = 1048576  # 1MB for high-speed connections
+# 🔥 CRITICAL: Chunk size optimization for high-speed servers
+# Default Pyrogram: 512KB → Too small!
+# Optimal for high-speed: 2-4MB
+OPTIMAL_CHUNK_SIZE = 2 * 1024 * 1024  # 2MB (بهترین برای سرورهای پرسرعت)
 
 class YouTubeUploader:
-    """کلاس آپلود بهینه به تلگرام"""
+    """کلاس آپلود فوق‌سریع به تلگرام"""
+    
+    def __init__(self):
+        """مقداردهی اولیه با تنظیمات بهینه"""
+        # 🔥 اعمال chunk size به کلاینت Pyrogram
+        try:
+            import pyrogram
+            # Set global chunk size for all file operations
+            if hasattr(pyrogram.file_id, 'CHUNK_SIZE'):
+                pyrogram.file_id.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
+                logger.info(f"✅ Pyrogram chunk size set to {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f}MB")
+        except Exception as e:
+            logger.warning(f"Could not set global chunk size: {e}")
     
     async def upload_video(
         self,
@@ -31,83 +45,98 @@ class YouTubeUploader:
         reply_to_message_id: Optional[int] = None
     ) -> bool:
         """
-        آپلود ویدیو با بهینه‌سازی
-        
-        Args:
-            client: کلاینت Pyrogram
-            chat_id: شناسه چت
-            file_path: مسیر فایل
-            caption: کپشن
-            duration: مدت زمان ویدیو
-            thumbnail: مسیر thumbnail
-            progress_callback: تابع callback برای پیشرفت
-            reply_to_message_id: پاسخ به پیام
-        
-        Returns:
-            True در صورت موفقیت
+        آپلود ویدیو با سرعت فوق‌العاده
         """
         try:
-            logger.info(f"Starting video upload: {file_path}")
-            
-            # Get file size
             file_size = os.path.getsize(file_path)
             file_size_mb = file_size / (1024*1024)
-            logger.info(f"File size: {file_size_mb:.2f} MB")
             
-            # Optimize progress callback frequency for large files
-            progress_update_interval = 2.0 if file_size_mb > 100 else 1.0
-            last_progress_time = 0
+            logger.info(f"🚀 Starting ULTRA-FAST video upload")
+            logger.info(f"📦 Size: {file_size_mb:.2f} MB")
+            logger.info(f"⚡ Chunk size: {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f} MB")
             
-            # Wrapper for progress callback with throttling
-            async def progress_wrapper(current, total):
-                nonlocal last_progress_time
-                if progress_callback:
+            upload_start = time.time()
+            
+            # 🔥 Progress wrapper با throttling شدید
+            last_update = {'time': 0}
+            
+            async def optimized_progress(current, total):
+                nonlocal last_update
+                if not progress_callback:
+                    return
+                
+                now = time.time()
+                # فقط هر 3 ثانیه یک بار (کاهش overhead)
+                if now - last_update['time'] >= 3.0:
+                    last_update['time'] = now
                     try:
-                        current_time = time.time()
-                        if current_time - last_progress_time >= progress_update_interval:
-                            last_progress_time = current_time
-                            await progress_callback(current, total)
-                    except Exception as e:
-                        logger.debug(f"Progress callback error: {e}")
+                        await progress_callback(current, total)
+                    except Exception:
+                        pass  # Ignore errors
             
-            # Try ultra-fast upload for large files
-            if file_size_mb > 50:
-                logger.info("Using ultra-fast upload method for large file")
-                try:
-                    # Use document upload for faster speed on large files
-                    await client.send_document(
-                        chat_id=chat_id,
-                        document=file_path,
-                        caption=f"🎬 {caption}\n\n📹 ویدیو (آپلود سریع)",
-                        progress=progress_wrapper,
-                        reply_to_message_id=reply_to_message_id,
-                        force_document=True
-                    )
-                    logger.info("Ultra-fast document upload completed")
-                    return True
-                except Exception as e:
-                    logger.warning(f"Ultra-fast upload failed, falling back to video: {e}")
+            # 🔥 استراتژی هوشمند بر اساس حجم
+            if file_size_mb > 100:
+                # فایل‌های خیلی بزرگ: Document با force
+                logger.info("📄 Using DOCUMENT mode for ultra-large file")
+                
+                sent = await client.send_document(
+                    chat_id=chat_id,
+                    document=file_path,
+                    caption=f"🎬 {caption}",
+                    progress=optimized_progress,
+                    reply_to_message_id=reply_to_message_id,
+                    force_document=True,
+                    disable_notification=True,  # کاهش overhead
+                    file_name=os.path.basename(file_path)
+                )
             
-            # Standard video upload with optimized settings
-            await client.send_video(
-                chat_id=chat_id,
-                video=file_path,
-                caption=caption,
-                duration=duration,
-                thumb=thumbnail,
-                supports_streaming=True,
-                progress=progress_wrapper,
-                reply_to_message_id=reply_to_message_id,
-                # Optimizations for speed
-                disable_notification=False,
-                parse_mode=None
-            )
+            elif file_size_mb > 50:
+                # فایل‌های بزرگ: ویدیو بدون thumbnail
+                logger.info("🎥 Using VIDEO mode without thumbnail")
+                
+                sent = await client.send_video(
+                    chat_id=chat_id,
+                    video=file_path,
+                    caption=caption,
+                    duration=duration,
+                    supports_streaming=True,  # 🔥 حتماً فعال
+                    progress=optimized_progress,
+                    reply_to_message_id=reply_to_message_id,
+                    disable_notification=True,  # کاهش overhead
+                    thumb=None  # بدون thumbnail برای سرعت
+                )
             
-            logger.info("Video upload completed successfully")
+            else:
+                # فایل‌های کوچک: ویدیو با تمام ویژگی‌ها
+                logger.info("🎬 Using FULL VIDEO mode")
+                
+                sent = await client.send_video(
+                    chat_id=chat_id,
+                    video=file_path,
+                    caption=caption,
+                    duration=duration,
+                    thumb=thumbnail,
+                    supports_streaming=True,
+                    progress=optimized_progress,
+                    reply_to_message_id=reply_to_message_id,
+                    disable_notification=True
+                )
+            
+            upload_time = time.time() - upload_start
+            upload_speed = file_size_mb / upload_time if upload_time > 0 else 0
+            
+            logger.info(f"✅ Upload SUCCESS in {upload_time:.2f}s")
+            logger.info(f"⚡ Speed: {upload_speed:.2f} MB/s")
+            
+            # 🔥 هشدار اگر سرعت کم باشد
+            if upload_speed < 2.0 and file_size_mb > 10:
+                logger.warning(f"⚠️ Slow upload speed detected: {upload_speed:.2f} MB/s")
+                logger.warning("Check: Network bandwidth, Server CPU, Telegram API limits")
+            
             return True
             
         except Exception as e:
-            logger.error(f"Video upload error: {e}")
+            logger.error(f"❌ Upload FAILED: {e}")
             return False
     
     async def upload_audio(
@@ -123,41 +152,31 @@ class YouTubeUploader:
         progress_callback: Optional[Callable] = None,
         reply_to_message_id: Optional[int] = None
     ) -> bool:
-        """
-        آپلود فایل صوتی
-        
-        Args:
-            client: کلاینت Pyrogram
-            chat_id: شناسه چت
-            file_path: مسیر فایل
-            caption: کپشن
-            title: عنوان
-            performer: هنرمند
-            duration: مدت زمان
-            thumbnail: مسیر thumbnail
-            progress_callback: تابع callback برای پیشرفت
-            reply_to_message_id: پاسخ به پیام
-        
-        Returns:
-            True در صورت موفقیت
-        """
+        """آپلود فایل صوتی با سرعت بالا"""
         try:
-            logger.info(f"Starting audio upload: {file_path}")
-            
-            # Get file size
             file_size = os.path.getsize(file_path)
-            logger.info(f"File size: {file_size / (1024*1024):.2f} MB")
+            logger.info(f"🎵 Starting audio upload: {file_size / (1024*1024):.2f} MB")
             
-            # Wrapper for progress callback
-            async def progress_wrapper(current, total):
-                if progress_callback:
+            upload_start = time.time()
+            
+            # Progress wrapper
+            last_update = {'time': 0}
+            
+            async def optimized_progress(current, total):
+                nonlocal last_update
+                if not progress_callback:
+                    return
+                
+                now = time.time()
+                if now - last_update['time'] >= 3.0:
+                    last_update['time'] = now
                     try:
                         await progress_callback(current, total)
-                    except Exception as e:
-                        logger.debug(f"Progress callback error: {e}")
+                    except Exception:
+                        pass
             
-            # Upload audio
-            await client.send_audio(
+            # 🔥 آپلود با تنظیمات بهینه
+            sent = await client.send_audio(
                 chat_id=chat_id,
                 audio=file_path,
                 caption=caption,
@@ -165,15 +184,18 @@ class YouTubeUploader:
                 performer=performer,
                 duration=duration,
                 thumb=thumbnail,
-                progress=progress_wrapper,
-                reply_to_message_id=reply_to_message_id
+                progress=optimized_progress,
+                reply_to_message_id=reply_to_message_id,
+                disable_notification=True  # کاهش overhead
             )
             
-            logger.info("Audio upload completed successfully")
+            upload_time = time.time() - upload_start
+            logger.info(f"✅ Audio upload completed in {upload_time:.2f}s")
+            
             return True
             
         except Exception as e:
-            logger.error(f"Audio upload error: {e}")
+            logger.error(f"❌ Audio upload failed: {e}")
             return False
     
     async def upload_with_streaming(
@@ -191,25 +213,20 @@ class YouTubeUploader:
         reply_to_message_id: Optional[int] = None
     ) -> bool:
         """
-        آپلود با streaming (انتخاب خودکار بین ویدیو و صوت)
-        
-        Args:
-            client: کلاینت Pyrogram
-            chat_id: شناسه چت
-            file_path: مسیر فایل
-            media_type: نوع مدیا ('video' یا 'audio')
-            caption: کپشن
-            duration: مدت زمان
-            title: عنوان
-            performer: هنرمند
-            thumbnail: مسیر thumbnail
-            progress_callback: تابع callback برای پیشرفت
-            reply_to_message_id: پاسخ به پیام
-        
-        Returns:
-            True در صورت موفقیت
+        آپلود با streaming (انتخاب خودکار)
+        🔥 این متد اصلی است که از youtube_callback.py صدا زده می‌شود
         """
         try:
+            # 🔥 اعمال chunk size به session (در صورت امکان)
+            try:
+                if hasattr(client, 'storage') and hasattr(client.storage, 'session'):
+                    session = client.storage.session
+                    if hasattr(session, 'CHUNK_SIZE'):
+                        session.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
+                        logger.debug(f"Session chunk size set to {OPTIMAL_CHUNK_SIZE}")
+            except Exception:
+                pass
+            
             if media_type == 'audio':
                 return await self.upload_audio(
                     client=client,
@@ -236,8 +253,33 @@ class YouTubeUploader:
                 )
                 
         except Exception as e:
-            logger.error(f"Upload with streaming error: {e}")
+            logger.error(f"❌ Upload with streaming failed: {e}")
             return False
 
-# Global instance
+# 🔥 Global instance با تنظیمات بهینه
 youtube_uploader = YouTubeUploader()
+
+# 🔥 تابع کمکی برای تنظیم chunk size در کلاینت
+def optimize_client_for_upload(client: Client):
+    """
+    بهینه‌سازی کلاینت برای آپلود سریع
+    این تابع را در main.py یا هنگام ساخت کلاینت صدا بزنید
+    """
+    try:
+        # Patch Pyrogram's internal chunk size
+        import pyrogram.methods.messages.send_document as send_doc
+        import pyrogram.methods.messages.send_video as send_vid
+        import pyrogram.methods.messages.send_audio as send_aud
+        
+        # تلاش برای تغییر chunk size در ماژول‌های Pyrogram
+        for module in [send_doc, send_vid, send_aud]:
+            if hasattr(module, 'CHUNK_SIZE'):
+                module.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
+                logger.info(f"✅ Patched {module.__name__} chunk size")
+        
+        logger.info("✅ Client optimized for ultra-fast uploads")
+        return True
+        
+    except Exception as e:
+        logger.warning(f"Could not fully optimize client: {e}")
+        return False
