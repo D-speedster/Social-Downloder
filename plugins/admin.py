@@ -95,13 +95,14 @@ def admin_inline_maker() -> list:
 
 
 def admin_reply_kb() -> ReplyKeyboardMarkup:
+    """
+    کیبورد پنل ادمین با 10 دکمه در 5 سطر (2 ستونی)
+    """
     return ReplyKeyboardMarkup(
         [
             ["📊 آمار کاربران", "🖥 وضعیت سرور"],
-            ["🔌 بررسی پروکسی"],
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
-            ["💬 پیام انتظار"],
-            ["🍪 مدیریت کوکی"],
+            ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
             ["⬅️ بازگشت"],
         ],
@@ -125,11 +126,7 @@ async def admin_menu_stats(_: Client, message: Message):
         f"🆕 کاربران امروز: <b>{stats.get('users_today', 0)}</b>\n"
         f"✅ کاربران فعال امروز: <b>{stats.get('active_today', 0)}</b>\n"
         f"📈 مجموع درخواست‌ها: <b>{stats.get('total_requests_sum', 0)}</b>\n"
-        f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n\n"
-        f"🗂 مجموع وظایف: <b>{stats.get('total_jobs', 0)}</b>\n"
-        f"⏳ در انتظار: <b>{stats.get('jobs_pending', 0)}</b>\n"
-        f"🟡 آماده: <b>{stats.get('jobs_ready', 0)}</b>\n"
-        f"✅ تکمیل‌شده: <b>{stats.get('jobs_completed', 0)}</b>\n"
+        f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n"
     )
     await message.reply_text(text, reply_markup=admin_reply_kb())
 
@@ -140,34 +137,7 @@ async def admin_menu_server(_: Client, message: Message):
     await message.reply_text(_server_status_text(), reply_markup=admin_reply_kb())
 
 
-# --- بررسی پروکسی‌ها ---
-import socket
-
-def check_proxy_port(host='127.0.0.1', port=1084):
-    """Check if proxy port is open"""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(3)
-        result = sock.connect_ex((host, port))
-        sock.close()
-        return result == 0
-    except:
-        return False
-
-@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔌 بررسی پروکسی$'))
-async def admin_menu_proxy_check(_: Client, message: Message):
-    # Check the fixed proxy port 1084
-    proxy_host = '127.0.0.1'
-    proxy_port = 1084
-    
-    is_open = check_proxy_port(proxy_host, proxy_port)
-    
-    if is_open:
-        status_text = f"🟢 پروکسی فعال است\n\n📍 آدرس: socks5h://{proxy_host}:{proxy_port}\n🔌 وضعیت پورت {proxy_port}: باز\n\n✅ ربات از این پروکسی برای دانلود استفاده می‌کند."
-    else:
-        status_text = f"🔴 پروکسی غیرفعال است\n\n📍 آدرس: socks5h://{proxy_host}:{proxy_port}\n🔌 وضعیت پورت {proxy_port}: بسته\n\n⚠️ لطفاً سرویس پروکسی را روشن کنید."
-    
-    await message.reply_text(status_text, reply_markup=admin_reply_kb())
+# بخش بررسی پروکسی حذف شد (Phase 2)
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 ارسال همگانی$'))
@@ -767,7 +737,7 @@ async def set_sp_custom(_, __, message: Message):
             return False
         # Ignore admin panel buttons texts (reply keyboard)
         if message.text.strip() in {
-            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور","🔌 بررسی پروکسی",
+            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور",
             "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
             "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
             "🔝 بالای محتوا","🔻 پایین محتوا"
@@ -1336,7 +1306,7 @@ async def handle_advertisement_content(client: Client, message: Message):
     """Handle advertisement content input from admin"""
     try:
         if message.text and message.text.strip() in {
-            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور","🔌 بررسی پروکسی",
+            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور",
             "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
             "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
             "🔝 بالای محتوا","🔻 پایین محتوا"

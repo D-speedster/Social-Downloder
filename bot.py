@@ -11,6 +11,7 @@ import asyncio
 from dotenv import load_dotenv
 import plugins.youtube_handler
 import plugins.youtube_callback
+from plugins.cookie_validator import start_cookie_validator, stop_cookie_validator
 
 # 🔥 CRITICAL: تنظیمات بهینه Pyrogram قبل از import
 print("🔧 در حال اعمال بهینه‌سازی‌های Pyrogram...")
@@ -194,6 +195,16 @@ async def main():
         # Initialize job queue
         await init_job_queue(client)
         
+        # Start Cookie Validator Service
+        try:
+            from plugins.admin import ADMIN
+            await start_cookie_validator(client, ADMIN)
+            logger.info("Cookie Validator service started")
+            print("🍪 سرویس بررسی کوکی راه‌اندازی شد")
+        except Exception as e:
+            logger.error(f"Failed to start Cookie Validator: {e}")
+            print(f"⚠️ خطا در راه‌اندازی سرویس کوکی: {e}")
+        
         logger.info("Bot started successfully")
         print("✅ ربات با موفقیت راه‌اندازی شد!")
         print("=" * 70)
@@ -223,6 +234,16 @@ async def main():
         
         raise
     finally:
+        # Stop Cookie Validator Service
+        try:
+            print("🍪 در حال توقف سرویس بررسی کوکی...")
+            await stop_cookie_validator()
+            logger.info("Cookie Validator service stopped")
+            print("✅ سرویس کوکی با موفقیت متوقف شد")
+        except Exception as e:
+            print(f"⚠️ خطا در توقف سرویس کوکی: {e}")
+            logger.error(f"Error stopping Cookie Validator: {e}")
+        
         try:
             if client is not None:
                 print("🔌 در حال قطع اتصال کلاینت...")
