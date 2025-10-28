@@ -41,9 +41,27 @@ def send_advertisement(client, user_id: int):
             content = ad_settings.get('content', '')
             file_id = ad_settings.get('file_id', '')
             caption = ad_settings.get('caption', '')
+            
+            # New fields for enhanced advertisement
+            button_text = ad_settings.get('button_text', '')
+            button_url = ad_settings.get('button_url', '')
+            disable_preview = ad_settings.get('disable_preview', True)  # Default: disable preview
 
             if content_type == 'text' and content:
-                msg = await client.send_message(chat_id=user_id, text=content)
+                # Create inline keyboard if button is configured
+                reply_markup = None
+                if button_text and button_url:
+                    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    reply_markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(button_text, url=button_url)
+                    ]])
+                
+                msg = await client.send_message(
+                    chat_id=user_id, 
+                    text=content,
+                    reply_markup=reply_markup,
+                    disable_web_page_preview=disable_preview
+                )
                 asyncio.create_task(_delete_after_delay(msg))
             elif content_type == 'photo' and file_id:
                 try:
@@ -71,23 +89,109 @@ def send_advertisement(client, user_id: int):
                             except Exception:
                                 pass
                     else:
-                        msg = await client.send_photo(chat_id=user_id, photo=file_id, caption=caption)
+                        # Create inline keyboard for photo
+                        reply_markup = None
+                        if button_text and button_url:
+                            from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                            reply_markup = InlineKeyboardMarkup([[
+                                InlineKeyboardButton(button_text, url=button_url)
+                            ]])
+                        
+                        msg = await client.send_photo(
+                            chat_id=user_id, 
+                            photo=file_id, 
+                            caption=caption,
+                            reply_markup=reply_markup
+                        )
                         asyncio.create_task(_delete_after_delay(msg))
                 except Exception:
                     if caption:
-                        msg = await client.send_message(chat_id=user_id, text=f"📢 تبلیغ\n\n{caption}")
+                        # Fallback with button if available
+                        reply_markup = None
+                        if button_text and button_url:
+                            from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                            reply_markup = InlineKeyboardMarkup([[
+                                InlineKeyboardButton(button_text, url=button_url)
+                            ]])
+                        
+                        msg = await client.send_message(
+                            chat_id=user_id, 
+                            text=f"📢 تبلیغ\n\n{caption}",
+                            reply_markup=reply_markup,
+                            disable_web_page_preview=disable_preview
+                        )
                         asyncio.create_task(_delete_after_delay(msg))
             elif content_type == 'video' and file_id:
-                msg = await client.send_video(chat_id=user_id, video=file_id, caption=caption)
+                # Create inline keyboard for video
+                reply_markup = None
+                if button_text and button_url:
+                    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    reply_markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(button_text, url=button_url)
+                    ]])
+                
+                msg = await client.send_video(
+                    chat_id=user_id, 
+                    video=file_id, 
+                    caption=caption,
+                    reply_markup=reply_markup
+                )
                 asyncio.create_task(_delete_after_delay(msg))
+                
             elif content_type == 'gif' and file_id:
-                msg = await client.send_animation(chat_id=user_id, animation=file_id, caption=caption)
+                # Create inline keyboard for gif
+                reply_markup = None
+                if button_text and button_url:
+                    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    reply_markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(button_text, url=button_url)
+                    ]])
+                
+                msg = await client.send_animation(
+                    chat_id=user_id, 
+                    animation=file_id, 
+                    caption=caption,
+                    reply_markup=reply_markup
+                )
                 asyncio.create_task(_delete_after_delay(msg))
+                
             elif content_type == 'sticker' and file_id:
+                # Stickers don't support captions or buttons, send separately if needed
                 msg = await client.send_sticker(chat_id=user_id, sticker=file_id)
                 asyncio.create_task(_delete_after_delay(msg))
+                
+                # Send caption with button separately if available
+                if (caption or (button_text and button_url)):
+                    reply_markup = None
+                    if button_text and button_url:
+                        from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                        reply_markup = InlineKeyboardMarkup([[
+                            InlineKeyboardButton(button_text, url=button_url)
+                        ]])
+                    
+                    text_msg = await client.send_message(
+                        chat_id=user_id,
+                        text=caption or "📢 تبلیغ",
+                        reply_markup=reply_markup,
+                        disable_web_page_preview=disable_preview
+                    )
+                    asyncio.create_task(_delete_after_delay(text_msg))
+                    
             elif content_type == 'audio' and file_id:
-                msg = await client.send_audio(chat_id=user_id, audio=file_id, caption=caption)
+                # Create inline keyboard for audio
+                reply_markup = None
+                if button_text and button_url:
+                    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+                    reply_markup = InlineKeyboardMarkup([[
+                        InlineKeyboardButton(button_text, url=button_url)
+                    ]])
+                
+                msg = await client.send_audio(
+                    chat_id=user_id, 
+                    audio=file_id, 
+                    caption=caption,
+                    reply_markup=reply_markup
+                )
                 asyncio.create_task(_delete_after_delay(msg))
         except Exception:
             # Silent fail to avoid interrupting main flow

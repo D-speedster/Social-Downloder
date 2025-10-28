@@ -538,7 +538,7 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                             from plugins.youtube import show_video
                             await show_video(client, orig_msg)
                         elif INSTA_REGEX.search(text):
-                            from plugins.instagram import download_instagram
+                            # Instagram handled by universal_downloader
                             from plugins.universal_downloader import handle_universal_link
                             await handle_universal_link(client, orig_msg)
                         elif (

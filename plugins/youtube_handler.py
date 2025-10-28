@@ -223,12 +223,21 @@ async def extract_video_info(url: str) -> dict:
             audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0) or 0, reverse=True)
             best_audio = audio_formats[0]
             available_qualities['audio'] = {
-                'format_string': best_audio['format_id'],
+                'format_string': 'bestaudio',  # استفاده از selector عمومی
                 'filesize': best_audio.get('filesize', 0) or 0,
-                'ext': best_audio.get('ext', 'm4a'),
+                'ext': 'mp3',  # همیشه mp3 برای فایل‌های صوتی
                 'type': 'audio_only'
             }
-            logger.info(f"Found audio format: {best_audio['format_id']}")
+            logger.info(f"Found audio format: bestaudio (best available: {best_audio['format_id']})")
+        else:
+            # اگر هیچ فرمت صوتی پیدا نشد، از best استفاده کن
+            available_qualities['audio'] = {
+                'format_string': 'best',  # fallback به بهترین فرمت موجود
+                'filesize': 0,
+                'ext': 'mp3',
+                'type': 'audio_only'
+            }
+            logger.warning("No audio formats found, using 'best' as fallback")
         
         # Debug logging for troubleshooting
         logger.info(f"Total formats found: {len(formats)}")

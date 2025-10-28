@@ -208,7 +208,8 @@ async def start_download(
             url=video_info['url'],
             format_string=quality_info['format_string'],
             output_filename=filename,
-            progress_callback=None  # بدون callback برای سرعت بیشتر
+            progress_callback=None,  # بدون callback برای سرعت بیشتر
+            is_audio_only=(quality == 'audio')  # مشخص کردن نوع فایل
         )
         download_time = time.time() - download_start
         

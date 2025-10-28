@@ -54,10 +54,57 @@ def get_user_friendly_error_message(api_response, platform):
     try:
         # If it's a string error message
         if isinstance(api_response, str):
-            if "timeout" in api_response.lower():
-                return "⏰ درخواست بیش از حد طول کشید. لطفاً دوباره تلاش کنید."
-            elif "network" in api_response.lower() or "connection" in api_response.lower():
-                return "🌐 مشکل در اتصال به اینترنت. لطفاً اتصال خود را بررسی کنید."
+            error_lower = api_response.lower()
+            
+            # 403 Forbidden
+            if "403" in error_lower or "forbidden" in error_lower:
+                return (
+                    "🔒 **دسترسی به محتوا محدود شده**\n\n"
+                    "💡 **احتمالات:**\n"
+                    "• پست خصوصی است (نیاز به فالو)\n"
+                    "• محدودیت موقت API\n"
+                    "• IP شما موقتاً مسدود شده\n\n"
+                    "🔄 **راه‌حل:**\n"
+                    "• چند دقیقه صبر کنید\n"
+                    "• دوباره تلاش کنید\n"
+                    "• اگر پست خصوصی است، ابتدا فالو کنید"
+                )
+            
+            # 429 Rate Limit
+            elif "429" in error_lower or "rate limit" in error_lower or "too many" in error_lower:
+                return (
+                    "⏰ **محدودیت تعداد درخواست**\n\n"
+                    "تعداد درخواست‌ها از حد مجاز گذشته.\n\n"
+                    "🔄 لطفاً 5-10 دقیقه صبر کنید و دوباره تلاش کنید."
+                )
+            
+            # 404 Not Found
+            elif "404" in error_lower or "not found" in error_lower:
+                return (
+                    "🔍 **محتوا یافت نشد**\n\n"
+                    "💡 **احتمالات:**\n"
+                    "• لینک اشتباه است\n"
+                    "• پست حذف شده\n"
+                    "• لینک منقضی شده\n\n"
+                    "🔄 لینک را بررسی کنید"
+                )
+            
+            # Timeout
+            elif "timeout" in error_lower:
+                return (
+                    "⏱ **زمان درخواست تمام شد**\n\n"
+                    "سرور پاسخ نداد.\n\n"
+                    "🔄 لطفاً دوباره تلاش کنید"
+                )
+            
+            # Network errors
+            elif any(word in error_lower for word in ["network", "connection", "dns"]):
+                return (
+                    "🌐 **مشکل در اتصال**\n\n"
+                    "خطا در برقراری ارتباط با سرور.\n\n"
+                    "🔄 لطفاً دوباره تلاش کنید"
+                )
+            
             else:
                 return f"❌ خطا در دریافت اطلاعات از {platform}"
         
@@ -473,8 +520,19 @@ async def handle_universal_link(client: Client, message: Message):
         fallback_media = None
         last_api_error_message = None
         
-        # Layered retry: try API and fallback concurrently, up to N cycles (Instagram)
-        max_cycles = 3 if platform == "Instagram" else 1
+        # Layered retry: try API and fallback concurrently, up to N cycles
+        # تنظیمات retry بر اساس platform
+        retry_config = {
+            "Instagram": {"cycles": 5, "timeout": 8},
+            "TikTok": {"cycles": 3, "timeout": 6},
+            "Pinterest": {"cycles": 3, "timeout": 6},
+            "Facebook": {"cycles": 3, "timeout": 6},
+        }
+        
+        config = retry_config.get(platform, {"cycles": 2, "timeout": 5})
+        max_cycles = config["cycles"]
+        base_timeout = config["timeout"]
+        
         api_data = None
         fallback_media = None
         last_api_error_message = None
@@ -486,7 +544,7 @@ async def handle_universal_link(client: Client, message: Message):
                 tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
 
             pending = {t for _, t in tasks}
-            wait_timeout = 6 + (2 * cycle)  # grow timeout slightly per cycle
+            wait_timeout = base_timeout + (2 * cycle)  # grow timeout per cycle based on platform
 
             try:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=wait_timeout)
@@ -723,22 +781,53 @@ async def handle_universal_link(client: Client, message: Message):
                 else:
                     memory_buffer = None
             if not use_memory:
-                # Fallback to file download for larger files with optimized retry
+                # Fallback to file download for larger files with smart retry
                 download_result = None
                 last_error = None
-                max_attempts = 3
-                base_delay = 0.5
+                
+                # تنظیمات retry بر اساس platform
+                if platform == "Instagram":
+                    max_attempts = 5  # افزایش به 5 برای Instagram
+                    base_delay = 2.0  # افزایش به 2 ثانیه
+                    max_delay = 30.0
+                else:
+                    max_attempts = 3
+                    base_delay = 1.0
+                    max_delay = 10.0
                 
                 for attempt in range(max_attempts):
                     try:
+                        _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} for {platform}")
                         download_result = await download_stream_to_file(download_url, filename)
+                        _log(f"[UNIV] Download success on attempt {attempt+1}")
                         break
                     except Exception as e:
                         last_error = e
+                        error_str = str(e).lower()
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} failed: {e}")
+                        
                         if attempt < max_attempts - 1:  # Only sleep if not last attempt
-                            # Exponential backoff with jitter
-                            delay = base_delay * (2 ** attempt)
+                            # محاسبه delay بر اساس نوع خطا
+                            if "403" in error_str or "forbidden" in error_str:
+                                # برای 403، delay بیشتر
+                                delay = min(base_delay * (3 ** attempt), max_delay)  # 2, 6, 18, 30
+                                _log(f"[UNIV] 403 error detected, waiting {delay}s before retry")
+                            
+                            elif "429" in error_str or "rate limit" in error_str or "too many" in error_str:
+                                # برای rate limit، delay خیلی بیشتر
+                                delay = min(base_delay * (5 ** attempt), max_delay)  # 2, 10, 30
+                                _log(f"[UNIV] Rate limit detected, waiting {delay}s before retry")
+                            
+                            elif "timeout" in error_str:
+                                # برای timeout، delay متوسط
+                                delay = min(base_delay * (2 ** attempt), max_delay)  # 2, 4, 8, 16, 30
+                                _log(f"[UNIV] Timeout detected, waiting {delay}s before retry")
+                            
+                            else:
+                                # برای سایر خطاها، delay عادی
+                                delay = min(base_delay * (2 ** attempt), max_delay)
+                                _log(f"[UNIV] Generic error, waiting {delay}s before retry")
+                            
                             await asyncio.sleep(delay)
                 t_dl_end = time.perf_counter()
                 _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
@@ -750,9 +839,11 @@ async def handle_universal_link(client: Client, message: Message):
                     file_path = download_result
 
                 if not file_path or not os.path.exists(file_path):
-                    err_txt = f"❌ خطا در دانلود فایل از {platform}."
+                    # استفاده از پیام کاربرپسند به جای خطای فنی
                     if last_error:
-                        err_txt += f"\nجزئیات: {last_error}"
+                        err_txt = get_user_friendly_error_message(str(last_error), platform)
+                    else:
+                        err_txt = f"❌ خطا در دانلود فایل از {platform}.\n\n🔄 لطفاً دوباره تلاش کنید."
                     await status_msg.edit_text(err_txt)
                     try:
                         if slot_acquired:
@@ -1258,5 +1349,25 @@ async def handle_universal_link(client: Client, message: Message):
                 await message.reply_text(f"❌ فایل قابل دانلود از {platform} یافت نشد.")
             else:
                 await message.reply_text(f"❌ خطا در پردازش لینک {platform}: {error_msg}")
+        except:
+            pass
+
+
+# Instagram handler - register with Pyrogram
+from pyrogram import filters
+
+@Client.on_message(filters.private & filters.regex(INSTA_REGEX))
+async def handle_instagram_link(client: Client, message: Message):
+    """Handler for Instagram links - delegates to universal downloader"""
+    try:
+        universal_logger.info(f"Instagram link detected from user {message.from_user.id}: {message.text}")
+        await handle_universal_link(client, message)
+    except Exception as e:
+        universal_logger.error(f"Instagram handler error: {e}")
+        try:
+            await message.reply_text(
+                "❌ خطا در پردازش لینک اینستاگرام.\n\n"
+                "🔄 لطفاً دوباره تلاش کنید."
+            )
         except:
             pass
