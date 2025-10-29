@@ -16,6 +16,7 @@ from plugins.media_utils import send_advertisement, download_file_simple, downlo
 from plugins.stream_utils import download_to_memory_stream, smart_upload_strategy, optimize_chunk_size
 from plugins.db_wrapper import DB
 from plugins import constant
+from plugins.caption_builder import build_caption
 from datetime import datetime as _dt
 import logging
 import requests
@@ -88,6 +89,26 @@ def get_user_friendly_error_message(api_response, platform):
                     "• لینک منقضی شده\n\n"
                     "🔄 لینک را بررسی کنید"
                 )
+            
+            # Server errors (502, 503, 504)
+            elif any(code in error_lower for code in ["502", "503", "504"]) or "سرور در دسترس نیست" in error_lower:
+                if platform == "Spotify":
+                    return (
+                        "🎵 **سرور اسپاتیفای موقتاً در دسترس نیست**\n\n"
+                        "💡 **علت:**\n"
+                        "• سرور دانلود اسپاتیفای مشکل دارد\n"
+                        "• ترافیک زیاد سرور\n\n"
+                        "🔄 **راه‌حل:**\n"
+                        "• 10-15 دقیقه صبر کنید\n"
+                        "• دوباره تلاش کنید\n"
+                        "• اگر مشکل ادامه داشت، بعداً امتحان کنید"
+                    )
+                else:
+                    return (
+                        f"🔧 **سرور {platform} موقتاً در دسترس نیست**\n\n"
+                        "سرور مشکل فنی دارد.\n\n"
+                        "🔄 لطفاً چند دقیقه صبر کنید و دوباره تلاش کنید."
+                    )
             
             # Timeout
             elif "timeout" in error_lower:
@@ -842,6 +863,9 @@ async def handle_universal_link(client: Client, message: Message):
                     # استفاده از پیام کاربرپسند به جای خطای فنی
                     if last_error:
                         err_txt = get_user_friendly_error_message(str(last_error), platform)
+                        # اضافه کردن پیشنهاد خاص برای مشکلات سرور
+                        if any(code in str(last_error).lower() for code in ["502", "503", "504", "سرور در دسترس نیست"]):
+                            err_txt += f"\n\n💡 **نکته:** اگر مشکل ادامه داشت، لطفاً 15-30 دقیقه بعد دوباره تلاش کنید."
                     else:
                         err_txt = f"❌ خطا در دانلود فایل از {platform}.\n\n🔄 لطفاً دوباره تلاش کنید."
                     await status_msg.edit_text(err_txt)
@@ -927,11 +951,17 @@ async def handle_universal_link(client: Client, message: Message):
             quality = "Unknown"
             duration_sec = 0
         
-        # Prepare simplified caption (only 3 essential lines)
-        caption = f"📸 پیج دانلود شده: {author}\n"
-        caption += f"⏱ زمان ویدیو: {duration_sec} ثانیه\n"
-        caption += f"🎞 کیفیت: {quality}"
-        caption = _safe_caption(caption, max_len=950)
+        # ساخت caption اختصاصی برای هر platform
+        try:
+            caption = build_caption(platform, api_data or {})
+            caption = _safe_caption(caption, max_len=950)
+        except Exception as e:
+            _log(f"[UNIV] Caption builder error: {e}")
+            # Fallback به caption ساده
+            caption = f"📥 محتوا از {platform}"
+            if title:
+                caption += f"\n📄 {title[:100]}"
+            caption = _safe_caption(caption, max_len=950)
         
         # Check advertisement settings once
         ad_enabled = False
