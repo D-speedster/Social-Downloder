@@ -398,15 +398,27 @@ def _extract_video_metadata(video_path: str):
         except Exception:
             pass
         
-        # Generate small Telegram-friendly thumbnail (optional)
+        # Generate small Telegram-friendly thumbnail (بهینه‌سازی شده)
         try:
             # Only if ffmpeg is available
             if ffmpeg_exe and isinstance(ffmpeg_exe, str):
                 thumb_path = video_path.rsplit('.', 1)[0] + '_thumb.jpg'
-                cmd = [ffmpeg_exe, '-ss', '00:00:01', '-i', video_path, '-vframes', '1', '-vf', 'scale=320:-2', '-y', thumb_path]
-                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, encoding='utf-8', errors='ignore')
-                if not os.path.exists(thumb_path):
-                    thumb_path = None
+                
+                # بررسی اینکه آیا thumbnail قبلاً وجود دارد
+                if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+                    pass  # از thumbnail موجود استفاده کن
+                else:
+                    # ساخت thumbnail با timeout کوتاه
+                    cmd = [ffmpeg_exe, '-y', '-ss', '1', '-i', video_path, '-vframes', '1', 
+                          '-vf', 'scale=320:-2', '-q:v', '5', '-f', 'image2', thumb_path]
+                    try:
+                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
+                                     encoding='utf-8', errors='ignore', timeout=6)
+                    except subprocess.TimeoutExpired:
+                        thumb_path = None
+                    
+                    if not os.path.exists(thumb_path) or os.path.getsize(thumb_path) == 0:
+                        thumb_path = None
         except Exception:
             thumb_path = None
         

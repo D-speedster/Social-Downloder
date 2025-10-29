@@ -196,41 +196,40 @@ def calculate_upload_delay(file_size_mb: float, chunk_count: int) -> float:
     """
     Calculate optimal delay between chunks to avoid Telegram throttling
     """
-    # 🔥 حذف تأخیرهای غیرضروری - فقط برای فایل‌های خیلی بزرگ
-    if file_size_mb > 500:  # فقط برای فایل‌های بالای 500MB
-        return 0.1
-    else:
-        return 0.0  # بدون تأخیر برای فایل‌های کوچک و متوسط
+    # 🔥 حذف کامل تأخیرها برای سرعت حداکثری
+    return 0.0  # بدون تأخیر برای تمام فایل‌ها
 
 
 async def throttled_upload_with_retry(upload_func, max_retries=None, base_delay=None):
     """
-    اجرای تابع آپلود با مکانیزم تلاش مجدد - بهینه شده برای سرعت
+    اجرای تابع آپلود با مکانیزم تلاش مجدد - فوق سریع
     """
     if max_retries is None:
-        max_retries = 2  # کاهش تعداد تلاش‌ها
+        max_retries = 1  # کاهش بیشتر تعداد تلاش‌ها
     if base_delay is None:
-        base_delay = 0.5  # کاهش تأخیر پایه
+        base_delay = 0.2  # کاهش بیشتر تأخیر پایه
         
     for attempt in range(max_retries + 1):
         try:
             return await upload_func()
         except Exception as e:
-            # فقط برای FloodWait و خطاهای شبکه retry کن
+            # فقط برای FloodWait retry کن، بقیه خطاها فوراً raise شوند
             error_str = str(e).lower()
-            should_retry = any(keyword in error_str for keyword in [
-                'flood', 'timeout', 'connection', 'network', 'slow_mode'
-            ])
             
-            if not should_retry or attempt == max_retries:
-                if 'flood' in error_str and hasattr(e, 'seconds'):
-                    print(f"FloodWait: Waiting {e.seconds} seconds...")
-                    await asyncio.sleep(e.seconds)
-                raise
+            if 'flood' in error_str and hasattr(e, 'seconds'):
+                print(f"FloodWait: Waiting {e.seconds} seconds...")
+                await asyncio.sleep(e.seconds)
+                continue
             
-            wait_time = base_delay * (attempt + 1)  # Linear backoff
-            print(f"Upload error: {e}. Retrying in {wait_time} seconds...")
-            await asyncio.sleep(wait_time)
+            # برای سایر خطاها، فقط یک بار retry کن
+            if attempt < max_retries and any(keyword in error_str for keyword in ['timeout', 'connection']):
+                wait_time = base_delay
+                print(f"Upload error: {e}. Quick retry in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+                continue
+            
+            # در غیر این صورت، فوراً خطا را raise کن
+            raise
     
     return None
 
@@ -305,26 +304,44 @@ def extract_video_metadata(file_path: str) -> dict:
 # 🔥 تابع جدید برای ساخت thumbnail
 def generate_thumbnail(file_path: str) -> str:
     """
-    ساخت thumbnail از ویدیو
+    ساخت سریع thumbnail از ویدیو
     """
     try:
-        ffmpeg_path = os.environ.get('FFMPEG_PATH', 'ffmpeg')
-        if not os.path.exists(ffmpeg_path):
-            ffmpeg_path = shutil.which('ffmpeg') or 'ffmpeg'
-        
+        # بررسی اینکه آیا thumbnail قبلاً وجود دارد
         thumb_path = file_path.rsplit('.', 1)[0] + '_thumb.jpg'
+        if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            return thumb_path
         
+        ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        if not ffmpeg_path:
+            try:
+                from config import FFMPEG_PATH as CFG_FFMPEG
+                ffmpeg_path = CFG_FFMPEG
+            except Exception:
+                ffmpeg_path = None
+        
+        if not ffmpeg_path or not os.path.exists(ffmpeg_path):
+            ffmpeg_path = shutil.which('ffmpeg')
+        
+        if not ffmpeg_path:
+            print("❌ FFmpeg not found, skipping thumbnail")
+            return None
+        
+        # دستور بهینه‌سازی شده برای سرعت بالا
         cmd = [
             ffmpeg_path, '-y',
-            '-ss', '2',
+            '-ss', '1',  # کاهش زمان seek
             '-i', file_path,
             '-vframes', '1',
-            '-vf', 'scale=320:-1',
-            '-q:v', '2',
+            '-vf', 'scale=320:-2',  # سایز کوچک‌تر برای سرعت
+            '-q:v', '5',  # کیفیت متوسط برای سرعت
+            '-f', 'image2',
             thumb_path
         ]
         
-        result = subprocess.run(cmd, capture_output=True, timeout=15)
+        # timeout کوتاه‌تر برای جلوگیری از کندی
+        result = subprocess.run(cmd, capture_output=True, timeout=8, 
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         if result.returncode == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
             print(f"✅ Thumbnail created: {thumb_path}")
@@ -333,6 +350,9 @@ def generate_thumbnail(file_path: str) -> str:
             print(f"❌ Thumbnail generation failed")
             return None
             
+    except subprocess.TimeoutExpired:
+        print("❌ Thumbnail generation timeout")
+        return None
     except Exception as e:
         print(f"❌ Thumbnail error: {e}")
         return None
@@ -341,26 +361,43 @@ def generate_thumbnail(file_path: str) -> str:
 # 🔥 تابع smart_upload_strategy اصلاح شده
 async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type: str, **kwargs) -> bool:
     """
-    🔥 بهینه‌سازی شده برای سرعت بالا - حداقل metadata
+    بهینه‌سازی شده برای سرعت بالا با حفظ metadata ضروری
     """
     file_size = os.path.getsize(file_path)
     file_size_mb = file_size / (1024 * 1024)
     
     progress_callback = kwargs.pop('progress', None)
     
-    # 🔥 حذف metadata extraction برای سرعت بالا
-    # فقط در صورت نیاز واقعی metadata استخراج شود
+    # برای ویدیوهای یوتیوب، metadata و thumbnail ضروری است
+    if media_type == "video" and file_size_mb > 1:  # فقط برای ویدیوهای بزرگتر از 1MB
+        try:
+            # استخراج سریع metadata
+            metadata = extract_video_metadata(file_path)
+            if metadata:
+                if 'duration' not in kwargs and metadata.get('duration'):
+                    kwargs['duration'] = metadata['duration']
+                if 'width' not in kwargs and metadata.get('width'):
+                    kwargs['width'] = metadata['width']
+                if 'height' not in kwargs and metadata.get('height'):
+                    kwargs['height'] = metadata['height']
+            
+            # ساخت thumbnail سریع اگر وجود ندارد
+            if 'thumb' not in kwargs:
+                thumb_path = generate_thumbnail(file_path)
+                if thumb_path:
+                    kwargs['thumb'] = thumb_path
+        except Exception as e:
+            print(f"Metadata extraction failed, continuing without: {e}")
     
     async def perform_upload():
         upload_kwargs = kwargs.copy()
         if progress_callback:
             upload_kwargs['progress'] = progress_callback
         
-        # 🔥 حذف supports_streaming که باعث کندی می‌شود
-        # 🔥 حذف metadata اضافی
-        
-        # آپلود مستقیم بدون تأخیر
+        # آپلود مستقیم بدون تأخیر اضافی
         if media_type == "video":
+            # اضافه کردن supports_streaming برای بهبود پخش
+            upload_kwargs['supports_streaming'] = True
             return await client.send_video(chat_id=chat_id, video=file_path, **upload_kwargs)
         elif media_type == "photo":
             return await client.send_photo(chat_id=chat_id, photo=file_path, **upload_kwargs)
@@ -370,11 +407,19 @@ async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type
             return await client.send_document(chat_id=chat_id, document=file_path, **upload_kwargs)
     
     try:
-        await throttled_upload_with_retry(perform_upload, max_retries=2, base_delay=0.5)
+        # آپلود مستقیم بدون retry اضافی برای سرعت بالا
+        await perform_upload()
         return True
     except Exception as e:
         print(f"Smart upload failed: {e}")
-        return False
+        # فقط یک بار retry در صورت خطا
+        try:
+            await asyncio.sleep(0.5)
+            await perform_upload()
+            return True
+        except Exception as e2:
+            print(f"Smart upload retry failed: {e2}")
+            return False
 
 
 async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: dict, title: str = "", thumbnail_url: str = None, progress_callback=None, **kwargs) -> dict:
@@ -465,11 +510,14 @@ async def direct_youtube_upload(client, chat_id: int, url: str, quality_info: di
 
         if ad_enabled and ad_position == 'before':
             send_advertisement(client, chat_id)
-            await asyncio.sleep(0.5)  # کاهش تأخیر
+            # حذف تأخیر غیرضروری
+        
+        # آپلود مستقیم بدون تأخیر
         message = await client.send_video(chat_id=chat_id, video=downloaded_file, **upload_kwargs)
 
         if ad_enabled and ad_position == 'after':
-            await asyncio.sleep(1)
+            # کاهش تأخیر به حداقل
+            await asyncio.sleep(0.2)
             send_advertisement(client, chat_id)
         
         total_time = time.time() - start_time
