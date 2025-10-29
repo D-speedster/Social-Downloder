@@ -55,6 +55,10 @@ class YouTubeUploader:
             logger.info(f"📦 Size: {file_size_mb:.2f} MB")
             logger.info(f"⚡ Chunk size: {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f} MB")
             
+            # نمایش در ترمینال هم
+            print(f"🚀 Starting video upload: {file_size_mb:.2f} MB")
+            print(f"⚡ Chunk size: {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f} MB")
+            
             upload_start = time.time()
             
             # 🔥 Progress wrapper با throttling شدید - فقط برای فایل‌های بزرگ
@@ -86,16 +90,27 @@ class YouTubeUploader:
                 # فایل‌های خیلی بزرگ: Document با force
                 logger.info("📄 Using DOCUMENT mode for ultra-large file (>500MB)")
                 
-                sent = await client.send_document(
-                    chat_id=chat_id,
-                    document=file_path,
-                    caption=f"🎬 {caption}",
-                    progress=optimized_progress,
-                    reply_to_message_id=reply_to_message_id,
-                    force_document=True,
-                    disable_notification=True,  # کاهش overhead
-                    file_name=os.path.basename(file_path)
-                )
+                # ارسال به صورت document
+                logger.info("📤 Sending as document (>500MB)...")
+                print("📤 Sending as document (>500MB)...")
+                
+                try:
+                    sent = await client.send_document(
+                        chat_id=chat_id,
+                        document=file_path,
+                        caption=f"🎬 {caption}",
+                        progress=optimized_progress,
+                        reply_to_message_id=reply_to_message_id,
+                        force_document=True,
+                        disable_notification=True,  # کاهش overhead
+                        file_name=os.path.basename(file_path)
+                    )
+                    logger.info("✅ Document sent successfully")
+                    print("✅ Document sent successfully")
+                except Exception as send_error:
+                    logger.error(f"❌ Send document failed: {send_error}")
+                    print(f"❌ Send document failed: {send_error}")
+                    raise
             
             elif file_size_mb > 100:  # افزایش threshold از 50 به 100 MB
                 # فایل‌های بزرگ: ویدیو با thumbnail اما بدون metadata اضافی
@@ -117,18 +132,35 @@ class YouTubeUploader:
                 if thumbnail and os.path.exists(thumbnail):
                     video_kwargs['thumb'] = thumbnail
                     logger.info(f"✅ Using provided thumbnail: {thumbnail}")
+                    print(f"✅ Using provided thumbnail: {os.path.basename(thumbnail)}")
                 else:
                     # تلاش برای ساخت thumbnail سریع
+                    print("🖼️ Generating thumbnail...")
                     try:
                         from plugins.stream_utils import generate_thumbnail
                         quick_thumb = generate_thumbnail(file_path)
                         if quick_thumb:
                             video_kwargs['thumb'] = quick_thumb
                             logger.info(f"✅ Generated quick thumbnail: {quick_thumb}")
+                            print(f"✅ Thumbnail generated: {os.path.basename(quick_thumb)}")
+                        else:
+                            print("⚠️ Thumbnail generation failed")
                     except Exception as e:
                         logger.warning(f"⚠️ Quick thumbnail generation failed: {e}")
+                        print(f"⚠️ Thumbnail error: {e}")
                 
-                sent = await client.send_video(**video_kwargs)
+                # ارسال ویدیو با error handling
+                logger.info("📤 Sending video to Telegram (100-500MB)...")
+                print("📤 Sending video to Telegram (100-500MB)...")
+                
+                try:
+                    sent = await client.send_video(**video_kwargs)
+                    logger.info("✅ Video sent successfully")
+                    print("✅ Video sent successfully")
+                except Exception as send_error:
+                    logger.error(f"❌ Send video failed: {send_error}")
+                    print(f"❌ Send video failed: {send_error}")
+                    raise
             
             else:
                 # فایل‌های کوچک: ویدیو با تمام ویژگی‌ها و metadata کامل
@@ -175,7 +207,18 @@ class YouTubeUploader:
                 except Exception as e:
                     logger.warning(f"⚠️ Metadata extraction failed: {e}")
                 
-                sent = await client.send_video(**video_kwargs)
+                # ارسال ویدیو با error handling
+                logger.info("📤 Sending video to Telegram...")
+                print("📤 Sending video to Telegram...")
+                
+                try:
+                    sent = await client.send_video(**video_kwargs)
+                    logger.info("✅ Video sent successfully")
+                    print("✅ Video sent successfully")
+                except Exception as send_error:
+                    logger.error(f"❌ Send video failed: {send_error}")
+                    print(f"❌ Send video failed: {send_error}")
+                    raise
             
             upload_time = time.time() - upload_start
             upload_speed = file_size_mb / upload_time if upload_time > 0 else 0
@@ -183,10 +226,15 @@ class YouTubeUploader:
             logger.info(f"✅ Upload SUCCESS in {upload_time:.2f}s")
             logger.info(f"⚡ Speed: {upload_speed:.2f} MB/s")
             
+            # نمایش در ترمینال
+            print(f"✅ Upload completed in {upload_time:.2f}s")
+            print(f"⚡ Upload speed: {upload_speed:.2f} MB/s")
+            
             # 🔥 هشدار اگر سرعت کم باشد
             if upload_speed < 2.0 and file_size_mb > 10:
                 logger.warning(f"⚠️ Slow upload speed detected: {upload_speed:.2f} MB/s")
                 logger.warning("Check: Network bandwidth, Server CPU, Telegram API limits")
+                print(f"⚠️ Slow upload speed: {upload_speed:.2f} MB/s")
             
             return True
             

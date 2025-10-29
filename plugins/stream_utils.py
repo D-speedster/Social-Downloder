@@ -431,14 +431,16 @@ def generate_thumbnail(file_path: str) -> str:
         if result.returncode == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
             thumb_size = os.path.getsize(thumb_path)
             logger.info(f"✅ Thumbnail created successfully: {thumb_path} ({thumb_size} bytes)")
-            print(f"✅ Thumbnail created: {thumb_path}")
+            print(f"✅ Thumbnail created successfully ({thumb_size} bytes)")
             return thumb_path
         else:
             logger.error(f"❌ Thumbnail generation failed - return code: {result.returncode}")
             if os.path.exists(thumb_path):
                 thumb_size = os.path.getsize(thumb_path)
                 logger.error(f"❌ Thumbnail file exists but size is: {thumb_size} bytes")
-            print(f"❌ Thumbnail generation failed")
+            print(f"❌ Thumbnail generation failed (return code: {result.returncode})")
+            if result.stderr:
+                print(f"   FFmpeg error: {result.stderr[:200]}")
             return None
             
     except subprocess.TimeoutExpired:
