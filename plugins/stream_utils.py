@@ -237,12 +237,32 @@ async def throttled_upload_with_retry(upload_func, max_retries=None, base_delay=
 # 🔥 تابع جدید برای استخراج metadata
 def extract_video_metadata(file_path: str) -> dict:
     """
-    استخراج metadata کامل از ویدیو با ffprobe
+    استخراج metadata کامل از ویدیو با ffprobe و لاگ‌گیری کامل
     """
+    logger = get_logger('stream_utils')
+    
     try:
+        logger.info(f"📊 Starting metadata extraction for: {os.path.basename(file_path)}")
+        
+        # بررسی وجود فایل
+        if not os.path.exists(file_path):
+            logger.error(f"❌ File not found: {file_path}")
+            return {}
+        
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        logger.info(f"📁 File size: {file_size_mb:.2f} MB")
+        
+        # پیدا کردن ffprobe
         ffprobe_path = os.environ.get('FFMPEG_PATH', 'ffmpeg').replace('ffmpeg', 'ffprobe')
+        logger.info(f"🔍 Initial ffprobe path: {ffprobe_path}")
+        
         if not os.path.exists(ffprobe_path):
             ffprobe_path = shutil.which('ffprobe') or 'ffprobe'
+            logger.info(f"🔍 ffprobe from PATH: {ffprobe_path}")
+        
+        if not ffprobe_path or not os.path.exists(ffprobe_path):
+            logger.error("❌ ffprobe not found")
+            return {}
         
         cmd = [
             ffprobe_path, '-v', 'error',
@@ -251,10 +271,25 @@ def extract_video_metadata(file_path: str) -> dict:
             file_path
         ]
         
+        logger.info(f"🔧 ffprobe command: {' '.join(cmd)}")
+        
+        start_time = time.time()
         result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore', timeout=10)
+        end_time = time.time()
+        
+        logger.info(f"⏱️ ffprobe execution time: {end_time - start_time:.2f}s")
+        logger.info(f"🔍 ffprobe return code: {result.returncode}")
+        
+        if result.stderr:
+            logger.warning(f"⚠️ ffprobe stderr: {result.stderr}")
         
         if result.returncode == 0:
-            data = json.loads(result.stdout)
+            try:
+                data = json.loads(result.stdout)
+                logger.info(f"📋 Raw ffprobe data: {data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ JSON decode error: {e}")
+                return {}
             
             metadata = {
                 'duration': 0,
@@ -265,38 +300,56 @@ def extract_video_metadata(file_path: str) -> dict:
             }
             
             format_data = data.get('format', {})
+            logger.info(f"📊 Format data: {format_data}")
+            
             if 'duration' in format_data:
                 try:
                     metadata['duration'] = int(float(format_data['duration']))
-                except:
-                    pass
+                    logger.info(f"⏱️ Duration from format: {metadata['duration']}s")
+                except Exception as e:
+                    logger.warning(f"⚠️ Duration parsing error: {e}")
             
             streams = data.get('streams', [])
-            for stream in streams:
+            logger.info(f"🎬 Found {len(streams)} streams")
+            
+            for i, stream in enumerate(streams):
                 codec_type = stream.get('codec_type', '')
+                logger.info(f"🔍 Stream {i}: type={codec_type}, data={stream}")
                 
                 if codec_type == 'video':
                     metadata['has_video'] = True
                     if 'width' in stream and not metadata['width']:
                         metadata['width'] = int(stream['width'])
+                        logger.info(f"📐 Width: {metadata['width']}")
                     if 'height' in stream and not metadata['height']:
                         metadata['height'] = int(stream['height'])
+                        logger.info(f"📐 Height: {metadata['height']}")
                     if not metadata['duration'] and 'duration' in stream:
                         try:
                             metadata['duration'] = int(float(stream['duration']))
-                        except:
-                            pass
+                            logger.info(f"⏱️ Duration from video stream: {metadata['duration']}s")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Stream duration parsing error: {e}")
                 
                 elif codec_type == 'audio':
                     metadata['has_audio'] = True
+                    logger.info("🔊 Audio stream detected")
             
+            logger.info(f"✅ Final metadata: {metadata}")
             print(f"📊 Metadata extracted: {metadata}")
             return metadata
         else:
+            logger.error(f"❌ ffprobe failed with return code {result.returncode}")
+            logger.error(f"❌ ffprobe stderr: {result.stderr}")
             print(f"❌ ffprobe failed: {result.stderr}")
             return {}
             
+    except subprocess.TimeoutExpired:
+        logger.error("❌ ffprobe timeout after 10 seconds")
+        print("❌ Metadata extraction timeout")
+        return {}
     except Exception as e:
+        logger.error(f"❌ Metadata extraction error: {e}")
         print(f"❌ Metadata extraction error: {e}")
         return {}
 
@@ -304,28 +357,48 @@ def extract_video_metadata(file_path: str) -> dict:
 # 🔥 تابع جدید برای ساخت thumbnail
 def generate_thumbnail(file_path: str) -> str:
     """
-    ساخت سریع thumbnail از ویدیو
+    ساخت سریع thumbnail از ویدیو با لاگ‌گیری کامل
     """
+    logger = get_logger('stream_utils')
+    
     try:
+        logger.info(f"🎬 Starting thumbnail generation for: {os.path.basename(file_path)}")
+        
         # بررسی اینکه آیا thumbnail قبلاً وجود دارد
         thumb_path = file_path.rsplit('.', 1)[0] + '_thumb.jpg'
         if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            logger.info(f"✅ Existing thumbnail found: {thumb_path}")
             return thumb_path
         
+        # پیدا کردن FFmpeg
         ffmpeg_path = os.environ.get('FFMPEG_PATH')
+        logger.info(f"🔍 FFMPEG_PATH from env: {ffmpeg_path}")
+        
         if not ffmpeg_path:
             try:
                 from config import FFMPEG_PATH as CFG_FFMPEG
                 ffmpeg_path = CFG_FFMPEG
-            except Exception:
+                logger.info(f"🔍 FFMPEG_PATH from config: {ffmpeg_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not load FFMPEG_PATH from config: {e}")
                 ffmpeg_path = None
         
         if not ffmpeg_path or not os.path.exists(ffmpeg_path):
             ffmpeg_path = shutil.which('ffmpeg')
+            logger.info(f"🔍 FFmpeg from PATH: {ffmpeg_path}")
         
         if not ffmpeg_path:
+            logger.error("❌ FFmpeg not found in any location")
             print("❌ FFmpeg not found, skipping thumbnail")
             return None
+        
+        # بررسی دسترسی به فایل ورودی
+        if not os.path.exists(file_path):
+            logger.error(f"❌ Input file not found: {file_path}")
+            return None
+        
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        logger.info(f"📊 Input file size: {file_size_mb:.2f} MB")
         
         # دستور بهینه‌سازی شده برای سرعت بالا
         cmd = [
@@ -339,21 +412,41 @@ def generate_thumbnail(file_path: str) -> str:
             thumb_path
         ]
         
+        logger.info(f"🔧 FFmpeg command: {' '.join(cmd)}")
+        
         # timeout کوتاه‌تر برای جلوگیری از کندی
+        start_time = time.time()
         result = subprocess.run(cmd, capture_output=True, timeout=8, 
-                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                              encoding='utf-8', errors='ignore')
+        end_time = time.time()
+        
+        logger.info(f"⏱️ FFmpeg execution time: {end_time - start_time:.2f}s")
+        logger.info(f"🔍 FFmpeg return code: {result.returncode}")
+        
+        if result.stdout:
+            logger.info(f"📝 FFmpeg stdout: {result.stdout}")
+        if result.stderr:
+            logger.warning(f"⚠️ FFmpeg stderr: {result.stderr}")
         
         if result.returncode == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
+            thumb_size = os.path.getsize(thumb_path)
+            logger.info(f"✅ Thumbnail created successfully: {thumb_path} ({thumb_size} bytes)")
             print(f"✅ Thumbnail created: {thumb_path}")
             return thumb_path
         else:
+            logger.error(f"❌ Thumbnail generation failed - return code: {result.returncode}")
+            if os.path.exists(thumb_path):
+                thumb_size = os.path.getsize(thumb_path)
+                logger.error(f"❌ Thumbnail file exists but size is: {thumb_size} bytes")
             print(f"❌ Thumbnail generation failed")
             return None
             
     except subprocess.TimeoutExpired:
+        logger.error("❌ Thumbnail generation timeout after 8 seconds")
         print("❌ Thumbnail generation timeout")
         return None
     except Exception as e:
+        logger.error(f"❌ Thumbnail generation error: {e}")
         print(f"❌ Thumbnail error: {e}")
         return None
 
@@ -361,63 +454,121 @@ def generate_thumbnail(file_path: str) -> str:
 # 🔥 تابع smart_upload_strategy اصلاح شده
 async def smart_upload_strategy(client, chat_id: int, file_path: str, media_type: str, **kwargs) -> bool:
     """
-    بهینه‌سازی شده برای سرعت بالا با حفظ metadata ضروری
+    بهینه‌سازی شده برای سرعت بالا با حفظ metadata ضروری و لاگ‌گیری کامل
     """
+    logger = get_logger('stream_utils')
+    
     file_size = os.path.getsize(file_path)
     file_size_mb = file_size / (1024 * 1024)
+    
+    logger.info(f"🚀 Starting smart upload: {os.path.basename(file_path)} ({file_size_mb:.2f} MB, type: {media_type})")
     
     progress_callback = kwargs.pop('progress', None)
     
     # برای ویدیوهای یوتیوب، metadata و thumbnail ضروری است
     if media_type == "video" and file_size_mb > 1:  # فقط برای ویدیوهای بزرگتر از 1MB
+        logger.info("🎬 Video detected, extracting metadata and thumbnail...")
+        
         try:
             # استخراج سریع metadata
+            metadata_start = time.time()
             metadata = extract_video_metadata(file_path)
+            metadata_time = time.time() - metadata_start
+            
+            logger.info(f"⏱️ Metadata extraction took: {metadata_time:.2f}s")
+            
             if metadata:
                 if 'duration' not in kwargs and metadata.get('duration'):
                     kwargs['duration'] = metadata['duration']
+                    logger.info(f"⏱️ Added duration: {metadata['duration']}s")
                 if 'width' not in kwargs and metadata.get('width'):
                     kwargs['width'] = metadata['width']
+                    logger.info(f"📐 Added width: {metadata['width']}px")
                 if 'height' not in kwargs and metadata.get('height'):
                     kwargs['height'] = metadata['height']
+                    logger.info(f"📐 Added height: {metadata['height']}px")
+            else:
+                logger.warning("⚠️ No metadata extracted")
             
             # ساخت thumbnail سریع اگر وجود ندارد
             if 'thumb' not in kwargs:
+                logger.info("🖼️ Generating thumbnail...")
+                thumb_start = time.time()
                 thumb_path = generate_thumbnail(file_path)
+                thumb_time = time.time() - thumb_start
+                
+                logger.info(f"⏱️ Thumbnail generation took: {thumb_time:.2f}s")
+                
                 if thumb_path:
                     kwargs['thumb'] = thumb_path
+                    logger.info(f"✅ Thumbnail added: {thumb_path}")
+                else:
+                    logger.warning("⚠️ Thumbnail generation failed")
+            else:
+                logger.info("🖼️ Thumbnail already provided")
+                
         except Exception as e:
+            logger.error(f"❌ Metadata/thumbnail extraction failed: {e}")
             print(f"Metadata extraction failed, continuing without: {e}")
+    else:
+        logger.info(f"📄 Non-video or small file, skipping metadata extraction")
+    
+    # لاگ کردن تنظیمات نهایی آپلود
+    upload_settings = {k: v for k, v in kwargs.items() if k not in ['thumb']}  # حذف thumb از لاگ برای خوانایی
+    if 'thumb' in kwargs:
+        upload_settings['thumb'] = f"<thumbnail: {os.path.basename(kwargs['thumb'])}>"
+    logger.info(f"📋 Upload settings: {upload_settings}")
     
     async def perform_upload():
         upload_kwargs = kwargs.copy()
         if progress_callback:
             upload_kwargs['progress'] = progress_callback
         
+        logger.info(f"📤 Starting {media_type} upload...")
+        upload_start = time.time()
+        
         # آپلود مستقیم بدون تأخیر اضافی
         if media_type == "video":
             # اضافه کردن supports_streaming برای بهبود پخش
             upload_kwargs['supports_streaming'] = True
-            return await client.send_video(chat_id=chat_id, video=file_path, **upload_kwargs)
+            result = await client.send_video(chat_id=chat_id, video=file_path, **upload_kwargs)
         elif media_type == "photo":
-            return await client.send_photo(chat_id=chat_id, photo=file_path, **upload_kwargs)
+            result = await client.send_photo(chat_id=chat_id, photo=file_path, **upload_kwargs)
         elif media_type == "audio":
-            return await client.send_audio(chat_id=chat_id, audio=file_path, **upload_kwargs)
+            result = await client.send_audio(chat_id=chat_id, audio=file_path, **upload_kwargs)
         else:
-            return await client.send_document(chat_id=chat_id, document=file_path, **upload_kwargs)
+            result = await client.send_document(chat_id=chat_id, document=file_path, **upload_kwargs)
+        
+        upload_time = time.time() - upload_start
+        logger.info(f"✅ Upload completed in {upload_time:.2f}s")
+        
+        return result
     
     try:
         # آپلود مستقیم بدون retry اضافی برای سرعت بالا
+        total_start = time.time()
         await perform_upload()
+        total_time = time.time() - total_start
+        
+        logger.info(f"🎉 Smart upload successful! Total time: {total_time:.2f}s")
         return True
+        
     except Exception as e:
+        logger.error(f"❌ Smart upload failed: {e}")
         print(f"Smart upload failed: {e}")
+        
         # فقط یک بار retry در صورت خطا
         try:
+            logger.info("🔄 Retrying upload after 0.5s...")
             await asyncio.sleep(0.5)
             await perform_upload()
+            
+            total_time = time.time() - total_start
+            logger.info(f"✅ Smart upload retry successful! Total time: {total_time:.2f}s")
             return True
+            
         except Exception as e2:
+            logger.error(f"❌ Smart upload retry failed: {e2}")
             print(f"Smart upload retry failed: {e2}")
             return False
 

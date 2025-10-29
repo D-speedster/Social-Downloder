@@ -57,18 +57,25 @@ class YouTubeUploader:
             
             upload_start = time.time()
             
-            # 🔥 Progress wrapper با throttling شدید
-            last_update = {'time': 0}
+            # 🔥 Progress wrapper با throttling شدید - فقط برای فایل‌های بزرگ
+            last_update = {'time': 0, 'percent': 0}
             
             async def optimized_progress(current, total):
                 nonlocal last_update
                 if not progress_callback:
                     return
                 
+                # فقط برای فایل‌های بزرگتر از 50MB progress نمایش بده
+                if file_size_mb < 50:
+                    return
+                
                 now = time.time()
-                # فقط هر 3 ثانیه یک بار (کاهش overhead)
-                if now - last_update['time'] >= 3.0:
+                current_percent = int((current / total) * 100)
+                
+                # فقط هر 5 ثانیه یا هر 10 درصد یک بار
+                if (now - last_update['time'] >= 5.0) or (current_percent - last_update['percent'] >= 10):
                     last_update['time'] = now
+                    last_update['percent'] = current_percent
                     try:
                         await progress_callback(current, total)
                     except Exception:
@@ -91,36 +98,84 @@ class YouTubeUploader:
                 )
             
             elif file_size_mb > 100:  # افزایش threshold از 50 به 100 MB
-                # فایل‌های بزرگ: ویدیو بدون thumbnail
-                logger.info("🎥 Using VIDEO mode without thumbnail (100-500MB)")
+                # فایل‌های بزرگ: ویدیو با thumbnail اما بدون metadata اضافی
+                logger.info("🎥 Using VIDEO mode with thumbnail (100-500MB)")
                 
-                sent = await client.send_video(
-                    chat_id=chat_id,
-                    video=file_path,
-                    caption=caption,
-                    duration=duration,
-                    supports_streaming=True,  # 🔥 حتماً فعال
-                    progress=optimized_progress,
-                    reply_to_message_id=reply_to_message_id,
-                    disable_notification=True,  # کاهش overhead
-                    thumb=None  # بدون thumbnail برای سرعت
-                )
+                # استخراج metadata سریع برای فایل‌های بزرگ
+                video_kwargs = {
+                    'chat_id': chat_id,
+                    'video': file_path,
+                    'caption': caption,
+                    'duration': duration,
+                    'supports_streaming': True,
+                    'progress': optimized_progress,
+                    'reply_to_message_id': reply_to_message_id,
+                    'disable_notification': True
+                }
+                
+                # اضافه کردن thumbnail اگر موجود باشد
+                if thumbnail and os.path.exists(thumbnail):
+                    video_kwargs['thumb'] = thumbnail
+                    logger.info(f"✅ Using provided thumbnail: {thumbnail}")
+                else:
+                    # تلاش برای ساخت thumbnail سریع
+                    try:
+                        from plugins.stream_utils import generate_thumbnail
+                        quick_thumb = generate_thumbnail(file_path)
+                        if quick_thumb:
+                            video_kwargs['thumb'] = quick_thumb
+                            logger.info(f"✅ Generated quick thumbnail: {quick_thumb}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Quick thumbnail generation failed: {e}")
+                
+                sent = await client.send_video(**video_kwargs)
             
             else:
-                # فایل‌های کوچک: ویدیو با تمام ویژگی‌ها
-                logger.info("🎬 Using FULL VIDEO mode")
+                # فایل‌های کوچک: ویدیو با تمام ویژگی‌ها و metadata کامل
+                logger.info("🎬 Using FULL VIDEO mode with complete metadata")
                 
-                sent = await client.send_video(
-                    chat_id=chat_id,
-                    video=file_path,
-                    caption=caption,
-                    duration=duration,
-                    thumb=thumbnail,
-                    supports_streaming=True,
-                    progress=optimized_progress,
-                    reply_to_message_id=reply_to_message_id,
-                    disable_notification=True
-                )
+                video_kwargs = {
+                    'chat_id': chat_id,
+                    'video': file_path,
+                    'caption': caption,
+                    'duration': duration,
+                    'supports_streaming': True,
+                    'progress': optimized_progress,
+                    'reply_to_message_id': reply_to_message_id,
+                    'disable_notification': True
+                }
+                
+                # اضافه کردن thumbnail
+                if thumbnail and os.path.exists(thumbnail):
+                    video_kwargs['thumb'] = thumbnail
+                    logger.info(f"✅ Using provided thumbnail: {thumbnail}")
+                else:
+                    # ساخت thumbnail برای فایل‌های کوچک
+                    try:
+                        from plugins.stream_utils import generate_thumbnail
+                        quick_thumb = generate_thumbnail(file_path)
+                        if quick_thumb:
+                            video_kwargs['thumb'] = quick_thumb
+                            logger.info(f"✅ Generated thumbnail: {quick_thumb}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ Thumbnail generation failed: {e}")
+                
+                # استخراج metadata برای فایل‌های کوچک
+                try:
+                    from plugins.stream_utils import extract_video_metadata
+                    metadata = extract_video_metadata(file_path)
+                    if metadata:
+                        if metadata.get('width') and metadata.get('height'):
+                            video_kwargs['width'] = metadata['width']
+                            video_kwargs['height'] = metadata['height']
+                            logger.info(f"✅ Added resolution: {metadata['width']}x{metadata['height']}")
+                        if metadata.get('duration') and not duration:
+                            video_kwargs['duration'] = metadata['duration']
+                            logger.info(f"✅ Added duration: {metadata['duration']}s")
+                except Exception as e:
+                    logger.warning(f"⚠️ Metadata extraction failed: {e}")
+                
+                sent = await client.send_video(**video_kwargs)
             
             upload_time = time.time() - upload_start
             upload_speed = file_size_mb / upload_time if upload_time > 0 else 0
