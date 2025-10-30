@@ -13,6 +13,14 @@ from plugins.dashboard import _render_dashboard, _build_markup as _build_dash_ma
 from plugins.admin import ADMIN
 import logging
 
+# 🔥 Import metrics برای tracking
+try:
+    from plugins.simple_metrics import metrics
+    METRICS_ENABLED = True
+except ImportError:
+    METRICS_ENABLED = False
+    print("⚠️ Metrics not available")
+
 # Configure Start module logger
 start_logger = logging.getLogger('start_main')
 start_logger.setLevel(logging.DEBUG)
