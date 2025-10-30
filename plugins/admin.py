@@ -60,6 +60,49 @@ admin_step = {
     'ad_caption': '',
 }
 
+# ✅ Per-user state management برای جلوگیری از conflict
+admin_user_states = {}  # {user_id: {'advertisement': {...}, 'created_at': ...}}
+
+class AdminUserState:
+    """State management برای هر ادمین"""
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.advertisement = {
+            'step': 0,
+            'content_type': '',
+            'file_id': '',
+            'caption': '',
+            'text': ''
+        }
+        self.created_at = time.time()
+        self.timeout = 300  # 5 minutes
+    
+    def is_expired(self):
+        return time.time() - self.created_at > self.timeout
+    
+    def reset_advertisement(self):
+        self.advertisement = {
+            'step': 0,
+            'content_type': '',
+            'file_id': '',
+            'caption': '',
+            'text': ''
+        }
+        self.created_at = time.time()
+
+def get_admin_user_state(user_id) -> AdminUserState:
+    """Get or create admin state for user"""
+    if user_id not in admin_user_states:
+        admin_user_states[user_id] = AdminUserState(user_id)
+    
+    state = admin_user_states[user_id]
+    
+    # ✅ Auto-reset expired states
+    if state.is_expired():
+        state.reset_advertisement()
+    
+    return state
+
 insta = {'level': 0, 'id': "default", 'pass': "defult"}
 
 
@@ -627,7 +670,13 @@ async def refresh_status_display(client: Client, callback_query: CallbackQuery):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 تنظیم تبلیغات$'))
 async def admin_menu_advertisement(_: Client, message: Message):
-    print("[ADMIN] advertisement setup via text by", message.from_user.id)
+    user_id = message.from_user.id
+    print(f"[ADMIN] advertisement setup via text by {user_id}")
+    admin_logger.info(f"[ADMIN] Advertisement setup started by {user_id}")
+    
+    # ✅ Get per-user state
+    state = get_admin_user_state(user_id)
+    state.reset_advertisement()
     
     # Get current advertisement settings
     ad_settings = data.get('advertisement', {})
@@ -640,15 +689,9 @@ async def admin_menu_advertisement(_: Client, message: Message):
     
     text = (
         "📺 <b>تنظیم تبلیغات</b>\n\n"
-        f"وضعیت: {status_text}\n"
+        f"وضعیت فعلی: {status_text}\n"
         f"نوع محتوا: {content_type.upper()}\n"
-        f"مکان نمایش: {position_text}\n\n"
-        "برای تنظیم تبلیغات جدید، محتوای مورد نظر خود را ارسال کنید:\n\n"
-        "• متن ساده\n"
-        "• عکس (با یا بدون متن)\n"
-        "• استیکر\n"
-        "• GIF\n"
-        "• ویدیو\n"
+        f"مکیدیو\n"
         "• موزیک\n\n"
         "برای لغو /cancel را بفرستید."
     )
@@ -1097,29 +1140,122 @@ async def broadcast_callback_handler(client: Client, callback_query: CallbackQue
         )
 
 @Client.on_message(filters.command('cancel') & filters.user(ADMIN))
-async def cancel_broadcast(_, message: Message):
-    if admin_step.get('broadcast') > 0:
+async def cancel_all_operations(_, message: Message):
+    """Cancel all active admin operations"""
+    cancelled_operations = []
+    
+    # Cancel broadcast
+    if admin_step.get('broadcast', 0) > 0:
         admin_step['broadcast'] = 0
         admin_step['broadcast_type'] = ''
         admin_step['broadcast_content'] = None
+        cancelled_operations.append("ارسال همگانی")
+    
+    # Cancel sponsor setup
+    if admin_step.get('sp', 0) == 1:
+        admin_step['sp'] = 0
+        cancelled_operations.append("تنظیم اسپانسر")
+    
+    # Cancel advertisement setup
+    if admin_step.get('advertisement', 0) > 0:
+        admin_step['advertisement'] = 0
+        admin_step['ad_content_type'] = ''
+        admin_step['ad_file_id'] = ''
+        admin_step['ad_caption'] = ''
+        admin_step['ad_text'] = ''
+        cancelled_operations.append("تنظیم تبلیغات")
+    
+    # Cancel waiting message setup
+    if admin_step.get('waiting_msg', 0) > 0:
+        admin_step['waiting_msg'] = 0
+        admin_step['waiting_msg_type'] = ''
+        admin_step['waiting_msg_platform'] = ''
+        cancelled_operations.append("تنظیم پیام انتظار")
+    
+    # Cancel cookie operations
+    if 'add_cookie' in admin_step:
+        del admin_step['add_cookie']
+        cancelled_operations.append("افزودن کوکی")
+    
+    if cancelled_operations:
+        operations_text = "، ".join(cancelled_operations)
         await message.reply_text(
-            "❌ عملیات ارسال همگانی لغو شد.",
+            f"❌ عملیات‌های زیر لغو شدند:\n• {operations_text}",
             reply_markup=admin_reply_kb()
         )
+        admin_logger.info(f"[ADMIN] Operations cancelled by {message.from_user.id}: {operations_text}")
     else:
-        await message.reply_text("عملیات فعالی برای لغو وجود ندارد.")
+        await message.reply_text(
+            "ℹ️ عملیات فعالی برای لغو وجود ندارد.",
+            reply_markup=admin_reply_kb()
+        )
 
 
-@Client.on_message(sp_filter & filters.user(ADMIN), group=6)
-async def set_sp(_: Client, message: Message):
+# Global lock برای جلوگیری از race condition
+_json_write_lock = asyncio.Lock()
+
+async def validate_ad_content(message: Message) -> tuple:
+    """
+    Validate advertisement content
+    
+    Returns:
+        (is_valid, error_message)
+    """
+    # ✅ Text validation
+    if message.text:
+        if len(message.text) > 4096:
+            return False, "❌ متن تبلیغات نباید بیشتر از 4096 کاراکتر باشد."
+        return True, ""
+    
+    # ✅ Photo validation
+    if message.photo:
+        file_size = message.photo.file_size or 0
+        if file_size > 10 * 1024 * 1024:  # 10 MB
+            return False, "❌ حجم عکس نباید بیشتر از 10 MB باشد."
+        return True, ""
+    
+    # ✅ Video validation
+    if message.video:
+        file_size = message.video.file_size or 0
+        if file_size > 50 * 1024 * 1024:  # 50 MB
+            return False, "❌ حجم ویدیو نباید بیشتر از 50 MB باشد."
+        duration = message.video.duration or 0
+        if duration > 60:  # 1 minute
+            return False, "❌ مدت زمان ویدیو نباید بیشتر از 1 دقیقه باشد."
+        return True, ""
+    
+    # ✅ Animation (GIF) validation
+    if message.animation:
+        file_size = message.animation.file_size or 0
+        if file_size > 10 * 1024 * 1024:  # 10 MB
+            return False, "❌ حجم GIF نباید بیشتر از 10 MB باشد."
+        return True, ""
+    
+    # ✅ Audio validation
+    if message.audio:
+        file_size = message.audio.file_size or 0
+        if file_size > 50 * 1024 * 1024:  # 50 MB
+            return False, "❌ حجم موزیک نباید بیشتر از 50 MB باشد."
+        return True, ""
+    
+    # ✅ Sticker validation
+    if message.sticker:
+        return True, ""
+    
+    return False, "❌ نوع محتوای ارسالی پشتیبانی نمی‌شود."
+
+@Client.on_message(sp_filter & filters.user(ADMIN), group=5)
+async def set_sp(client: Client, message: Message):
      raw = (message.text or '').strip()
      val = raw
+     
      # Normalize input
      if re.match(r'^(https?://)?t\.me/[A-Za-z0-9_]{4,}$', raw):
          # Extract username from t.me link
          uname = re.sub(r'^(https?://)?t\.me/', '', raw).strip('/')
          if uname.startswith('+'):
-             await message.reply_text("لینک دعوت خصوصی (+) پشتیبانی نمی‌شود. لطفاً @username یا آی‌دی عددی -100… را ارسال کنید.")
+             await message.reply_text("❌ لینک دعوت خصوصی (+) پشتیبانی نمی‌شود.\nلطفاً @username یا آی‌دی عددی -100… را ارسال کنید.")
+             admin_step['sp'] = 0
              return
          val = '@' + uname
      elif re.match(r'^@[A-Za-z0-9_]{4,}$', raw):
@@ -1127,16 +1263,109 @@ async def set_sp(_: Client, message: Message):
      elif re.match(r'^-100\d{8,14}$', raw):
          val = raw
      else:
-         await message.reply_text("فرمت وارد شده صحیح نیست. نمونه‌ها: @example یا -1001234567890 یا https://t.me/example")
+         await message.reply_text("❌ فرمت نادرست.\n\nنمونه‌های صحیح:\n• @example\n• -1001234567890\n• https://t.me/example")
+         admin_step['sp'] = 0
          return
-
-     data['sponser'] = val
-     from .db_path_manager import db_path_manager
-     json_db_path = db_path_manager.get_json_db_path()
      
-     with open(json_db_path, "w", encoding='utf-8') as outfile:
-         json.dump(data, outfile, indent=4, ensure_ascii=False)
-     await message.reply_text("اسپانسر بات با موفقیت تغییر کرد ✅")
+     # ✅ Validation: بررسی دسترسی به کانال
+     try:
+         status_msg = await message.reply_text("🔄 در حال بررسی دسترسی...")
+         
+         try:
+             # دریافت اطلاعات کانال
+             chat = await client.get_chat(val)
+             
+             # ✅ دریافت ID ربات
+             bot = await client.get_me()
+             
+             # بررسی اینکه ربات عضو و ادمین است
+             try:
+                 bot_member = await client.get_chat_member(val, bot.id)
+                 if bot_member.status not in ["administrator", "creator"]:
+                     await status_msg.edit_text(
+                         "❌ ربات در این کانال ادمین نیست!\n\n"
+                         "لطفاً ابتدا ربات را در کانال ادمین کنید."
+                     )
+                     admin_step['sp'] = 0
+                     return
+             except Exception as e:
+                 await status_msg.edit_text(
+                     "❌ ربات در این کانال عضو نیست!\n\n"
+                     "لطفاً ابتدا ربات را به کانال اضافه کنید.\n\n"
+                     f"خطا: {str(e)[:100]}"
+                 )
+                 admin_step['sp'] = 0
+                 return
+             
+             await status_msg.edit_text("✅ دسترسی تأیید شد. در حال ذخیره...")
+             
+         except Exception as e:
+             await status_msg.edit_text(
+                 f"❌ خطا در دسترسی به کانال!\n\n"
+                 f"لطفاً مطمئن شوید:\n"
+                 f"• شناسه کانال صحیح است\n"
+                 f"• ربات در کانال عضو است\n"
+                 f"• ربات ادمین است\n\n"
+                 f"خطا: {str(e)[:100]}"
+             )
+             admin_step['sp'] = 0
+             return
+     
+     except Exception as e:
+         await message.reply_text(f"❌ خطا در بررسی دسترسی: {e}")
+         admin_step['sp'] = 0
+         return
+     
+     # ✅ Thread-safe write با lock
+     async with _json_write_lock:
+         try:
+             from .db_path_manager import db_path_manager
+             json_db_path = db_path_manager.get_json_db_path()
+             
+             # ✅ Backup قبل از نوشتن
+             backup_path = json_db_path + '.bak'
+             if os.path.exists(json_db_path):
+                 shutil.copy2(json_db_path, backup_path)
+             
+             # ✅ Read-Modify-Write pattern
+             with open(json_db_path, 'r', encoding='utf-8') as f:
+                 current_data = json.load(f)
+             
+             current_data['sponser'] = val
+             
+             # ✅ Atomic write
+             temp_path = json_db_path + '.tmp'
+             with open(temp_path, 'w', encoding='utf-8') as outfile:
+                 json.dump(current_data, outfile, indent=4, ensure_ascii=False)
+             
+             # ✅ Atomic rename
+             os.replace(temp_path, json_db_path)
+             
+             # ✅ Update in-memory data
+             data['sponser'] = val
+             
+             # ✅ Log
+             admin_logger.info(f"[ADMIN] Sponsor set by {message.from_user.id}: {val}")
+             
+             await status_msg.edit_text(
+                 f"✅ اسپانسر با موفقیت تنظیم شد!\n\n"
+                 f"کانال: {val}\n"
+                 f"نام: {chat.title if hasattr(chat, 'title') else 'نامشخص'}"
+             )
+             
+         except Exception as e:
+             # ✅ Restore backup در صورت خطا
+             admin_logger.error(f"[ADMIN] Error setting sponsor: {e}")
+             try:
+                 if os.path.exists(backup_path):
+                     shutil.copy2(backup_path, json_db_path)
+             except Exception:
+                 pass
+             
+             await message.reply_text(f"❌ خطا در ذخیره: {e}")
+             admin_step['sp'] = 0
+             return
+     
      admin_step['sp'] = 0
 
 
@@ -1303,8 +1532,9 @@ async def waiting_cancel_callback_handler(client: Client, callback_query: Callba
 
 # Handle advertisement content input
 async def handle_advertisement_content(client: Client, message: Message):
-    """Handle advertisement content input from admin"""
+    """Handle advertisement content input from admin with validation"""
     try:
+        # Ignore admin panel buttons
         if message.text and message.text.strip() in {
             "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور",
             "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
@@ -1312,6 +1542,14 @@ async def handle_advertisement_content(client: Client, message: Message):
             "🔝 بالای محتوا","🔻 پایین محتوا"
         }:
             return
+        
+        # ✅ Validation محتوا
+        is_valid, error_msg = await validate_ad_content(message)
+        if not is_valid:
+            await message.reply_text(error_msg)
+            admin_step['advertisement'] = 0
+            return
+        
         ad_data = {
             'enabled': True,
             'position': 'after'  # default position
@@ -1322,7 +1560,6 @@ async def handle_advertisement_content(client: Client, message: Message):
             ad_data['content'] = message.text
             ad_data['file_id'] = ''
             ad_data['caption'] = ''
-            # Store text content for later save
             admin_step['ad_text'] = message.text
         elif message.photo:
             ad_data['content_type'] = 'photo'
@@ -1364,6 +1601,9 @@ async def handle_advertisement_content(client: Client, message: Message):
         admin_step['ad_file_id'] = ad_data.get('file_id', '')
         admin_step['ad_caption'] = ad_data.get('caption', '')
         
+        # ✅ Log
+        admin_logger.info(f"[ADMIN] Advertisement content received: {ad_data['content_type']}")
+        
         # Ask for position
         keyboard = ReplyKeyboardMarkup([
             ["🔝 بالای محتوا", "🔻 پایین محتوا"],
@@ -1378,6 +1618,7 @@ async def handle_advertisement_content(client: Client, message: Message):
         )
         
     except Exception as e:
+        admin_logger.error(f"[ADMIN] Advertisement content error: {e}")
         print(f"[ERROR] Advertisement content processing error: {e}")
         await message.reply_text(f"❌ خطا در پردازش محتوای تبلیغات: {str(e)}")
         admin_step['advertisement'] = 0
@@ -1397,7 +1638,7 @@ async def admin_text_handler(client: Client, message: Message):
 # NEW: Activate advertisement content handler when in step 1
 ad_content_filter = filters.create(lambda _, __, m: admin_step.get('advertisement') == 1)
 
-@Client.on_message(ad_content_filter & filters.user(ADMIN), group=6)
+@Client.on_message(ad_content_filter & filters.user(ADMIN), group=7)
 async def admin_ad_content_entry(client: Client, message: Message):
     await handle_advertisement_content(client, message)
 
@@ -1418,26 +1659,46 @@ async def admin_ad_position_handler(_: Client, message: Message):
         else:
             ad_settings['content'] = ''
 
-        # Persist to database.json safely
-        try:
-            from .db_path_manager import db_path_manager
-            json_db_path = db_path_manager.get_json_db_path()
-            
-            backup_path = json_db_path + '.bak'
-            if os.path.exists(json_db_path):
-                shutil.copy2(json_db_path, backup_path)
-            data['advertisement'] = ad_settings
-            with open(json_db_path, 'w', encoding='utf-8') as outfile:
-                json.dump(data, outfile, indent=4, ensure_ascii=False)
-        except Exception as e:
-            print(f"[ADMIN] Failed to save advertisement settings: {e}")
+        # ✅ Persist to database.json safely با lock
+        async with _json_write_lock:
             try:
-                if os.path.exists(backup_path):
-                    shutil.copy2(backup_path, json_db_path)
-            except Exception:
-                pass
-            await message.reply_text("❌ خطا در ذخیره تنظیمات تبلیغات.")
-            return
+                from .db_path_manager import db_path_manager
+                json_db_path = db_path_manager.get_json_db_path()
+                
+                # ✅ Backup
+                backup_path = json_db_path + '.bak'
+                if os.path.exists(json_db_path):
+                    shutil.copy2(json_db_path, backup_path)
+                
+                # ✅ Read-Modify-Write
+                with open(json_db_path, 'r', encoding='utf-8') as f:
+                    current_data = json.load(f)
+                
+                current_data['advertisement'] = ad_settings
+                
+                # ✅ Atomic write
+                temp_path = json_db_path + '.tmp'
+                with open(temp_path, 'w', encoding='utf-8') as outfile:
+                    json.dump(current_data, outfile, indent=4, ensure_ascii=False)
+                
+                os.replace(temp_path, json_db_path)
+                
+                # ✅ Update in-memory
+                data['advertisement'] = ad_settings
+                
+                # ✅ Log
+                admin_logger.info(f"[ADMIN] Advertisement settings saved: {ad_settings['content_type']}, position={pos}")
+                
+            except Exception as e:
+                admin_logger.error(f"[ADMIN] Failed to save advertisement: {e}")
+                print(f"[ADMIN] Failed to save advertisement settings: {e}")
+                try:
+                    if os.path.exists(backup_path):
+                        shutil.copy2(backup_path, json_db_path)
+                except Exception:
+                    pass
+                await message.reply_text("❌ خطا در ذخیره تنظیمات تبلیغات.")
+                return
 
         # Reset steps
         admin_step['advertisement'] = 0
@@ -1451,6 +1712,7 @@ async def admin_ad_position_handler(_: Client, message: Message):
             reply_markup=admin_reply_kb()
         )
     except Exception as e:
+        admin_logger.error(f"[ADMIN] Error in ad position handler: {e}")
         print(f"[ADMIN] Error in ad position handler: {e}")
         await message.reply_text("❌ خطای غیرمنتظره در تنظیم تبلیغات.")
 def _server_status_text():

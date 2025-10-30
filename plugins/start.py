@@ -607,17 +607,21 @@ async def handle_text_messages(client: Client, message: Message):
             # These are handled by dedicated handlers, do nothing here
             pass
         else:
-            # Not a supported URL, send help message
-            await message.reply_text(
-                "🔗 **لینک پشتیبانی شده ارسال کنید:**\n\n"
-                "📺 **یوتیوب** - youtube.com, youtu.be\n"
-                "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
-                "🎵 **اسپاتیفای** - spotify.com\n"
-                "🎬 **تیک‌تاک** - tiktok.com\n"
-                "🎧 **ساندکلود** - soundcloud.com\n\n"
-                "💡 فقط لینک را ارسال کنید تا پردازش شود.",
-                reply_markup=build_main_menu(message.from_user.id)
-            )
+            # Only show help for text that looks like a URL
+            if ('http' in text.lower() or 'www.' in text.lower() or '.com' in text.lower() or 
+                '.org' in text.lower() or '.net' in text.lower() or text.startswith('@')):
+                # Looks like a URL but not supported
+                await message.reply_text(
+                    "🔗 **لینک پشتیبانی شده ارسال کنید:**\n\n"
+                    "📺 **یوتیوب** - youtube.com, youtu.be\n"
+                    "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
+                    "🎵 **اسپاتیفای** - spotify.com\n"
+                    "🎬 **تیک‌تاک** - tiktok.com\n"
+                    "🎧 **ساندکلود** - soundcloud.com\n\n"
+                    "💡 فقط لینک را ارسال کنید تا پردازش شود.",
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            # For regular text, do nothing (let other handlers handle it)
     except Exception as e:
         print(f"Error handling text message: {e}")
         try:
