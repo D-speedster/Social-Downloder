@@ -2,9 +2,20 @@ import os
 import asyncio
 from typing import Dict
 
-# Global semaphore to limit concurrent heavy downloads/transcodes
-DEFAULT_CAPACITY = max(2, min(4, (os.cpu_count() or 2)//2))
+# 🔥 بهینه‌سازی برای production: افزایش capacity
+# محاسبه خودکار بر اساس CPU cores
+def calculate_optimal_capacity():
+    cpu_count = os.cpu_count() or 2
+    # هر core می‌تواند 4 دانلود همزمان handle کند
+    optimal = cpu_count * 4
+    # حداقل 8، حداکثر 32
+    return max(8, min(optimal, 32))
+
+DEFAULT_CAPACITY = calculate_optimal_capacity()
 MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', str(DEFAULT_CAPACITY)))
+
+print(f"🚀 Concurrency initialized: {MAX_CONCURRENT_DOWNLOADS} concurrent downloads")
+
 _download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
 _active = 0

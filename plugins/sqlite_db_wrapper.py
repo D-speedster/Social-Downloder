@@ -14,13 +14,34 @@ class DB:
         db_path = db_path_manager.get_sqlite_db_path()
         self.mydb = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
         self.cursor = self.mydb.cursor()
-        # Reduce locking and improve concurrency
+        
+        # 🔥 بهینه‌سازی‌های حیاتی SQLite برای production
         try:
+            # WAL mode: بهترین برای concurrent reads/writes
             self.cursor.execute('PRAGMA journal_mode=WAL')
+            
+            # NORMAL: تعادل بین سرعت و ایمنی
             self.cursor.execute('PRAGMA synchronous=NORMAL')
+            
+            # افزایش timeout برای جلوگیری از lock errors
             self.cursor.execute('PRAGMA busy_timeout=30000')
-        except Exception:
-            pass
+            
+            # 🔥 بهینه‌سازی‌های جدید
+            # افزایش cache size (10MB)
+            self.cursor.execute('PRAGMA cache_size=-10000')
+            
+            # استفاده از memory برای temp tables
+            self.cursor.execute('PRAGMA temp_store=MEMORY')
+            
+            # بهینه‌سازی page size
+            self.cursor.execute('PRAGMA page_size=4096')
+            
+            # افزایش mmap size برای سرعت بیشتر (256MB)
+            self.cursor.execute('PRAGMA mmap_size=268435456')
+            
+            print(f"✅ SQLite optimized for production")
+        except Exception as e:
+            print(f"⚠️ SQLite optimization warning: {e}")
         
         print(f"SQLite database connected at: {db_path}")
 

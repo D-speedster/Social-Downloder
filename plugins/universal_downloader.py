@@ -597,9 +597,12 @@ async def handle_universal_link(client: Client, message: Message):
                                     if not invalid:
                                         api_data = result
                                         _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
+                                        print(f"✅ API success for {platform}")
                                     else:
                                         # Store the full API response for better error handling
                                         last_api_error_message = result
+                                        _log(f"[UNIV] API returned invalid data (cycle {cycle+1}): {result}")
+                                        print(f"⚠️ API invalid data (cycle {cycle+1}): {result.get('message', 'Unknown')}")
 
                                 elif task_name == "fallback" and result:
                                     fallback_media = result
@@ -660,11 +663,21 @@ async def handle_universal_link(client: Client, message: Message):
         
         # Check results
         if not api_data and not fallback_media:
+            # لاگ تفصیلی برای debug
+            _log(f"[UNIV] Both API and fallback failed for {platform}")
+            _log(f"[UNIV] Last API error: {last_api_error_message}")
+            print(f"❌ Both API and fallback failed for {platform}")
+            print(f"   Last error: {last_api_error_message}")
+            
             # Use user-friendly error message
             if last_api_error_message:
                 error_msg = get_user_friendly_error_message(last_api_error_message, platform)
             else:
                 error_msg = f"❌ خطا در دریافت اطلاعات از {platform}"
+            
+            # اضافه کردن پیشنهاد برای اینستاگرام
+            if platform == "Instagram":
+                error_msg += "\n\n💡 **نکته:** اگر این لینک روی یک اکانت کار می‌کند اما روی اکانت دیگر نه، احتمالاً API موقتاً محدود شده است. لطفاً 10-15 دقیقه صبر کنید."
             
             await status_msg.edit_text(error_msg)
             try:

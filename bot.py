@@ -135,9 +135,18 @@ except Exception as e:
     logger.error(f"Database initialization failed: {e}")
     sys.exit(1)
 
-# Workers
-MAX_WORKERS = min(16, os.cpu_count() * 2) if os.cpu_count() else 8
-logger.info(f"Using {MAX_WORKERS} workers")
+# 🔥 Workers بهینه‌سازی شده برای production
+# محاسبه خودکار بر اساس CPU cores
+def calculate_optimal_workers():
+    cpu_count = os.cpu_count() or 2
+    # هر core می‌تواند 8-16 worker handle کند
+    optimal = cpu_count * 8
+    # حداقل 16، حداکثر 64
+    return max(16, min(optimal, 64))
+
+MAX_WORKERS = calculate_optimal_workers()
+logger.info(f"🚀 Using {MAX_WORKERS} workers (optimized for {os.cpu_count() or 2} CPU cores)")
+print(f"⚡ Workers: {MAX_WORKERS}")
 
 async def main():
     client = None
