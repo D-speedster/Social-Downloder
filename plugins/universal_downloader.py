@@ -494,7 +494,7 @@ def _og_request_sync(url: str):
     with concurrent.futures.ThreadPoolExecutor() as executor:
         return loop.run_in_executor(executor, _make_og_request)
 
-async def handle_universal_link(client: Client, message: Message):
+async def handle_universal_link(client: Client, message: Message, is_retry: bool = False):
     """Handle downloads for Spotify, TikTok, and SoundCloud links"""
     try:
         t0 = time.perf_counter()
@@ -669,7 +669,47 @@ async def handle_universal_link(client: Client, message: Message):
             print(f"❌ Both API and fallback failed for {platform}")
             print(f"   Last error: {last_api_error_message}")
             
-            # Use user-friendly error message
+            # 🔥 UX بهبود یافته: برای اینستاگرام، اضافه به صف retry (فقط اگر retry نیست)
+            if platform == "Instagram" and not is_retry:
+                try:
+                    from plugins.retry_queue import retry_queue, RetryRequest
+                    
+                    # ایجاد درخواست retry
+                    retry_request = RetryRequest(
+                        user_id=user_id,
+                        chat_id=message.chat.id,
+                        url=url,
+                        platform=platform,
+                        message_id=message.message_id,
+                        status_message_id=status_msg.message_id,
+                        error_message=str(last_api_error_message) if last_api_error_message else "API failed"
+                    )
+                    
+                    # اضافه به صف
+                    retry_queue.add(retry_request)
+                    
+                    # پیام امیدوارکننده به کاربر
+                    await status_msg.edit_text(
+                        "⏳ **در حال پردازش...**\n\n"
+                        "🔄 سرور اینستاگرام کمی شلوغ است\n"
+                        "💡 ما خودکار دوباره تلاش می‌کنیم!\n\n"
+                        "⏱️ لطفاً 2-3 دقیقه صبر کنید\n"
+                        "✨ فایل شما به زودی ارسال می‌شود\n\n"
+                        "🙏 از صبر شما متشکریم!"
+                    )
+                    
+                    try:
+                        if user_reserved:
+                            release_user(user_id)
+                    except Exception:
+                        pass
+                    return
+                    
+                except Exception as e:
+                    _log(f"[UNIV] Error adding to retry queue: {e}")
+                    # اگر retry queue کار نکرد، پیام عادی نمایش بده
+            
+            # برای سایر پلتفرم‌ها یا اگر retry queue کار نکرد
             if last_api_error_message:
                 error_msg = get_user_friendly_error_message(last_api_error_message, platform)
             else:

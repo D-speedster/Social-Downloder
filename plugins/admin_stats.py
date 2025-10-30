@@ -216,9 +216,42 @@ async def manual_cleanup_command(client: Client, message: Message):
         await message.reply_text(f"❌ خطا در پاکسازی: {e}")
 
 
+@Client.on_message(filters.command("queue") & filters.user(ADMIN))
+async def retry_queue_status(client: Client, message: Message):
+    """
+    نمایش وضعیت صف تلاش مجدد
+    """
+    try:
+        from plugins.retry_queue import retry_queue
+        
+        stats = retry_queue.get_stats()
+        
+        text = "📋 **وضعیت صف تلاش مجدد**\n\n"
+        text += f"📊 کل درخواست‌ها: {stats['total']}\n"
+        text += f"⏳ در انتظار: {stats['pending']}\n"
+        text += f"🔄 در حال پردازش: {stats['in_progress']}\n"
+        text += f"❌ ناموفق: {stats['failed']}\n\n"
+        
+        if stats['total'] == 0:
+            text += "✅ صف خالی است!"
+        else:
+            # نمایش چند درخواست اول
+            pending = retry_queue.get_pending()[:5]  # فقط 5 تای اول
+            if pending:
+                text += "🔄 **درخواست‌های در انتظار:**\n"
+                for req in pending:
+                    text += f"• کاربر {req.user_id}: {req.platform} (تلاش {req.attempt}/{req.max_attempts})\n"
+        
+        await message.reply_text(text)
+        
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در دریافت وضعیت صف: {e}")
+
+
 print("✅ Admin stats commands loaded")
 print("   - /stats: نمایش آمار کامل")
 print("   - /health: بررسی سلامت سیستم")
 print("   - /reset_stats: ریست آمار")
 print("   - /circuit: وضعیت circuit breakers")
 print("   - /cleanup: پاکسازی دستی")
+print("   - /queue: وضعیت صف تلاش مجدد")

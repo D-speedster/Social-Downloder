@@ -224,6 +224,16 @@ async def main():
             logger.warning(f"Could not start metrics logging: {e}")
             print(f"⚠️ خطا در راه‌اندازی لاگ‌گیری: {e}")
         
+        # 🔥 Start Retry Queue Processor
+        try:
+            from plugins.retry_queue import start_retry_queue_processor
+            asyncio.create_task(start_retry_queue_processor(client))
+            logger.info("Retry queue processor started")
+            print("🔄 پردازش‌گر صف تلاش مجدد راه‌اندازی شد")
+        except Exception as e:
+            logger.warning(f"Could not start retry queue: {e}")
+            print(f"⚠️ خطا در راه‌اندازی صف تلاش مجدد: {e}")
+        
         # Start Cookie Validator Service
         try:
             from plugins.admin import ADMIN
