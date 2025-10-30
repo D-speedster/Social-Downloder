@@ -152,7 +152,73 @@ async def reset_stats_command(client: Client, message: Message):
         await message.reply_text(f"❌ خطا در ریست آمار: {e}")
 
 
+@Client.on_message(filters.command("circuit") & filters.user(ADMIN))
+async def circuit_breaker_status(client: Client, message: Message):
+    """
+    نمایش وضعیت circuit breakers
+    """
+    try:
+        from plugins.circuit_breaker import circuit_manager
+        
+        stats = circuit_manager.get_all_stats()
+        
+        if not stats:
+            await message.reply_text("⚡ هیچ circuit breaker فعالی وجود ندارد.")
+            return
+        
+        text = "⚡ **وضعیت Circuit Breakers**\n\n"
+        
+        for name, breaker_stats in stats.items():
+            state = breaker_stats['state']
+            
+            # انتخاب emoji بر اساس وضعیت
+            if state == 'closed':
+                emoji = "✅"
+                state_text = "عادی"
+            elif state == 'open':
+                emoji = "🔴"
+                state_text = "خطا"
+            else:  # half_open
+                emoji = "⚠️"
+                state_text = "تست"
+            
+            text += f"{emoji} **{name}**\n"
+            text += f"   وضعیت: {state_text}\n"
+            text += f"   خطاها: {breaker_stats['failure_count']}\n"
+            text += f"   موفقیت‌ها: {breaker_stats['success_count']}\n"
+            text += f"   زمان: {breaker_stats['uptime']:.0f}s\n\n"
+        
+        await message.reply_text(text)
+        
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در دریافت وضعیت: {e}")
+
+
+@Client.on_message(filters.command("cleanup") & filters.user(ADMIN))
+async def manual_cleanup_command(client: Client, message: Message):
+    """
+    اجرای دستی پاکسازی
+    """
+    try:
+        from plugins.auto_cleanup import auto_cleanup
+        
+        await message.reply_text("🧹 در حال پاکسازی...")
+        
+        stats = auto_cleanup.cleanup_temp_files()
+        
+        text = "✅ **پاکسازی انجام شد**\n\n"
+        text += f"📁 فایل‌های پاک شده: {stats['deleted_count']}\n"
+        text += f"💾 فضای آزاد شده: {stats['freed_mb']:.2f} MB"
+        
+        await message.reply_text(text)
+        
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در پاکسازی: {e}")
+
+
 print("✅ Admin stats commands loaded")
 print("   - /stats: نمایش آمار کامل")
 print("   - /health: بررسی سلامت سیستم")
 print("   - /reset_stats: ریست آمار")
+print("   - /circuit: وضعیت circuit breakers")
+print("   - /cleanup: پاکسازی دستی")

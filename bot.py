@@ -204,6 +204,26 @@ async def main():
         # Initialize job queue
         await init_job_queue(client)
         
+        # 🔥 Start Auto-cleanup Service
+        try:
+            from plugins.auto_cleanup import start_auto_cleanup
+            asyncio.create_task(start_auto_cleanup())
+            logger.info("Auto-cleanup service started")
+            print("🧹 سرویس پاکسازی خودکار راه‌اندازی شد")
+        except Exception as e:
+            logger.warning(f"Could not start auto-cleanup: {e}")
+            print(f"⚠️ خطا در راه‌اندازی پاکسازی خودکار: {e}")
+        
+        # 🔥 Start Periodic Metrics Logging
+        try:
+            from plugins.simple_metrics import metrics
+            asyncio.create_task(metrics.start_periodic_logging(interval=300))  # هر 5 دقیقه
+            logger.info("Periodic metrics logging started")
+            print("📊 لاگ‌گیری دوره‌ای آمار راه‌اندازی شد")
+        except Exception as e:
+            logger.warning(f"Could not start metrics logging: {e}")
+            print(f"⚠️ خطا در راه‌اندازی لاگ‌گیری: {e}")
+        
         # Start Cookie Validator Service
         try:
             from plugins.admin import ADMIN
