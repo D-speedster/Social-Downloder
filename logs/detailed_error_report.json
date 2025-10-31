@@ -1,24 +1,20 @@
 {
-  "timestamp": "2025-10-31T14:00:12.220348",
+  "timestamp": "2025-10-31T16:17:40.917428",
   "system_info": {
     "platform": "Windows-11-10.0.26200-SP0",
     "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
     "python_executable": "C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
     "working_directory": "C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1",
-    "timestamp": "2025-10-31T14:00:12.211477",
+    "timestamp": "2025-10-31T16:17:40.893962",
     "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.EXE"
   },
   "error_analysis": {
-    "timestamp": "2025-10-31T14:00:12.217788",
+    "timestamp": "2025-10-31T16:17:40.911575",
     "error_type": "OperationalError",
     "error_message": "database is locked",
     "traceback": [
       "Traceback (most recent call last):\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 309, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\base_events.py\", line 719, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 202, in main\n    await client.start()\n",
+      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 203, in main\n    await client.start()\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 58, in start\n    is_authorized = await self.connect()\n                    ^^^^^^^^^^^^^^^^^^^^\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\connect.py\", line 40, in connect\n    await self.load_session()\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 616, in load_session\n    await self.storage.open()\n",

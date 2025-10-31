@@ -1,0 +1,27 @@
+{
+  "locks": [
+    {
+      "id": "lock_1_1761918925",
+      "channel_id": "-1001300105098",
+      "channel_name": "🇮🇹 ITALY TIME 🇮🇹",
+      "channel_username": "@ITALYTIMEE",
+      "created_at": "2025-10-31 17:25:25",
+      "total_bot_starts": 0,
+      "joined_through_lock": 0,
+      "already_members": 0,
+      "not_joined": 0
+    },
+    {
+      "id": "lock_2_1761918946",
+      "channel_id": "-1001435081834",
+      "channel_name": "𝗔𝗹𝗲𝗳 | الف‌",
+      "channel_username": "@OkAlef",
+      "created_at": "2025-10-31 17:25:46",
+      "total_bot_starts": 0,
+      "joined_through_lock": 0,
+      "already_members": 0,
+      "not_joined": 0
+    }
+  ],
+  "updated_at": "2025-10-31T17:25:46.813288"
+}

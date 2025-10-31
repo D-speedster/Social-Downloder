@@ -238,7 +238,51 @@ async def join_check(_, client: Client, message: Message):
         fj = True
     if not fj:
         start_logger.info(f"Force join disabled, allowing user={message.from_user.id}")
+        JOIN_CHECK_CACHE[uid] = (True, current_time)
         return True
+    
+    # ✅ استفاده از سیستم جدید قفل‌های چندگانه
+    try:
+        from plugins.sponsor_system import get_sponsor_system
+        system = get_sponsor_system()
+        
+        # بررسی عضویت در تمام قفل‌ها
+        is_member, not_joined_locks = await system.check_user_membership(client, uid)
+        
+        if is_member:
+            # کاربر در تمام قفل‌ها عضو است
+            JOIN_CHECK_CACHE[uid] = (True, current_time)
+            return True
+        else:
+            # کاربر در برخی قفل‌ها عضو نیست
+            # فقط یک بار پیام بفرست
+            if uid not in JOIN_CHECK_CACHE or JOIN_CHECK_CACHE[uid][0] != False:
+                _store_pending_link_if_any(message)
+                
+                # ساخت پیام با لیست قفل‌ها
+                locks_text = "\n".join([
+                    f"• {lock.channel_name or lock.channel_username or lock.channel_id}"
+                    for lock in not_joined_locks
+                ])
+                
+                await message.reply_text(
+                    f"🔒 **برای استفاده از ربات عضویت الزامی است**\n\n"
+                    f"📢 **کانال‌های مورد نیاز:**\n{locks_text}\n\n"
+                    f"💡 **مراحل:**\n"
+                    f"1️⃣ روی دکمه‌های زیر کلیک کنید\n"
+                    f"2️⃣ در تمام کانال‌ها عضو شوید\n"
+                    f"3️⃣ روی «✅ جوین شدم» بزنید\n"
+                    f"4️⃣ لینک شما خودکار پردازش می‌شود",
+                    reply_markup=system.build_join_markup(not_joined_locks)
+                )
+            
+            JOIN_CHECK_CACHE[uid] = (False, current_time)
+            return False
+            
+    except Exception as e:
+        start_logger.error(f"Error in new sponsor system: {e}")
+        # Fallback به سیستم قدیمی
+        pass
         
     try:
         sponsor_tag = data.get('sponser')
@@ -677,6 +721,17 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
 async def handle_text_messages(client: Client, message: Message):
     """Handle universal URLs (Spotify, TikTok, SoundCloud) - YouTube and Instagram have dedicated handlers"""
     try:
+        # ✅ اگر ادمین در حالت تنظیم است، این handler را رد کن
+        from plugins.admin import ADMIN, admin_step
+        if message.from_user and message.from_user.id in ADMIN:
+            # بررسی کن که آیا در حالت تنظیم است
+            if (admin_step.get('sp') == 1 or 
+                admin_step.get('broadcast') > 0 or 
+                admin_step.get('advertisement') > 0 or 
+                admin_step.get('waiting_msg') > 0):
+                print(f"[START] Skipping handle_text_messages for admin in setup mode")
+                return
+        
         text = message.text.strip()
         
         # Only handle universal platforms (expanded list)

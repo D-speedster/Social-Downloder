@@ -446,18 +446,41 @@ async def import_cookie_path_cmd(_: Client, message: Message):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 تنظیم اسپانسر$'))
 async def admin_menu_sponsor(_: Client, message: Message):
-    print("[ADMIN] sponsor setup via text by", message.from_user.id)
+    """ورود به پنل مدیریت اسپانسر جدید"""
+    user_id = message.from_user.id
+    print(f"[ADMIN] 🚀 sponsor management opened by {user_id}")
+    admin_logger.info(f"[ADMIN] sponsor management opened by {user_id}")
+    
+    # ✅ Reset other states
+    admin_step['sp'] = 0
+    admin_step['broadcast'] = 0
+    admin_step['advertisement'] = 0
+    admin_step['waiting_msg'] = 0
+    
+    # نمایش منوی جدید
+    from plugins.sponsor_admin import build_sponsor_admin_menu
+    from plugins.sponsor_system import get_sponsor_system
+    
+    system = get_sponsor_system()
+    locks_count = len(system.get_all_locks())
+    
+    text = f"""🔐 **مدیریت قفل‌های اسپانسری**
+
+📊 **وضعیت فعلی:**
+• تعداد قفل‌ها: {locks_count}
+
+💡 **قابلیت‌ها:**
+• افزودن قفل‌های متعدد (مولتی قفل)
+• آمار کامل هر قفل (جوین، لفت، تبدیل)
+• مدیریت آسان قفل‌ها
+• نمایش زیبای آمار به کاربران
+
+یک گزینه را انتخاب کنید:"""
+    
     await message.reply_text(
-        "ابتدا ربات را در چنل مورد نظر ادمین کن سپس شناسه چنل را ارسال کن.\n"
-        "فرمت‌های مجاز:\n"
-        "- @username (کانال عمومی)\n"
-        "- -100xxxxxxxxxx (آی‌دی عددی، مناسب کانال خصوصی)\n"
-        "- لینک t.me/username (به @username تبدیل می‌شود)\n\n"
-        "نکته: لینک دعوت خصوصی (+) پشتیبانی نمی‌شود؛ برای کانال خصوصی از آی‌دی عددی استفاده کنید.\n\n"
-        "برای لغو، روی «❌ لغو» بزنید یا /cancel.",
-        reply_markup=admin_reply_kb()
+        text,
+        reply_markup=build_sponsor_admin_menu()
     )
-    admin_step['sp'] = 1
 
 
 # Handler for old power toggle button removed - replaced with new status system
@@ -767,34 +790,57 @@ async def admin_panel(_: Client, message: Message):
 # Admin root handler removed - now using reply keyboard directly from start
 
 
-async def set_sp_custom(_, __, message: Message):
+# ✅ فیلتر ساده‌تر برای تنظیم اسپانسر
+def sponsor_input_filter(_, __, message: Message):
+    """فیلتر برای دریافت ورودی اسپانسر"""
     try:
-        # Only active when we are in sponsor input step
+        print(f"[ADMIN] 🔍 sponsor_input_filter checking... sp={admin_step.get('sp')}")
+        
+        # فقط وقتی که در حالت تنظیم اسپانسر هستیم
         if admin_step.get('sp') != 1:
+            print(f"[ADMIN] ❌ Filter failed: sp != 1 (sp={admin_step.get('sp')})")
             return False
-        # Only consider messages from admins
+        
+        # فقط ادمین‌ها
         if not message.from_user or message.from_user.id not in ADMIN:
+            print(f"[ADMIN] ❌ Filter failed: not admin")
             return False
-        # Only allow text messages
+        
+        # فقط پیام متنی
         if not message.text:
+            print(f"[ADMIN] ❌ Filter failed: no text")
             return False
-        # Ignore admin panel buttons texts (reply keyboard)
-        if message.text.strip() in {
-            "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور",
-            "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
-            "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
-            "🔝 بالای محتوا","🔻 پایین محتوا"
-        }:
+        
+        text = message.text.strip()
+        print(f"[ADMIN] 📝 Text received: {text}")
+        
+        # نادیده گرفتن دکمه‌های پنل ادمین
+        admin_buttons = {
+            "🛠 مدیریت", "📊 آمار کاربران", "🖥 وضعیت سرور",
+            "📢 ارسال همگانی", "📢 تنظیم اسپانسر", "💬 پیام انتظار",
+            "🍪 مدیریت کوکی", "📺 تنظیم تبلیغات", "✅ وضعیت ربات",
+            "⬅️ بازگشت", "❌ لغو"
+        }
+        if text in admin_buttons:
+            print(f"[ADMIN] ❌ Filter failed: admin button")
             return False
-        # Do NOT capture commands like /language, /start, etc.
-        if message.text.strip().startswith('/'):
+        
+        # نادیده گرفتن دستورات
+        if text.startswith('/'):
+            print(f"[ADMIN] ❌ Filter failed: command")
             return False
+        
+        print(f"[ADMIN] ✅ sponsor_input_filter PASSED for: {text}")
+        admin_logger.info(f"[ADMIN] sponsor_input_filter PASSED for: {text}")
         return True
-    except Exception:
+        
+    except Exception as e:
+        print(f"[ADMIN] ❌ sponsor_input_filter error: {e}")
+        admin_logger.error(f"[ADMIN] sponsor_input_filter error: {e}")
         return False
 
 
-sp_filter = filters.create(set_sp_custom)
+sp_filter = filters.create(sponsor_input_filter)
 
 
 async def admin_panel_custom(_, __, query):
@@ -1244,131 +1290,206 @@ async def validate_ad_content(message: Message) -> tuple:
     
     return False, "❌ نوع محتوای ارسالی پشتیبانی نمی‌شود."
 
-@Client.on_message(sp_filter & filters.user(ADMIN), group=5)
+@Client.on_message(filters.user(ADMIN) & filters.private & filters.text, group=5)
 async def set_sp(client: Client, message: Message):
-     print(f"[ADMIN] set_sp called by user={message.from_user.id} with text={message.text}")
-     admin_logger.info(f"[ADMIN] set_sp called by user={message.from_user.id} with text={message.text}")
-     raw = (message.text or '').strip()
-     val = raw
-     
-     # Normalize input
-     if re.match(r'^(https?://)?t\.me/[A-Za-z0-9_]{4,}$', raw):
-         # Extract username from t.me link
-         uname = re.sub(r'^(https?://)?t\.me/', '', raw).strip('/')
-         if uname.startswith('+'):
-             await message.reply_text("❌ لینک دعوت خصوصی (+) پشتیبانی نمی‌شود.\nلطفاً @username یا آی‌دی عددی -100… را ارسال کنید.")
-             admin_step['sp'] = 0
-             return
-         val = '@' + uname
-     elif re.match(r'^@[A-Za-z0-9_]{4,}$', raw):
-         val = raw
-     elif re.match(r'^-100\d{8,14}$', raw):
-         val = raw
-     else:
-         await message.reply_text("❌ فرمت نادرست.\n\nنمونه‌های صحیح:\n• @example\n• -1001234567890\n• https://t.me/example")
-         admin_step['sp'] = 0
-         return
-     
-     # ✅ Validation: بررسی دسترسی به کانال
-     try:
-         status_msg = await message.reply_text("🔄 در حال بررسی دسترسی...")
-         
-         try:
-             # دریافت اطلاعات کانال
-             chat = await client.get_chat(val)
-             
-             # ✅ دریافت ID ربات
-             bot = await client.get_me()
-             
-             # بررسی اینکه ربات عضو و ادمین است
-             try:
-                 bot_member = await client.get_chat_member(val, bot.id)
-                 if bot_member.status not in ["administrator", "creator"]:
-                     await status_msg.edit_text(
-                         "❌ ربات در این کانال ادمین نیست!\n\n"
-                         "لطفاً ابتدا ربات را در کانال ادمین کنید."
-                     )
-                     admin_step['sp'] = 0
-                     return
-             except Exception as e:
-                 await status_msg.edit_text(
-                     "❌ ربات در این کانال عضو نیست!\n\n"
-                     "لطفاً ابتدا ربات را به کانال اضافه کنید.\n\n"
-                     f"خطا: {str(e)[:100]}"
-                 )
-                 admin_step['sp'] = 0
-                 return
-             
-             await status_msg.edit_text("✅ دسترسی تأیید شد. در حال ذخیره...")
-             
-         except Exception as e:
-             await status_msg.edit_text(
-                 f"❌ خطا در دسترسی به کانال!\n\n"
-                 f"لطفاً مطمئن شوید:\n"
-                 f"• شناسه کانال صحیح است\n"
-                 f"• ربات در کانال عضو است\n"
-                 f"• ربات ادمین است\n\n"
-                 f"خطا: {str(e)[:100]}"
-             )
-             admin_step['sp'] = 0
-             return
-     
-     except Exception as e:
-         await message.reply_text(f"❌ خطا در بررسی دسترسی: {e}")
-         admin_step['sp'] = 0
-         return
-     
-     # ✅ Thread-safe write با lock
-     async with _json_write_lock:
-         try:
-             # ✅ Use local database.json
-             json_db_path = os.path.join(os.path.dirname(__file__), 'database.json')
-             
-             # ✅ Backup قبل از نوشتن
-             backup_path = json_db_path + '.bak'
-             if os.path.exists(json_db_path):
-                 shutil.copy2(json_db_path, backup_path)
-             
-             # ✅ Read-Modify-Write pattern
-             with open(json_db_path, 'r', encoding='utf-8') as f:
-                 current_data = json.load(f)
-             
-             current_data['sponser'] = val
-             
-             # ✅ Atomic write
-             temp_path = json_db_path + '.tmp'
-             with open(temp_path, 'w', encoding='utf-8') as outfile:
-                 json.dump(current_data, outfile, indent=4, ensure_ascii=False)
-             
-             # ✅ Atomic rename
-             os.replace(temp_path, json_db_path)
-             
-             # ✅ Update in-memory data
-             data['sponser'] = val
-             
-             # ✅ Log
-             admin_logger.info(f"[ADMIN] Sponsor set by {message.from_user.id}: {val}")
-             
-             await status_msg.edit_text(
-                 f"✅ اسپانسر با موفقیت تنظیم شد!\n\n"
-                 f"کانال: {val}\n"
-                 f"نام: {chat.title if hasattr(chat, 'title') else 'نامشخص'}"
-             )
-             
-         except Exception as e:
-             # ✅ Restore backup در صورت خطا
-             admin_logger.error(f"[ADMIN] Error setting sponsor: {e}")
-             try:
-                 if os.path.exists(backup_path):
-                     shutil.copy2(backup_path, json_db_path)
-             except Exception:
-                 pass
-             
-             await message.reply_text(f"❌ خطا در ذخیره: {e}")
-             admin_step['sp'] = 0
-             return
-     
-     admin_step['sp'] = 0
+    """Handler جدید و بهبود یافته برای تنظیم اسپانسر"""
+    
+    # ✅ بررسی دستی: فقط در حالت تنظیم اسپانسر
+    if admin_step.get('sp') != 1:
+        return
+    
+    # ✅ نادیده گرفتن دکمه‌های پنل
+    admin_buttons = {
+        "🛠 مدیریت", "📊 آمار کاربران", "🖥 وضعیت سرور",
+        "📢 ارسال همگانی", "📢 تنظیم اسپانسر", "💬 پیام انتظار",
+        "🍪 مدیریت کوکی", "📺 تنظیم تبلیغات", "✅ وضعیت ربات",
+        "⬅️ بازگشت", "❌ لغو"
+    }
+    if message.text.strip() in admin_buttons:
+        return
+    
+    # ✅ نادیده گرفتن دستورات
+    if message.text.strip().startswith('/'):
+        return
+    
+    # ✅ حالا پردازش کن
+    user_id = message.from_user.id
+    raw_text = (message.text or '').strip()
+    
+    print(f"[ADMIN] ✅ set_sp CALLED! user={user_id}, text={raw_text}")
+    admin_logger.info(f"[ADMIN] set_sp called by {user_id} with text: {raw_text}")
+    
+    try:
+        # ✅ مرحله 1: Normalize ورودی
+        sponsor_value = None
+        
+        # بررسی لینک t.me
+        if raw_text.startswith('http://t.me/') or raw_text.startswith('https://t.me/') or raw_text.startswith('t.me/'):
+            # استخراج username از لینک
+            username = raw_text.split('t.me/')[-1].strip('/')
+            if username.startswith('+'):
+                await message.reply_text(
+                    "❌ **لینک دعوت خصوصی پشتیبانی نمی‌شود**\n\n"
+                    "لطفاً از یکی از فرمت‌های زیر استفاده کنید:\n"
+                    "• `@username`\n"
+                    "• `-1001234567890`"
+                )
+                admin_step['sp'] = 0
+                return
+            sponsor_value = '@' + username if not username.startswith('@') else username
+        
+        # بررسی @username
+        elif raw_text.startswith('@'):
+            sponsor_value = raw_text
+        
+        # بررسی ID عددی
+        elif raw_text.startswith('-100') and raw_text[1:].isdigit():
+            sponsor_value = raw_text
+        
+        # فرمت نامعتبر
+        else:
+            await message.reply_text(
+                "❌ **فرمت نامعتبر!**\n\n"
+                "📋 **فرمت‌های صحیح:**\n"
+                "• `@username` → مثال: `@OkAlef`\n"
+                "• `-1001234567890` → آی‌دی عددی\n"
+                "• `https://t.me/username` → لینک کانال\n\n"
+                "💡 **دوباره تلاش کنید یا /cancel بزنید**"
+            )
+            return  # نه admin_step['sp'] = 0 تا بتواند دوباره تلاش کند
+        
+        print(f"[ADMIN] Normalized sponsor value: {sponsor_value}")
+        
+        # ✅ مرحله 2: بررسی دسترسی به کانال
+        status_msg = await message.reply_text("🔄 **در حال بررسی دسترسی...**")
+        
+        try:
+            # دریافت اطلاعات کانال
+            chat = await client.get_chat(sponsor_value)
+            chat_title = getattr(chat, 'title', 'نامشخص')
+            chat_username = getattr(chat, 'username', None)
+            
+            print(f"[ADMIN] Chat found: {chat_title} (username: {chat_username})")
+            
+            # دریافت اطلاعات ربات
+            bot = await client.get_me()
+            bot_id = bot.id
+            
+            # بررسی عضویت و ادمین بودن ربات
+            try:
+                bot_member = await client.get_chat_member(sponsor_value, bot_id)
+                bot_status = bot_member.status
+                
+                print(f"[ADMIN] Bot status in channel: {bot_status}")
+                
+                if bot_status not in ["administrator", "creator"]:
+                    await status_msg.edit_text(
+                        f"❌ **ربات در کانال ادمین نیست!**\n\n"
+                        f"📢 کانال: **{chat_title}**\n"
+                        f"🤖 وضعیت ربات: `{bot_status}`\n\n"
+                        f"⚠️ لطفاً ابتدا ربات را در کانال **ادمین** کنید."
+                    )
+                    admin_step['sp'] = 0
+                    return
+                
+            except Exception as member_error:
+                print(f"[ADMIN] Error checking bot membership: {member_error}")
+                await status_msg.edit_text(
+                    f"❌ **ربات در کانال عضو نیست!**\n\n"
+                    f"📢 کانال: **{chat_title}**\n\n"
+                    f"⚠️ لطفاً ابتدا ربات را به کانال اضافه کنید.\n\n"
+                    f"🔍 خطا: `{str(member_error)[:80]}`"
+                )
+                admin_step['sp'] = 0
+                return
+            
+            await status_msg.edit_text("✅ **دسترسی تأیید شد!**\n\n🔄 در حال ذخیره...")
+            
+        except Exception as chat_error:
+            print(f"[ADMIN] Error getting chat: {chat_error}")
+            await status_msg.edit_text(
+                f"❌ **خطا در دسترسی به کانال!**\n\n"
+                f"🔍 خطا: `{str(chat_error)[:100]}`\n\n"
+                f"💡 **بررسی کنید:**\n"
+                f"• شناسه کانال صحیح باشد\n"
+                f"• ربات در کانال عضو باشد\n"
+                f"• ربات ادمین باشد"
+            )
+            admin_step['sp'] = 0
+            return
+        
+        # ✅ مرحله 3: ذخیره در database
+        async with _json_write_lock:
+            try:
+                json_db_path = os.path.join(os.path.dirname(__file__), 'database.json')
+                
+                # Backup
+                backup_path = json_db_path + '.bak'
+                if os.path.exists(json_db_path):
+                    shutil.copy2(json_db_path, backup_path)
+                
+                # Read-Modify-Write
+                with open(json_db_path, 'r', encoding='utf-8') as f:
+                    current_data = json.load(f)
+                
+                current_data['sponser'] = sponsor_value
+                
+                # Atomic write
+                temp_path = json_db_path + '.tmp'
+                with open(temp_path, 'w', encoding='utf-8') as outfile:
+                    json.dump(current_data, outfile, indent=4, ensure_ascii=False)
+                
+                os.replace(temp_path, json_db_path)
+                
+                # Update in-memory
+                data['sponser'] = sponsor_value
+                
+                admin_logger.info(f"[ADMIN] ✅ Sponsor successfully set by {user_id}: {sponsor_value}")
+                
+                # پیام موفقیت
+                success_text = (
+                    f"✅ **اسپانسر با موفقیت تنظیم شد!**\n\n"
+                    f"📢 **کانال:** {chat_title}\n"
+                    f"🆔 **شناسه:** `{sponsor_value}`\n"
+                )
+                if chat_username:
+                    success_text += f"🔗 **لینک:** https://t.me/{chat_username}\n"
+                
+                success_text += "\n✅ **قفل عضویت فعال است**"
+                
+                await status_msg.edit_text(success_text)
+                
+            except Exception as save_error:
+                admin_logger.error(f"[ADMIN] Error saving sponsor: {save_error}")
+                
+                # Restore backup
+                try:
+                    if os.path.exists(backup_path):
+                        shutil.copy2(backup_path, json_db_path)
+                except Exception:
+                    pass
+                
+                await status_msg.edit_text(
+                    f"❌ **خطا در ذخیره‌سازی!**\n\n"
+                    f"🔍 خطا: `{str(save_error)[:100]}`\n\n"
+                    f"💡 لطفاً دوباره تلاش کنید."
+                )
+                admin_step['sp'] = 0
+                return
+        
+        # ✅ Reset state
+        admin_step['sp'] = 0
+        print(f"[ADMIN] ✅ Sponsor setup completed successfully!")
+        
+    except Exception as e:
+        admin_logger.error(f"[ADMIN] Unexpected error in set_sp: {e}")
+        print(f"[ADMIN] ❌ Unexpected error: {e}")
+        await message.reply_text(
+            f"❌ **خطای غیرمنتظره!**\n\n"
+            f"🔍 خطا: `{str(e)[:100]}`\n\n"
+            f"💡 لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+        )
+        admin_step['sp'] = 0
 
 
 # Remaining callback handler code removed - now handled by message handlers
@@ -1519,6 +1640,46 @@ async def waiting_type_callback_handler(client: Client, callback_query: Callback
         f"❌ برای لغو /cancel را بفرستید.",
         reply_markup=None
     )
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^sp$'))
+async def sponsor_menu_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش منوی مدیریت اسپانسر"""
+    from plugins.sponsor_admin import build_sponsor_admin_menu
+    from plugins.sponsor_system import get_sponsor_system
+    
+    system = get_sponsor_system()
+    locks_count = len(system.get_all_locks())
+    
+    text = f"""🔐 **مدیریت قفل‌های اسپانسری**
+
+📊 **وضعیت فعلی:**
+• تعداد قفل‌ها: {locks_count}
+
+💡 **قابلیت‌ها:**
+• افزودن قفل‌های متعدد (مولتی قفل)
+• آمار کامل هر قفل (جوین، لفت، تبدیل)
+• مدیریت آسان قفل‌ها
+• نمایش زیبای آمار به کاربران
+
+یک گزینه را انتخاب کنید:"""
+    
+    await callback_query.message.edit_text(
+        text,
+        reply_markup=build_sponsor_admin_menu()
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cancel_sponsor_setup$'))
+async def cancel_sponsor_setup_callback(client: Client, callback_query: CallbackQuery):
+    """لغو تنظیم اسپانسر"""
+    admin_step['sp'] = 0
+    await callback_query.edit_message_text(
+        "❌ **تنظیم اسپانسر لغو شد**\n\n"
+        "می‌توانید از پنل ادمین دوباره شروع کنید."
+    )
+    await callback_query.answer("لغو شد")
+
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^waiting_cancel$'))
 async def waiting_cancel_callback_handler(client: Client, callback_query: CallbackQuery):

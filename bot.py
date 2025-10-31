@@ -11,6 +11,7 @@ import asyncio
 from dotenv import load_dotenv
 import plugins.youtube_handler
 import plugins.youtube_callback
+import plugins.sponsor_admin
 from plugins.cookie_validator import start_cookie_validator, stop_cookie_validator
 
 # 🔥 CRITICAL: تنظیمات بهینه Pyrogram قبل از import
