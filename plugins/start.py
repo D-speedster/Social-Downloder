@@ -415,6 +415,17 @@ async def start(client: Client, message: Message):
             return
             
         start_logger.info(f"Start command received from user {user_id}")
+        
+        # 🔥 Track bot start in sponsor system
+        try:
+            from plugins.sponsor_system import get_sponsor_system
+            sponsor_system = get_sponsor_system()
+            if len(sponsor_system.get_all_locks()) > 0:
+                await sponsor_system.track_bot_start(client, user_id)
+                start_logger.debug(f"Tracked bot start for user {user_id} in sponsor system")
+        except Exception as track_error:
+            start_logger.error(f"Error tracking bot start: {track_error}")
+        
         check_user = DB().check_user_register(user_id)
         welcome_text = (
             "🔴 به ربات YouTube | Instagram Save خوش آمدید\n\n"

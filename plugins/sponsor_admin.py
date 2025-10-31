@@ -163,10 +163,15 @@ async def sponsor_remove_callback(client: Client, callback_query: CallbackQuery)
     await callback_query.answer()
 
 
-@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^sponsor_delete_(.+)$'))
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^sponsor_delete_(?!confirm_)(.+)$'))
 async def sponsor_delete_confirm_callback(client: Client, callback_query: CallbackQuery):
     """تایید حذف قفل"""
-    lock_id = callback_query.data.split('_', 2)[2]
+    # Parse lock_id correctly
+    # Format: sponsor_delete_lock_1_1234567890
+    parts = callback_query.data.split('_')
+    lock_id = '_'.join(parts[2:])  # Join all parts after "sponsor_delete_"
+    
+    logger.info(f"[SPONSOR_DELETE] Showing confirmation for lock_id={lock_id}")
     system = get_sponsor_system()
     lock = system.get_lock(lock_id)
     
@@ -205,14 +210,22 @@ async def sponsor_delete_confirm_callback(client: Client, callback_query: Callba
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^sponsor_delete_confirm_(.+)$'))
 async def sponsor_delete_execute_callback(client: Client, callback_query: CallbackQuery):
     """اجرای حذف قفل"""
-    lock_id = callback_query.data.split('_', 3)[3]
+    # Parse lock_id correctly
+    # Format: sponsor_delete_confirm_lock_1_1234567890
+    parts = callback_query.data.split('_')
+    lock_id = '_'.join(parts[3:])  # Join all parts after "sponsor_delete_confirm_"
+    
+    logger.info(f"[SPONSOR_DELETE] Executing delete for lock_id={lock_id}")
+    
     system = get_sponsor_system()
     
     if system.remove_lock(lock_id):
+        logger.info(f"[SPONSOR_DELETE] Successfully deleted lock_id={lock_id}")
         await callback_query.answer("✅ قفل با موفقیت حذف شد!", show_alert=True)
         # بازگشت به لیست
         await sponsor_list_callback(client, callback_query)
     else:
+        logger.error(f"[SPONSOR_DELETE] Failed to delete lock_id={lock_id}")
         await callback_query.answer("❌ خطا در حذف قفل!", show_alert=True)
 
 
@@ -404,6 +417,15 @@ async def verify_multi_join_callback(client: Client, callback_query: CallbackQue
     
     if is_member:
         await callback_query.answer("✅ عضویت شما در تمام کانال‌ها تایید شد!", show_alert=True)
+        
+        # 🔥 Track successful join for all locks
+        try:
+            all_locks = system.get_all_locks()
+            for lock in all_locks:
+                await system.track_successful_join(client, user_id, lock.id)
+            logger.info(f"[VERIFY_JOIN] Tracked successful join for user {user_id} in {len(all_locks)} locks")
+        except Exception as track_error:
+            logger.error(f"[VERIFY_JOIN] Error tracking join: {track_error}")
         
         # حذف پیام قفل
         try:
