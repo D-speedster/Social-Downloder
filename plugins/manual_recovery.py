@@ -240,14 +240,20 @@ class ManualRecovery:
             try:
                 # دریافت timestamp از message یا callback_query
                 timestamp = None
+                user_id = None
                 
                 if 'message' in update:
                     timestamp = update['message'].get('date')
+                    user_id = update['message'].get('from', {}).get('id')
                 elif 'callback_query' in update:
                     timestamp = update['callback_query']['message'].get('date')
+                    user_id = update['callback_query'].get('from', {}).get('id')
                 
                 if timestamp:
                     update_time = datetime.fromtimestamp(timestamp)
+                    # 🔥 Debug: لاگ کردن هر update
+                    logger.info(f"Update from user {user_id}: time={update_time.strftime('%H:%M:%S')}, cutoff={cutoff_time.strftime('%H:%M:%S')}, included={update_time >= cutoff_time}")
+                    
                     if update_time >= cutoff_time:
                         filtered.append(update)
             except Exception as e:
@@ -312,7 +318,26 @@ class ManualRecovery:
             if not user_id or not chat_id:
                 return False
             
-            # نادیده گرفتن دستورات قدیمی
+            # 🔥 Debug: لاگ کردن هر پیام
+            logger.info(f"Processing message from user {user_id}: {text[:50] if text else 'no text'}")
+            
+            # ✅ بررسی دستور /start
+            if text.strip() == '/start':
+                logger.info(f"Processing /start command from user {user_id}")
+                # ارسال پیام استارت اصلی
+                welcome_text = (
+                    "🔴 به ربات YouTube | Instagram Save خوش آمدید\n\n"
+                    "⛱ شما می‌توانید لینک‌های یوتیوب و اینستاگرام خود را برای ربات ارسال کرده و فایل آن‌ها را در سریع‌ترین زمان ممکن با کیفیت دلخواه دریافت کنید\n\n"
+                    "💡 **ربات اکنون آنلاین است و آماده دریافت درخواست‌های شماست!**"
+                )
+                await client.send_message(
+                    chat_id=chat_id,
+                    text=welcome_text,
+                    reply_to_message_id=message_id
+                )
+                return True
+            
+            # نادیده گرفتن سایر دستورات قدیمی
             if text.startswith('/'):
                 logger.debug(f"Skipping old command from user {user_id}")
                 return False
