@@ -61,9 +61,6 @@ IFUNNY_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?ifunny\.(?:co|com)/", re.IG
 DEEZER_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?deezer\.com/", re.IGNORECASE)
 RADIOJAVAN_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?radiojavan\.com/", re.IGNORECASE)
 PENDING_LINKS = {}
-# Cache برای جلوگیری از بررسی تکراری عضویت
-JOIN_CHECK_CACHE = {}  # {user_id: (result, timestamp)}
-JOIN_CACHE_TTL = 5  # 5 seconds
 
 
 def _store_pending_link_if_any(message: Message):
@@ -93,37 +90,13 @@ def _store_pending_link_if_any(message: Message):
 # Build sponsor join markup dynamically (reflects latest @channel set by admin)
 def sponsor_join_markup() -> InlineKeyboardMarkup:
     tag = data.get('sponser', '') or ''
+    # Only build a URL button when we have a public @username
     buttons = []
-    
-    # ✅ Support both @username and numeric IDs
     if tag.startswith('@') and len(tag) > 1:
-        # Public channel with @username
         uname = tag[1:]
         url = f"https://t.me/{uname}"
-        buttons.append([InlineKeyboardButton("🔗 عضویت در چنل ما", url=url)])
-    elif tag.startswith('-100'):
-        # Private channel with numeric ID - try to get invite link from sponsors list
-        sponsors_list = data.get('sponsors', [])
-        channel_name = "کانال اسپانسر"
-        for sponsor in sponsors_list:
-            if sponsor.get('id') == tag:
-                channel_name = sponsor.get('name', channel_name)
-                # If there's a username in the list, use it
-                if sponsor.get('type') == 'username':
-                    username = sponsor.get('id', '').lstrip('@')
-                    if username:
-                        url = f"https://t.me/{username}"
-                        buttons.append([InlineKeyboardButton(f"🔗 عضویت در {channel_name}", url=url)])
-                break
-        
-        # If no button was added, show a generic message
-        if not buttons:
-            buttons.append([InlineKeyboardButton("⚠️ لطفاً در کانال اسپانسر عضو شوید", callback_data="sponsor_info")])
-    
-    # Add verify button
-    buttons.append([InlineKeyboardButton("✅ جوین شدم", callback_data="verify_join")])
-    
-    return InlineKeyboardMarkup(buttons)
+        buttons.append([InlineKeyboardButton("عضویت در چنل ما", url=url)])
+    return InlineKeyboardMarkup(buttons + [[InlineKeyboardButton("✅ جوین شدم", callback_data="verify_join")]])
 
 # Maintenance mode gate (applies to ALL messages before other handlers)
 @Client.on_message(filters.private & ~filters.user(ADMIN), group=-3)
@@ -161,6 +134,13 @@ def build_main_menu(user_id: int):
     return None
 
 
+# Disabled old persistent keyboard (YouTube / Instagram / Dashboard / Settings)
+# persistentMenu = ReplyKeyboardMarkup([
+#     [txt['main_youtube'], txt['main_instagram']],
+#     [txt['main_dashboard'], txt['main_settings']]
+# ], resize_keyboard=True)
+
+
 async def start_acc(_, client: Client, message: Message):
     if step['start'] == 1:
         return True
@@ -194,39 +174,11 @@ async def join_check(_, client: Client, message: Message):
             return False
     except Exception:
         return False
-    
-    uid = message.from_user.id
-    
-    # ✅ فقط برای پیام‌هایی که لینک هستند بررسی کن
-    text = getattr(message, 'text', '') or ''
-    if text and not any([
-        'http' in text.lower(),
-        'www.' in text.lower(),
-        '.com' in text.lower(),
-        '.net' in text.lower(),
-        '.org' in text.lower(),
-        'youtu' in text.lower(),
-        'instagram' in text.lower(),
-        'spotify' in text.lower(),
-        'tiktok' in text.lower()
-    ]):
-        # این پیام لینک نیست، اجازه بده
-        return True
-    
-    # ✅ Check cache first to avoid duplicate checks
-    import time
-    current_time = time.time()
-    if uid in JOIN_CHECK_CACHE:
-        cached_result, cached_time = JOIN_CHECK_CACHE[uid]
-        if current_time - cached_time < JOIN_CACHE_TTL:
-            start_logger.debug(f"Using cached join result for user={uid}: {cached_result}")
-            return cached_result
         
     # Admins bypass sponsor check
     try:
-        if uid in ADMIN:
-            start_logger.info(f"Admin bypass for user={uid}")
-            JOIN_CHECK_CACHE[uid] = (True, current_time)
+        if message.from_user.id in ADMIN:
+            start_logger.info(f"Admin bypass for user={message.from_user.id}")
             return True
     except Exception:
         pass
@@ -276,35 +228,9 @@ async def join_check(_, client: Client, message: Message):
                 or (isinstance(st, str) and st.lower() in ("member", "administrator", "creator", "restricted"))
                 or (hasattr(st, 'value') and str(st.value).lower() in ("member", "administrator", "creator", "restricted"))
             ):
-                # ✅ Cache successful result
-                JOIN_CHECK_CACHE[uid] = (True, current_time)
                 return True
             else:
                 # اگر کاربر left یا kicked باشد
-                # ✅ فقط یک بار پیام بفرست (اولین بار که cache نیست)
-                if uid not in JOIN_CHECK_CACHE or JOIN_CHECK_CACHE[uid][0] != False:
-                    _store_pending_link_if_any(message)
-                    await message.reply_text(
-                        "🔒 **برای استفاده از ربات عضویت در چنل الزامی است**\n\n"
-                        "💡 **مراحل:**\n"
-                        "1️⃣ روی دکمه زیر کلیک کنید\n"
-                        "2️⃣ در چنل عضو شوید\n"
-                        "3️⃣ روی «✅ جوین شدم» بزنید\n"
-                        "4️⃣ لینک شما خودکار پردازش می‌شود\n\n"
-                        "🎯 **پس از عضویت تمام قابلیت‌ها در اختیار شماست:**\n"
-                        "• دانلود از یوتیوب با کیفیت‌های مختلف\n"
-                        "• دانلود از اینستاگرام (پست/ریل/استوری)\n"
-                        "• دانلود از اسپاتیفای، تیک‌تاک و 10+ پلتفرم دیگر",
-                        reply_markup=sponsor_join_markup()
-                    )
-                # ✅ Cache failed result
-                JOIN_CHECK_CACHE[uid] = (False, current_time)
-                return False
-        except Exception as admin_error:
-            start_logger.warning(f"CHAT_ADMIN_REQUIRED or other error: {admin_error}")
-            # اگر ربات ادمین نیست، کاربر را به عضویت دعوت می‌کنیم
-            # ✅ فقط یک بار پیام بفرست
-            if uid not in JOIN_CHECK_CACHE or JOIN_CHECK_CACHE[uid][0] != False:
                 _store_pending_link_if_any(message)
                 await message.reply_text(
                     "🔒 **برای استفاده از ربات عضویت در چنل الزامی است**\n\n"
@@ -319,14 +245,10 @@ async def join_check(_, client: Client, message: Message):
                     "• دانلود از اسپاتیفای، تیک‌تاک و 10+ پلتفرم دیگر",
                     reply_markup=sponsor_join_markup()
                 )
-            # ✅ Cache failed result
-            JOIN_CHECK_CACHE[uid] = (False, current_time)
-            return False
-
-    except UserNotParticipant:
-        start_logger.info(f"UserNotParticipant for user={getattr(message.from_user,'id',None)}")
-        # ✅ فقط یک بار پیام بفرست
-        if uid not in JOIN_CHECK_CACHE or JOIN_CHECK_CACHE[uid][0] != False:
+                return False
+        except Exception as admin_error:
+            start_logger.warning(f"CHAT_ADMIN_REQUIRED or other error: {admin_error}")
+            # اگر ربات ادمین نیست، کاربر را به عضویت دعوت می‌کنیم
             _store_pending_link_if_any(message)
             await message.reply_text(
                 "🔒 **برای استفاده از ربات عضویت در چنل الزامی است**\n\n"
@@ -341,8 +263,15 @@ async def join_check(_, client: Client, message: Message):
                 "• دانلود از اسپاتیفای، تیک‌تاک و 10+ پلتفرم دیگر",
                 reply_markup=sponsor_join_markup()
             )
-        # ✅ Cache failed result
-        JOIN_CHECK_CACHE[uid] = (False, current_time)
+            return False
+
+    except UserNotParticipant:
+        start_logger.info(f"UserNotParticipant for user={getattr(message.from_user,'id',None)}")
+        _store_pending_link_if_any(message)
+        await message.reply_text(
+            "برای حمایت از ربات، لطفاً ابتدا در کانال زیر عضو شوید و سپس روی دکمهٔ ‘جوین شدم’ بزنید.",
+            reply_markup=sponsor_join_markup()
+        )
         return False
     except Exception as e:
         start_logger.error(f"Error checking membership: {e}")
@@ -351,6 +280,8 @@ async def join_check(_, client: Client, message: Message):
 
 
 join = filters.create(join_check)
+
+
 
 
 def get_random_string():
@@ -509,6 +440,30 @@ async def help_menu_callback(client: Client, callback_query):
     await callback_query.edit_message_text(text, reply_markup=build_main_menu(callback_query.from_user.id))
 
 
+# ===== Disabled old Main Menu Handlers (replaced by commands) =====
+# @Client.on_message(filters.private & filters.regex(r'^' + re.escape(txt['main_youtube']) + r'$'))
+# async def menu_youtube(client: Client, message: Message):
+#     await message.reply_text(txt['prompt_send_youtube'])
+#
+#
+# @Client.on_message(filters.private & filters.regex(r'^' + re.escape(txt['main_instagram']) + r'$'))
+# async def menu_instagram(client: Client, message: Message):
+#     await message.reply_text(txt['prompt_send_instagram'])
+#
+#
+# @Client.on_message(filters.private & filters.regex(r'^' + re.escape(txt['main_dashboard']) + r'$'))
+# async def menu_dashboard(client: Client, message: Message):
+#     user_id = message.from_user.id
+#     text_dash = await _render_dashboard(user_id)
+#     await message.reply_text(text_dash, reply_markup=_build_dash_markup(), disable_web_page_preview=True)
+#
+#
+# @Client.on_message(filters.private & filters.regex(r'^' + re.escape(txt['main_settings']) + r'$'))
+# async def menu_settings(client: Client, message: Message):
+#     text_settings = _settings_text(message.from_user.id)
+#     await message.reply_text(text_settings, reply_markup=_settings_main_kb())
+
+
 # Whitespace-tolerant alias for /dash and /dashboard to handle leading/trailing spaces
 @Client.on_message(filters.private & filters.regex(r'^\s*/(dash|dashboard)\s*$'))
 async def menu_dashboard_cmd_alias(client: Client, message: Message):
@@ -530,32 +485,10 @@ def _settings_main_kb():
         [InlineKeyboardButton(txt['settings_clear_history'], callback_data='settings_clear')]
     ])
 
-@Client.on_callback_query(filters.regex(r'^sponsor_info$'))
-async def sponsor_info_callback(client: Client, callback_query: CallbackQuery):
-    """Show sponsor channel information"""
-    try:
-        sponsor_tag = data.get('sponser', '')
-        if sponsor_tag:
-            await callback_query.answer(
-                f"لطفاً در کانال اسپانسر عضو شوید.\nشناسه: {sponsor_tag}",
-                show_alert=True
-            )
-        else:
-            await callback_query.answer("کانال اسپانسر تنظیم نشده است.", show_alert=True)
-    except Exception as e:
-        await callback_query.answer("خطا در نمایش اطلاعات", show_alert=True)
-
-
 @Client.on_callback_query(filters.regex(r'^verify_join$'))
 async def verify_join_callback(client: Client, callback_query: CallbackQuery):
     try:
         uid = getattr(callback_query.from_user, 'id', None)
-        
-        # ✅ Clear cache for this user to force fresh check
-        if uid in JOIN_CHECK_CACHE:
-            del JOIN_CHECK_CACHE[uid]
-            print(f"[VERIFY] Cleared join cache for user={uid}")
-        
         # Admins bypass
         if uid in ADMIN:
             print(f"[VERIFY] admin bypass user={uid}")
@@ -673,7 +606,7 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
 
 
 # === General Message Handler for Universal URLs (Spotify, TikTok, SoundCloud) ===
-@Client.on_message(filters.private & filters.text & join & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]) & ~filters.regex(r'^(🛠 مدیریت|📊 آمار کاربران|🖥 وضعیت سرور|📢 ارسال همگانی|📢 تنظیم اسپانسر|🔌 خاموش/روشن|🔐 خاموش/روشن اسپانسری|📺 خاموش/روشن تبلیغات|🍪 مدیریت کوکی|📺 تنظیم تبلیغات|📺 کوکی یوتیوب|⬅️ بازگشت|➕ افزودن کوکی یوتیوب|📋 مشاهده کوکی‌های یوتیوب|🗑 حذف همه کوکی‌های یوتیوب|✅ بله، حذف کن یوتیوب|❌ لغو|💬 پیام انتظار|🔝 بالای محتوا|🔻 پایین محتوا|🔌 بررسی پروکسی|✅ وضعیت ربات)$'), group=10)
+@Client.on_message(filters.private & filters.text & join & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]) & ~filters.regex(r'^(🛠 مدیریت|📊 آمار کاربران|🖥 وضعیت سرور|📢 ارسال همگانی|📢 تنظیم اسپانسر|🔌 خاموش/روشن|🔐 خاموش/روشن اسپانسری|📺 خاموش/روشن تبلیغات|🍪 مدیریت کوکی|📺 تنظیم تبلیغات|📺 کوکی یوتیوب|⬅️ بازگشت|➕ افزودن کوکی یوتیوب|📋 مشاهده کوکی‌های یوتیوب|🗑 حذف همه کوکی‌های یوتیوب|✅ بله، حذف کن یوتیوب|❌ لغو|💬 پیام انتظار|🔝 بالای محتوا|🔻 پایین محتوا|🔌 بررسی پروکسی|✅ وضعیت ربات)$'), group=1)
 async def handle_text_messages(client: Client, message: Message):
     """Handle universal URLs (Spotify, TikTok, SoundCloud) - YouTube and Instagram have dedicated handlers"""
     try:

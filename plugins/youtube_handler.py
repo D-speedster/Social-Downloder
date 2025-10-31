@@ -11,6 +11,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
 from plugins.sqlite_db_wrapper import DB
 from plugins.logger_config import get_logger
+from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 import yt_dlp
 
 # Initialize logger
@@ -351,7 +352,8 @@ async def download_thumbnail(url: str) -> str:
 
 @Client.on_message(
     filters.regex(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})') 
-    & filters.private
+    & filters.private 
+    & join  # 🔒 فیلتر عضویت اسپانسری اضافه شد
 )
 async def handle_youtube_link(client: Client, message: Message):
     """Handler اصلی برای لینک‌های یوتیوب"""

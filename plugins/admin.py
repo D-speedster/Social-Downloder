@@ -554,8 +554,8 @@ async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
         
         # Save changes to database
         try:
-            from .db_path_manager import db_path_manager
-            json_db_path = db_path_manager.get_json_db_path()
+            # ✅ Use local database.json
+            json_db_path = os.path.join(os.path.dirname(__file__), 'database.json')
             
             # Create backup before writing
             backup_path = json_db_path + '.bak'
@@ -1246,6 +1246,8 @@ async def validate_ad_content(message: Message) -> tuple:
 
 @Client.on_message(sp_filter & filters.user(ADMIN), group=5)
 async def set_sp(client: Client, message: Message):
+     print(f"[ADMIN] set_sp called by user={message.from_user.id} with text={message.text}")
+     admin_logger.info(f"[ADMIN] set_sp called by user={message.from_user.id} with text={message.text}")
      raw = (message.text or '').strip()
      val = raw
      
@@ -1319,8 +1321,8 @@ async def set_sp(client: Client, message: Message):
      # ✅ Thread-safe write با lock
      async with _json_write_lock:
          try:
-             from .db_path_manager import db_path_manager
-             json_db_path = db_path_manager.get_json_db_path()
+             # ✅ Use local database.json
+             json_db_path = os.path.join(os.path.dirname(__file__), 'database.json')
              
              # ✅ Backup قبل از نوشتن
              backup_path = json_db_path + '.bak'
@@ -1662,8 +1664,8 @@ async def admin_ad_position_handler(_: Client, message: Message):
         # ✅ Persist to database.json safely با lock
         async with _json_write_lock:
             try:
-                from .db_path_manager import db_path_manager
-                json_db_path = db_path_manager.get_json_db_path()
+                # ✅ Use local database.json
+                json_db_path = os.path.join(os.path.dirname(__file__), 'database.json')
                 
                 # ✅ Backup
                 backup_path = json_db_path + '.bak'

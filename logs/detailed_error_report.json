@@ -1,46 +1,36 @@
 {
-  "timestamp": "2025-10-29T19:31:26.120132",
+  "timestamp": "2025-10-31T14:00:12.220348",
   "system_info": {
     "platform": "Windows-11-10.0.26200-SP0",
     "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]",
     "python_executable": "C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
     "working_directory": "C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1",
-    "timestamp": "2025-10-29T19:31:26.075975",
+    "timestamp": "2025-10-31T14:00:12.211477",
     "ffmpeg_path": "C:\\ffmpeg\\bin\\ffmpeg.EXE"
   },
   "error_analysis": {
-    "timestamp": "2025-10-29T19:31:26.083373",
-    "error_type": "CancelledError",
-    "error_message": "",
+    "timestamp": "2025-10-31T14:00:12.217788",
+    "error_type": "OperationalError",
+    "error_message": "database is locked",
     "traceback": [
       "Traceback (most recent call last):\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 270, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 309, in <module>\n    asyncio.run(main())\n    ~~~~~~~~~~~^^^^^^^^\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 195, in run\n    return runner.run(main)\n           ~~~~~~~~~~^^^^^^\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n",
       "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\base_events.py\", line 719, in run_until_complete\n    return future.result()\n           ~~~~~~~~~~~~~^^\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 250, in main\n    await client.stop()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\stop.py\", line 65, in stop\n    await do_it()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\stop.py\", line 61, in do_it\n    await self.terminate()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\terminate.py\", line 47, in terminate\n    await self.dispatcher.stop()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\dispatcher.py\", line 162, in stop\n    await i\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\dispatcher.py\", line 240, in handler_worker\n    await handler.callback(self.client, *args)\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\plugins\\youtube_callback.py\", line 102, in handle_quality_selection\n    await start_download(\n    ...<6 lines>...\n    )\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\plugins\\youtube_callback.py\", line 293, in start_download\n    success = await youtube_uploader.upload_with_streaming(\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<11 lines>...\n    )\n    ^\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\plugins\\youtube_uploader.py\", line 314, in upload_with_streaming\n        thumbnail: Optional[str] = None,\n                       ^^^^^^^^^^^^^^^^^\n    ...<8 lines>...\n            # 🔥 اعمال chunk size به session (در صورت امکان)\n            ^^^^\n",
-      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\plugins\\youtube_uploader.py\", line 188, in upload_video\n    quick_thumb = generate_thumbnail(file_path)\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\messages\\send_video.py\", line 187, in send_video\n    file = await self.save_file(video, progress=progress, progress_args=progress_args)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\advanced\\save_file.py\", line 223, in save_file\n    await session.stop()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\session\\session.py\", line 169, in stop\n    await self.connection.close()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\connection\\connection.py\", line 65, in close\n    await self.protocol.close()\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\connection\\transport\\tcp\\tcp.py\", line 92, in close\n    await asyncio.wait_for(self.writer.wait_closed(), TCP.TIMEOUT)\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\tasks.py\", line 507, in wait_for\n    return await fut\n           ^^^^^^^^^\n",
-      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\asyncio\\streams.py\", line 358, in wait_closed\n    await self._protocol._get_close_waiter(self)\n",
-      "asyncio.exceptions.CancelledError\n"
+      "  File \"C:\\Users\\speedster\\Desktop\\Mybots\\DownloaderYT-V1\\bot.py\", line 202, in main\n    await client.start()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\utilities\\start.py\", line 58, in start\n    is_authorized = await self.connect()\n                    ^^^^^^^^^^^^^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\methods\\auth\\connect.py\", line 40, in connect\n    await self.load_session()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\client.py\", line 616, in load_session\n    await self.storage.open()\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 63, in open\n    self.update()\n    ~~~~~~~~~~~^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\file_storage.py\", line 52, in update\n    self.version(version)\n    ~~~~~~~~~~~~^^^^^^^^^\n",
+      "  File \"C:\\Users\\speedster\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\pyrogram\\storage\\sqlite_storage.py\", line 219, in version\n    self.conn.execute(\n    ~~~~~~~~~~~~~~~~~^\n        \"UPDATE version SET number = ?\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        (value,)\n        ^^^^^^^^\n    )\n    ^\n",
+      "sqlite3.OperationalError: database is locked\n"
     ],
     "suggestions": [
-      "خطای غیرمنتظره رخ داده است",
-      "لاگ‌های کامل را بررسی کنید",
-      "کد مربوطه را دیباگ کنید"
+      "مشکل در اتصال یا عملیات پایگاه داده",
+      "فایل پایگاه داده را بررسی کنید",
+      "دسترسی نوشتن در دایرکتوری را چک کنید"
     ]
   },
   "environment_issues": []

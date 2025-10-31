@@ -1450,8 +1450,9 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
 
 # Instagram handler - register with Pyrogram
 from pyrogram import filters
+from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 
-@Client.on_message(filters.private & filters.regex(INSTA_REGEX))
+@Client.on_message(filters.private & filters.regex(INSTA_REGEX) & join)  # 🔒 فیلتر عضویت اضافه شد
 async def handle_instagram_link(client: Client, message: Message):
     """Handler for Instagram links - delegates to universal downloader"""
     try:
