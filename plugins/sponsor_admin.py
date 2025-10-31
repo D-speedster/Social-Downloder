@@ -412,22 +412,51 @@ async def verify_multi_join_callback(client: Client, callback_query: CallbackQue
             pass
         
         # پردازش لینک معلق (اگر وجود دارد)
-        from plugins.start import PENDING_LINKS
+        from plugins.start import PENDING_LINKS, YOUTUBE_REGEX, INSTA_REGEX
         pending = PENDING_LINKS.pop(user_id, None)
+        
         if pending:
             try:
+                logger.info(f"[VERIFY_JOIN] Processing pending link for user {user_id}")
+                
                 await client.send_message(
                     chat_id=pending['chat_id'],
                     text="🔁 عضویت تایید شد — در حال پردازش لینکی که قبلاً ارسال کرده بودید…"
                 )
                 
-                # ارسال مجدد پیام برای پردازش
-                await client.send_message(
-                    chat_id=pending['chat_id'],
-                    text=pending['text']
-                )
+                # دریافت message object اصلی
+                try:
+                    orig_msg = await client.get_messages(pending['chat_id'], pending['message_id'])
+                    
+                    if not orig_msg:
+                        raise Exception("Message not found")
+                    
+                    # پردازش بر اساس نوع لینک
+                    text = pending.get('text', '')
+                    
+                    if YOUTUBE_REGEX.search(text):
+                        logger.info(f"[VERIFY_JOIN] Processing YouTube link")
+                        from plugins.youtube_handler import show_video
+                        await show_video(client, orig_msg)
+                    elif INSTA_REGEX.search(text):
+                        logger.info(f"[VERIFY_JOIN] Processing Instagram link")
+                        from plugins.universal_downloader import handle_universal_link
+                        await handle_universal_link(client, orig_msg)
+                    else:
+                        # سایر پلتفرم‌ها
+                        logger.info(f"[VERIFY_JOIN] Processing universal link")
+                        from plugins.universal_downloader import handle_universal_link
+                        await handle_universal_link(client, orig_msg)
+                        
+                except Exception as msg_error:
+                    logger.error(f"[VERIFY_JOIN] Error fetching/processing message: {msg_error}")
+                    await client.send_message(
+                        chat_id=pending['chat_id'],
+                        text="❗️ خطا در پردازش لینک. لطفاً دوباره لینک را ارسال کنید."
+                    )
+                    
             except Exception as e:
-                logger.error(f"Error processing pending link: {e}")
+                logger.error(f"[VERIFY_JOIN] Error processing pending link: {e}", exc_info=True)
     else:
         # هنوز در برخی کانال‌ها عضو نیست
         channels_text = "\n".join([
