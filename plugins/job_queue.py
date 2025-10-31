@@ -202,11 +202,35 @@ class JobQueue:
                 if not ok:
                     raise Exception("آپلود ناموفق بود")
 
-                # Cleanup
+                # 🔥 Robust Cleanup با fallback
+                cleanup_success = False
                 try:
                     youtube_downloader.cleanup(downloaded_file)
-                except Exception:
-                    pass
+                    cleanup_success = True
+                    logger.info(f"Cleanup successful for job {job.job_id}")
+                except Exception as e:
+                    logger.error(f"Primary cleanup failed for job {job.job_id}: {e}")
+                    # 🔥 Fallback: Force cleanup
+                    try:
+                        if os.path.exists(downloaded_file):
+                            os.remove(downloaded_file)
+                            cleanup_success = True
+                            logger.info(f"Fallback cleanup successful for job {job.job_id}")
+                        
+                        # پاک‌سازی فایل‌های مرتبط (thumbnail, etc)
+                        base_path = os.path.splitext(downloaded_file)[0]
+                        for ext in ['.jpg', '.png', '.webp', '_thumb.jpg']:
+                            related_file = base_path + ext
+                            if os.path.exists(related_file):
+                                try:
+                                    os.remove(related_file)
+                                except:
+                                    pass
+                    except Exception as e2:
+                        logger.error(f"Fallback cleanup also failed for job {job.job_id}: {e2}")
+                
+                if not cleanup_success:
+                    logger.warning(f"⚠️ File cleanup failed for job {job.job_id}, file may remain: {downloaded_file}")
 
                 DB().update_job_status(job.job_id, 'completed')
                 DB().update_job_progress(job.job_id, 100)

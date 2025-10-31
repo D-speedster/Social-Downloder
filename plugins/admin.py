@@ -48,6 +48,8 @@ admin_step = {
     # NEW: broadcast state machine
     'broadcast': 0,  # 0: idle, 1: choosing type, 2: waiting for content, 3: waiting for confirmation
     'broadcast_type': '',  # 'normal' or 'forward'
+    # NEW: manual recovery state
+    'manual_recovery': 0,  # 0: idle, 1: waiting for minutes
     'broadcast_content': None,  # stored message for confirmation
     # NEW: waiting message management
     'waiting_msg': 0,
@@ -139,7 +141,7 @@ def admin_inline_maker() -> list:
 
 def admin_reply_kb() -> ReplyKeyboardMarkup:
     """
-    کیبورد پنل ادمین با 10 دکمه در 5 سطر (2 ستونی)
+    کیبورد پنل ادمین با 12 دکمه در 6 سطر (2 ستونی)
     """
     return ReplyKeyboardMarkup(
         [
@@ -147,6 +149,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
+            ["🔄 آپدیت انتظار", "📨 پیام‌های آفلاین"],
             ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
@@ -178,6 +181,173 @@ async def admin_menu_stats(_: Client, message: Message):
 async def admin_menu_server(_: Client, message: Message):
     print("[ADMIN] server status via text by", message.from_user.id)
     await message.reply_text(_server_status_text(), reply_markup=admin_reply_kb())
+
+
+@Client.on_message(filters.command('health') & filters.user(ADMIN))
+async def health_check_cmd(_: Client, message: Message):
+    """دستور بررسی سلامت سیستم"""
+    try:
+        from plugins.health_monitor import get_health_monitor
+        monitor = get_health_monitor()
+        
+        if not monitor:
+            await message.reply_text("⚠️ Health Monitor فعال نیست")
+            return
+        
+        report = monitor.get_status_report()
+        await message.reply_text(report)
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در دریافت گزارش سلامت: {e}")
+
+
+@Client.on_message(filters.command('clearalerts') & filters.user(ADMIN))
+async def clear_alerts_cmd(_: Client, message: Message):
+    """پاک کردن cooldown هشدارها (برای تست)"""
+    try:
+        from plugins.health_monitor import get_health_monitor
+        monitor = get_health_monitor()
+        
+        if not monitor:
+            await message.reply_text("⚠️ Health Monitor فعال نیست")
+            return
+        
+        # پاک کردن تمام cooldowns
+        count = len(monitor.alerts_sent)
+        monitor.alerts_sent.clear()
+        
+        await message.reply_text(f"✅ {count} cooldown پاک شد\n\nهشدارها اکنون می‌توانند دوباره ارسال شوند.")
+    except Exception as e:
+        await message.reply_text(f"❌ خطا: {e}")
+
+
+# 📨 Manual Recovery System
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📨 پیام‌های آفلاین$'))
+async def manual_recovery_menu(_: Client, message: Message):
+    """منوی بازیابی دستی پیام‌ها"""
+    user_id = message.from_user.id
+    print(f"[ADMIN] manual recovery menu opened by {user_id}")
+    
+    # Reset state
+    admin_step['manual_recovery'] = 1
+    
+    text = (
+        "📨 **بازیابی پیام‌های آفلاین**\n\n"
+        "این قابلیت به شما اجازه می‌دهد پیام‌های کاربرانی که\n"
+        "در زمان آفلاین بودن ربات ارسال کرده‌اند را بازیابی کنید.\n\n"
+        "⏱ **چند دقیقه قبل را بررسی کنم؟**\n\n"
+        "💡 **راهنما:**\n"
+        "• حداقل: 1 دقیقه\n"
+        "• حداکثر: 1440 دقیقه (24 ساعت)\n"
+        "• مثال: 30 (برای 30 دقیقه اخیر)\n\n"
+        "📝 **لطفاً عدد را وارد کنید:**"
+    )
+    
+    await message.reply_text(
+        text,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ لغو", callback_data="cancel_recovery")
+        ]])
+    )
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cancel_recovery$'))
+async def cancel_recovery_cb(_: Client, callback_query: CallbackQuery):
+    """لغو بازیابی"""
+    admin_step['manual_recovery'] = 0
+    await callback_query.message.edit_text(
+        "❌ بازیابی لغو شد",
+        reply_markup=None
+    )
+    await callback_query.answer()
+
+
+# Handler برای دریافت تعداد دقیقه
+recovery_filter = filters.create(lambda _, __, m: admin_step.get('manual_recovery') == 1 and m.text and not m.text.startswith('/'))
+
+@Client.on_message(recovery_filter & filters.user(ADMIN), group=15)
+async def handle_recovery_minutes(client: Client, message: Message):
+    """دریافت تعداد دقیقه و شروع بازیابی"""
+    user_id = message.from_user.id
+    
+    try:
+        # پارس کردن عدد
+        text = message.text.strip()
+        
+        # نادیده گرفتن پیام‌های خاص
+        if text in ['📨 پیام‌های آفلاین', '⬅️ بازگشت', '🛠 مدیریت']:
+            return
+        
+        minutes = int(text)
+        
+        # اعتبارسنجی
+        if minutes < 1 or minutes > 1440:
+            await message.reply_text(
+                "❌ **عدد نامعتبر**\n\n"
+                "لطفاً عددی بین 1 تا 1440 وارد کنید."
+            )
+            return
+        
+        # Reset state
+        admin_step['manual_recovery'] = 0
+        
+        # شروع بازیابی
+        from config import BOT_TOKEN
+        from plugins.manual_recovery import manual_recover_messages
+        
+        status_msg = await message.reply_text(
+            f"🔄 **شروع بازیابی**\n\n"
+            f"⏱ بازه زمانی: {minutes} دقیقه اخیر\n"
+            f"⏳ لطفاً صبر کنید...\n\n"
+            f"💡 این ممکن است چند دقیقه طول بکشد."
+        )
+        
+        # اجرای بازیابی
+        result = await manual_recover_messages(client, BOT_TOKEN, minutes, user_id)
+        
+        if not result.get('success'):
+            await status_msg.edit_text(
+                f"❌ **خطا در بازیابی**\n\n"
+                f"{result.get('message', 'خطای نامشخص')}"
+            )
+        
+    except ValueError:
+        await message.reply_text(
+            "❌ **فرمت نامعتبر**\n\n"
+            "لطفاً فقط عدد وارد کنید.\n"
+            "مثال: 30"
+        )
+        admin_step['manual_recovery'] = 1  # ادامه انتظار
+    
+    except Exception as e:
+        admin_logger.error(f"Error in manual recovery: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+        admin_step['manual_recovery'] = 0
+
+
+@Client.on_message(filters.command('recovery') & filters.user(ADMIN))
+async def recovery_stats_cmd(_: Client, message: Message):
+    """دستور بررسی آمار بازیابی پیام‌ها"""
+    try:
+        from plugins.message_recovery import get_recovery_stats
+        stats = get_recovery_stats()
+        
+        if not stats:
+            await message.reply_text("⚠️ آماری یافت نشد")
+            return
+        
+        text = "🔄 **آمار بازیابی پیام‌ها**\n\n"
+        text += f"🚀 تعداد راه‌اندازی‌ها: {stats.get('total_startups', 0)}\n"
+        text += f"📨 کل پیام‌های بازیابی شده: {stats.get('total_recovered', 0)}\n"
+        text += f"🆔 آخرین Update ID: {stats.get('last_update_id', 0)}\n\n"
+        
+        if stats.get('last_startup'):
+            text += f"⏰ آخرین راه‌اندازی: {stats['last_startup']}\n"
+        if stats.get('last_shutdown'):
+            text += f"⏹️ آخرین توقف: {stats['last_shutdown']}\n"
+        
+        await message.reply_text(text)
+    except Exception as e:
+        await message.reply_text(f"❌ خطا در دریافت آمار: {e}")
 
 
 # بخش بررسی پروکسی حذف شد (Phase 2)
@@ -1495,6 +1665,30 @@ async def set_sp(client: Client, message: Message):
 # Remaining callback handler code removed - now handled by message handlers
 
 
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔄 آپدیت انتظار$'))
+async def pending_update_menu_text(client: Client, message: Message):
+    """منوی مدیریت آپدیت انتظار"""
+    # Clear other states
+    admin_step['sp'] = 2
+    admin_step['broadcast'] = 0
+    admin_step['waiting_msg'] = 0
+    
+    text = "🔄 <b>سیستم آپدیت انتظار</b>\n\n"
+    text += "از این بخش می‌توانید پیام‌های کاربرانی که در زمان خاموش بودن ربات پیام داده‌اند را پردازش کنید.\n\n"
+    text += "💡 <b>نحوه کار:</b>\n"
+    text += "• ادمین تعداد دقیقه‌های گذشته را وارد می‌کند\n"
+    text += "• ربات پیام‌های آن بازه زمانی را پردازش می‌کند\n"
+    text += "• به کاربران پیام اطلاع‌رسانی ارسال می‌شود\n\n"
+    text += "📝 لطفاً تعداد دقیقه‌های گذشته را وارد کنید (1-1440):"
+    
+    await message.reply_text(
+        text,
+        reply_markup=ReplyKeyboardRemove()
+    )
+    # Set state for minutes input
+    admin_step['pending_update'] = 1
+
+
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^💬 پیام انتظار$'))
 async def waiting_msg_menu_text(client: Client, message: Message):
     """Show waiting message management menu via text"""
@@ -1531,6 +1725,48 @@ async def waiting_msg_menu_text(client: Client, message: Message):
 waiting_msg_filter = filters.create(
     lambda _, __, message: admin_step.get('waiting_msg') == 2
 )
+
+# Handle pending update minutes input
+pending_update_filter = filters.create(
+    lambda _, __, message: admin_step.get('pending_update') == 1
+)
+
+@Client.on_message(pending_update_filter & filters.user(ADMIN), group=8)
+async def handle_pending_update_minutes(client: Client, message: Message):
+    """Handle pending update minutes input"""
+    if not message.text or not message.text.strip().isdigit():
+        await message.reply_text("❌ لطفاً یک عدد معتبر وارد کنید (1-1440).")
+        return
+    
+    minutes = int(message.text.strip())
+    
+    if minutes < 1 or minutes > 1440:
+        await message.reply_text("❌ تعداد دقیقه باید بین 1 تا 1440 باشد.")
+        return
+    
+    # Reset admin step
+    admin_step['pending_update'] = 0
+    
+    # Process pending updates
+    try:
+        from plugins.message_recovery import process_pending_updates
+        result = await process_pending_updates(minutes)
+        
+        await message.reply_text(
+            f"✅ آپدیت انتظار با موفقیت انجام شد!\n\n"
+            f"⏰ بازه زمانی: {minutes} دقیقه گذشته\n"
+            f"📨 پیام‌های پردازش شده: {result.get('processed', 0)}\n"
+            f"👥 کاربران اطلاع‌رسانی شده: {result.get('notified', 0)}",
+            reply_markup=admin_reply_kb()
+        )
+        
+    except Exception as e:
+        print(f"[ERROR] Failed to process pending updates: {e}")
+        await message.reply_text(
+            f"❌ خطا در پردازش آپدیت انتظار: {e}",
+            reply_markup=admin_reply_kb()
+        )
+
 
 @Client.on_message(waiting_msg_filter & filters.user(ADMIN), group=7)
 async def handle_waiting_message_input(client: Client, message: Message):

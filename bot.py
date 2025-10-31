@@ -13,6 +13,7 @@ import plugins.youtube_handler
 import plugins.youtube_callback
 import plugins.sponsor_admin
 from plugins.cookie_validator import start_cookie_validator, stop_cookie_validator
+from plugins.health_monitor import start_health_monitor, stop_health_monitor, get_health_monitor
 
 # 🔥 CRITICAL: تنظیمات بهینه Pyrogram قبل از import
 print("🔧 در حال اعمال بهینه‌سازی‌های Pyrogram...")
@@ -202,6 +203,13 @@ async def main():
         print("🔗 در حال اتصال به تلگرام...")
         await client.start()
         
+        # 🔥 Record startup in database
+        try:
+            db.record_startup()
+            logger.info("Startup recorded in database")
+        except Exception as e:
+            logger.warning(f"Could not record startup: {e}")
+        
         # Initialize job queue
         await init_job_queue(client)
         
@@ -245,6 +253,16 @@ async def main():
             logger.error(f"Failed to start Cookie Validator: {e}")
             print(f"⚠️ خطا در راه‌اندازی سرویس کوکی: {e}")
         
+        # 🔥 Start Health Monitor
+        try:
+            from plugins.admin import ADMIN
+            asyncio.create_task(start_health_monitor(client, ADMIN))
+            logger.info("Health Monitor started")
+            print("🏥 سیستم نظارت سلامت راه‌اندازی شد")
+        except Exception as e:
+            logger.warning(f"Could not start health monitor: {e}")
+            print(f"⚠️ خطا در راه‌اندازی health monitor: {e}")
+        
         logger.info("Bot started successfully")
         print("✅ ربات با موفقیت راه‌اندازی شد!")
         print("=" * 70)
@@ -274,6 +292,15 @@ async def main():
         
         raise
     finally:
+        # 🔥 Record shutdown in database
+        try:
+            if 'db' in globals():
+                db.record_shutdown()
+                logger.info("Shutdown recorded in database")
+                print("📝 زمان توقف ثبت شد")
+        except Exception as e:
+            logger.warning(f"Could not record shutdown: {e}")
+        
         # Stop Cookie Validator Service
         try:
             print("🍪 در حال توقف سرویس بررسی کوکی...")

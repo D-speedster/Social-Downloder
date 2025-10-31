@@ -1,49 +1,59 @@
 import sqlite3
 import os
+import threading
 from datetime import datetime, date
 from datetime import datetime as _dt, timedelta as _td
 from .db_path_manager import db_path_manager
 
 
+# 🔥 Thread-safe connection pool
+_thread_local = threading.local()
+_db_path = None
+_lock = threading.Lock()
+
+
+def _get_connection():
+    """Get thread-local database connection"""
+    global _db_path
+    
+    if not hasattr(_thread_local, 'connection') or _thread_local.connection is None:
+        if _db_path is None:
+            raise RuntimeError("Database not initialized. Call DB() first.")
+        
+        # Create new connection for this thread
+        conn = sqlite3.connect(_db_path, timeout=30, check_same_thread=True)
+        
+        # Apply optimizations
+        cursor = conn.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA synchronous=NORMAL')
+        cursor.execute('PRAGMA busy_timeout=30000')
+        cursor.execute('PRAGMA cache_size=-10000')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+        cursor.execute('PRAGMA page_size=4096')
+        cursor.execute('PRAGMA mmap_size=268435456')
+        
+        _thread_local.connection = conn
+        _thread_local.cursor = cursor
+    
+    return _thread_local.connection, _thread_local.cursor
+
+
 class DB:
     def __init__(self):
+        global _db_path
+        
         # Use external database path based on OS
         db_path_manager.ensure_database_directory()
         db_path_manager.migrate_existing_database()
         
-        db_path = db_path_manager.get_sqlite_db_path()
-        self.mydb = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
-        self.cursor = self.mydb.cursor()
+        with _lock:
+            _db_path = db_path_manager.get_sqlite_db_path()
         
-        # 🔥 بهینه‌سازی‌های حیاتی SQLite برای production
-        try:
-            # WAL mode: بهترین برای concurrent reads/writes
-            self.cursor.execute('PRAGMA journal_mode=WAL')
-            
-            # NORMAL: تعادل بین سرعت و ایمنی
-            self.cursor.execute('PRAGMA synchronous=NORMAL')
-            
-            # افزایش timeout برای جلوگیری از lock errors
-            self.cursor.execute('PRAGMA busy_timeout=30000')
-            
-            # 🔥 بهینه‌سازی‌های جدید
-            # افزایش cache size (10MB)
-            self.cursor.execute('PRAGMA cache_size=-10000')
-            
-            # استفاده از memory برای temp tables
-            self.cursor.execute('PRAGMA temp_store=MEMORY')
-            
-            # بهینه‌سازی page size
-            self.cursor.execute('PRAGMA page_size=4096')
-            
-            # افزایش mmap size برای سرعت بیشتر (256MB)
-            self.cursor.execute('PRAGMA mmap_size=268435456')
-            
-            print(f"✅ SQLite optimized for production")
-        except Exception as e:
-            print(f"⚠️ SQLite optimization warning: {e}")
+        # Get thread-local connection
+        self.mydb, self.cursor = _get_connection()
         
-        print(f"SQLite database connected at: {db_path}")
+        print(f"✅ SQLite thread-safe connection ready (thread: {threading.current_thread().name})")
 
     def setup(self) -> None:
         try:
@@ -113,6 +123,25 @@ class DB:
                     created_at TEXT NOT NULL,
                     last_used_at TEXT
                 )"""
+            )
+            
+            # Create bot_state table for tracking updates and recovery
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS bot_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    last_update_id INTEGER NOT NULL DEFAULT 0,
+                    last_startup TIMESTAMP,
+                    last_shutdown TIMESTAMP,
+                    total_startups INTEGER NOT NULL DEFAULT 0,
+                    total_recovered_messages INTEGER NOT NULL DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )"""
+            )
+            
+            # Initialize bot_state if not exists
+            self.cursor.execute(
+                """INSERT OR IGNORE INTO bot_state (id, last_update_id, total_startups) 
+                   VALUES (1, 0, 0)"""
             )
             
             # Insert default waiting messages if they don't exist
@@ -506,3 +535,76 @@ class DB:
         except sqlite3.Error as error:
             print(f"Failed to get user jobs: {error}")
             return []
+    
+    # --- Message recovery operations ---
+    def get_last_update_id(self) -> int:
+        """Get last processed update_id"""
+        try:
+            query = 'SELECT last_update_id FROM bot_state WHERE id = 1'
+            result = self.cursor.execute(query).fetchone()
+            return result[0] if result else 0
+        except sqlite3.Error as e:
+            print(f"Failed to get last_update_id: {e}")
+            return 0
+    
+    def save_last_update_id(self, update_id: int) -> None:
+        """Save last processed update_id"""
+        try:
+            query = '''UPDATE bot_state 
+                       SET last_update_id = ?, updated_at = CURRENT_TIMESTAMP 
+                       WHERE id = 1'''
+            self.cursor.execute(query, (update_id,))
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to save last_update_id: {e}")
+    
+    def record_startup(self) -> None:
+        """Record bot startup"""
+        try:
+            query = '''UPDATE bot_state 
+                       SET last_startup = CURRENT_TIMESTAMP, 
+                           total_startups = total_startups + 1,
+                           updated_at = CURRENT_TIMESTAMP 
+                       WHERE id = 1'''
+            self.cursor.execute(query)
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to record startup: {e}")
+    
+    def record_shutdown(self) -> None:
+        """Record bot shutdown"""
+        try:
+            query = '''UPDATE bot_state 
+                       SET last_shutdown = CURRENT_TIMESTAMP,
+                           updated_at = CURRENT_TIMESTAMP 
+                       WHERE id = 1'''
+            self.cursor.execute(query)
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to record shutdown: {e}")
+    
+    def increment_recovered_messages(self, count: int) -> None:
+        """Increment recovered messages counter"""
+        try:
+            query = '''UPDATE bot_state 
+                       SET total_recovered_messages = total_recovered_messages + ?,
+                           updated_at = CURRENT_TIMESTAMP 
+                       WHERE id = 1'''
+            self.cursor.execute(query, (count,))
+            self.mydb.commit()
+        except sqlite3.Error as e:
+            print(f"Failed to increment recovered messages: {e}")
+    
+    def get_bot_state(self) -> dict:
+        """Get bot state information"""
+        try:
+            query = 'SELECT * FROM bot_state WHERE id = 1'
+            self.cursor.execute(query)
+            row = self.cursor.fetchone()
+            if row:
+                columns = [description[0] for description in self.cursor.description]
+                return dict(zip(columns, row))
+            return {}
+        except sqlite3.Error as e:
+            print(f"Failed to get bot state: {e}")
+            return {}
