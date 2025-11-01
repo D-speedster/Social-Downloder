@@ -59,7 +59,7 @@ TUMBLR_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?tumblr\.com/", re.IGNORECAS
 RUMBLE_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?rumble\.com/", re.IGNORECASE)
 IFUNNY_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?ifunny\.(?:co|com)/", re.IGNORECASE)
 DEEZER_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?deezer\.com/", re.IGNORECASE)
-RADIOJAVAN_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?radiojavan\.com/", re.IGNORECASE)
+RADIOJAVAN_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:play\.)?radiojavan\.com/(?:song|podcast|video)/[\w\-\(\)]+/?$", re.IGNORECASE)
 PENDING_LINKS = {}
 # Cache برای جلوگیری از بررسی تکراری عضویت
 JOIN_CHECK_CACHE = {}  # {user_id: (result, timestamp)}
@@ -462,7 +462,8 @@ async def help_command_handler(client: Client, message: Message):
         "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
         "🎵 **اسپاتیفای** - spotify.com\n"
         "🎬 **تیک‌تاک** - tiktok.com\n"
-        "🎧 **ساندکلود** - soundcloud.com\n\n"
+        "🎧 **ساندکلود** - soundcloud.com\n"
+        "📻 **رادیو جوان** - radiojavan.com\n\n"
         "💡 **نحوه استفاده:**\n"
         "- فقط لینک را ارسال کنید تا به‌طور خودکار پردازش شود\n"
         "- برای یوتیوب لیست کیفیت‌ها نمایش داده می‌شود\n"
@@ -746,15 +747,15 @@ async def handle_text_messages(client: Client, message: Message):
         text = message.text.strip()
         
         # Only handle universal platforms (expanded list)
-        # YouTube and Instagram are handled by their dedicated handlers with join filters
+        # YouTube, Instagram, and RadioJavan are handled by their dedicated handlers with join filters
         if (SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or SOUNDCLOUD_REGEX.search(text) or 
             PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or THREADS_REGEX.search(text) or 
             FACEBOOK_REGEX.search(text) or REDDIT_REGEX.search(text) or IMGUR_REGEX.search(text) or 
             SNAPCHAT_REGEX.search(text) or TUMBLR_REGEX.search(text) or RUMBLE_REGEX.search(text) or 
-            IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text) or RADIOJAVAN_REGEX.search(text)):
+            IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text)):
             from plugins.universal_downloader import handle_universal_link
             await handle_universal_link(client, message)
-        elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text):
+        elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text) or RADIOJAVAN_REGEX.search(text):
             # These are handled by dedicated handlers, do nothing here
             pass
         else:
@@ -768,7 +769,8 @@ async def handle_text_messages(client: Client, message: Message):
                     "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
                     "🎵 **اسپاتیفای** - spotify.com\n"
                     "🎬 **تیک‌تاک** - tiktok.com\n"
-                    "🎧 **ساندکلود** - soundcloud.com\n\n"
+                    "🎧 **ساندکلود** - soundcloud.com\n"
+                    "📻 **رادیو جوان** - radiojavan.com\n\n"
                     "💡 فقط لینک را ارسال کنید تا پردازش شود.",
                     reply_markup=build_main_menu(message.from_user.id)
                 )

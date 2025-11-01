@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 import plugins.youtube_handler
 import plugins.youtube_callback
 import plugins.sponsor_admin
+import plugins.radiojavan_handler  # 🎵 RadioJavan downloader
 from plugins.cookie_validator import start_cookie_validator, stop_cookie_validator
 from plugins.health_monitor import start_health_monitor, stop_health_monitor, get_health_monitor
 
