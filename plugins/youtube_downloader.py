@@ -62,32 +62,37 @@ class YouTubeDownloader:
             # Check for cookie file
             cookie_file = 'cookie_youtube.txt'
             
-            # yt-dlp options with maximum stability
+            # yt-dlp options - BALANCED: Speed + Stability
             ydl_opts = {
                 'format': format_string,
                 'outtmpl': output_path,
                 'quiet': True,
                 'no_warnings': True,
                 'progress_hooks': [progress_hook] if progress_callback else [],
-                # Network stability improvements
-                'retries': 10,                   # افزایش تلاش مجدد به 10 بار
-                'fragment_retries': 20,          # افزایش تلاش مجدد fragment ها
-                'retry_sleep_functions': {       # زمان انتظار بین تلاش‌ها
-                    'http': lambda n: min(3 * (2 ** n), 30),
-                    'fragment': lambda n: min(2 * (2 ** n), 20),
+                
+                # 🔥 PERFORMANCE: Speed optimizations
+                'concurrent_fragment_downloads': 4,  # 4 fragments همزمان (متعادل)
+                'http_chunk_size': 5242880,          # 5MB chunks (سریع‌تر)
+                'buffersize': 16384,                 # 16KB buffer
+                
+                # 🛡️ STABILITY: Network reliability
+                'retries': 10,
+                'fragment_retries': 15,
+                'retry_sleep_functions': {
+                    'http': lambda n: min(2 * (2 ** n), 20),
+                    'fragment': lambda n: min(1 * (2 ** n), 10),
                 },
-                # Connection settings - حداکثر پایداری
-                'http_chunk_size': 524288,       # کاهش بیشتر به 512KB
-                'concurrent_fragment_downloads': 1,  # فقط 1 fragment همزمان
-                'socket_timeout': 60,            # افزایش timeout به 60s
-                'read_timeout': 60,              # افزایش timeout به 60s
-                # Disable problematic features
-                'no_check_certificate': True,    # نادیده گرفتن مشکلات SSL
-                'prefer_insecure': False,        # استفاده از HTTPS
-                # Additional stability options
-                'keepvideo': False,              # حذف فایل ویدیو بعد از merge
-                'ignoreerrors': False,           # توقف در صورت خطا
-                'nocheckcertificate': False,     # بررسی certificate
+                'socket_timeout': 45,
+                'read_timeout': 45,
+                
+                # 🔒 SECURITY: SSL/Certificate
+                'no_check_certificate': True,
+                'prefer_insecure': False,
+                
+                # 🧹 CLEANUP: File management
+                'keepvideo': False,
+                'ignoreerrors': False,
+                'nocheckcertificate': False,
             }
             
             # تنظیمات مخصوص فایل‌های صوتی
@@ -203,11 +208,16 @@ class YouTubeDownloader:
                 
                 raise Exception("All download attempts failed")
             
+            import time
+            download_start = time.time()
             result_path = await loop.run_in_executor(None, _download_with_retry)
+            download_time = time.time() - download_start
             
             # Verify file exists
             if os.path.exists(result_path) and os.path.getsize(result_path) > 0:
-                logger.info(f"Download completed: {result_path} ({os.path.getsize(result_path)} bytes)")
+                file_size_mb = os.path.getsize(result_path) / (1024 * 1024)
+                speed_mbps = file_size_mb / download_time if download_time > 0 else 0
+                logger.info(f"✅ Download completed: {file_size_mb:.2f} MB in {download_time:.2f}s ({speed_mbps:.2f} MB/s)")
                 return result_path
             else:
                 logger.error(f"Download failed: file not found or empty")

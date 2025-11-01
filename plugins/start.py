@@ -60,6 +60,7 @@ RUMBLE_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?rumble\.com/", re.IGNORECAS
 IFUNNY_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?ifunny\.(?:co|com)/", re.IGNORECASE)
 DEEZER_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?deezer\.com/", re.IGNORECASE)
 RADIOJAVAN_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:play\.)?radiojavan\.com/(?:song|podcast|video)/[\w\-\(\)]+/?$", re.IGNORECASE)
+APARAT_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?aparat\.com/v/[\w\-]+/?$", re.IGNORECASE)
 PENDING_LINKS = {}
 # Cache برای جلوگیری از بررسی تکراری عضویت
 JOIN_CHECK_CACHE = {}  # {user_id: (result, timestamp)}
@@ -459,6 +460,7 @@ async def help_command_handler(client: Client, message: Message):
         "📘 راهنما\n\n"
         "🔗 **پلتفرم‌های پشتیبانی شده:**\n"
         "📺 **یوتیوب** - youtube.com, youtu.be\n"
+        "🎬 **آپارات** - aparat.com\n"
         "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
         "🎵 **اسپاتیفای** - spotify.com\n"
         "🎬 **تیک‌تاک** - tiktok.com\n"
@@ -466,7 +468,7 @@ async def help_command_handler(client: Client, message: Message):
         "📻 **رادیو جوان** - radiojavan.com\n\n"
         "💡 **نحوه استفاده:**\n"
         "- فقط لینک را ارسال کنید تا به‌طور خودکار پردازش شود\n"
-        "- برای یوتیوب لیست کیفیت‌ها نمایش داده می‌شود\n"
+        "- برای یوتیوب و آپارات لیست کیفیت‌ها نمایش داده می‌شود\n"
         "- سایر پلتفرم‌ها به‌طور مستقیم دانلود می‌شوند\n\n"
         "📊 از بخش حساب کاربری می‌توانید آمار خود را ببینید."
     )
@@ -755,7 +757,7 @@ async def handle_text_messages(client: Client, message: Message):
             IFUNNY_REGEX.search(text) or DEEZER_REGEX.search(text)):
             from plugins.universal_downloader import handle_universal_link
             await handle_universal_link(client, message)
-        elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text) or RADIOJAVAN_REGEX.search(text):
+        elif YOUTUBE_REGEX.search(text) or INSTA_REGEX.search(text) or RADIOJAVAN_REGEX.search(text) or APARAT_REGEX.search(text):
             # These are handled by dedicated handlers, do nothing here
             pass
         else:
@@ -766,6 +768,7 @@ async def handle_text_messages(client: Client, message: Message):
                 await message.reply_text(
                     "🔗 **لینک پشتیبانی شده ارسال کنید:**\n\n"
                     "📺 **یوتیوب** - youtube.com, youtu.be\n"
+                    "🎬 **آپارات** - aparat.com\n"
                     "📷 **اینستاگرام** - instagram.com (پست/ریل/استوری)\n"
                     "🎵 **اسپاتیفای** - spotify.com\n"
                     "🎬 **تیک‌تاک** - tiktok.com\n"
