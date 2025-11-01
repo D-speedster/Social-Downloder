@@ -286,7 +286,7 @@ async def start_download(
         if ad_enabled and ad_position == 'before':
             logger.info("Sending advertisement before YouTube content")
             send_advertisement(client, call.message.chat.id)
-            await asyncio.sleep(1)  # Wait 1 second after advertisement
+            # No need to wait - advertisement runs in background
         
         # 🔥 آپلود با تنظیمات بهینه
         upload_start = time.time()
@@ -311,21 +311,25 @@ async def start_download(
         logger.info(f"✅ Upload: {upload_time:.2f}s")
         
         # حذف پیام progress
+        logger.debug("Deleting progress message...")
         try:
             await call.message.delete()
-        except:
-            pass
+            logger.debug("Progress message deleted")
+        except Exception as e:
+            logger.warning(f"Failed to delete progress message: {e}")
         
         # Send advertisement after content if enabled and position is 'after'
         if ad_enabled and ad_position == 'after':
             logger.info("Sending advertisement after YouTube content")
-            await asyncio.sleep(1)  # Wait 1 second after upload
             send_advertisement(client, call.message.chat.id)
+            logger.debug("Advertisement sent")
         
         # Update database
+        logger.debug("Updating database...")
         try:
             db = DB()
             db.increment_request(user_id, time.strftime('%Y-%m-%d %H:%M:%S'))
+            logger.debug("Database updated")
         except Exception as e:
             logger.warning(f"Database update error: {e}")
         
