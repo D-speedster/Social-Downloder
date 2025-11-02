@@ -238,9 +238,7 @@ async def main():
         
         # Retry Queue removed - using simpler inline retry logic
         logger.info("Using inline retry logic (no background queue)")
-        except Exception as e:
-            logger.warning(f"Could not start retry queue: {e}")
-            print(f"⚠️ خطا در راه‌اندازی صف تلاش مجدد: {e}")
+        print("✅ استفاده از retry logic ساده (بدون صف پس‌زمینه)")
         
         # Start Cookie Validator Service
         try:
