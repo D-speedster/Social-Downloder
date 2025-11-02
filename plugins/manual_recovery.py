@@ -8,6 +8,7 @@
 import requests
 import asyncio
 import time
+import pytz
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
 from plugins.logger_config import get_logger
@@ -86,8 +87,8 @@ class ManualRecovery:
                     'notified': 0
                 }
             
-            # فیلتر بر اساس زمان
-            cutoff_time = datetime.now() - timedelta(minutes=minutes)
+            # فیلتر بر اساس زمان (با timezone UTC)
+            cutoff_time = datetime.now(pytz.UTC) - timedelta(minutes=minutes)
             filtered_updates = self._filter_by_time(updates, cutoff_time)
             
             # 🔥 Debug: لاگ کردن اطلاعات
@@ -111,13 +112,13 @@ class ManualRecovery:
                                 timestamp = update['callback_query']['message'].get('date')
                             
                             if timestamp:
-                                update_time = datetime.fromtimestamp(timestamp)
+                                update_time = datetime.fromtimestamp(timestamp, tz=pytz.UTC)
                                 if first_time is None:
                                     first_time = update_time
                                 last_time = update_time
                         
                         if first_time and last_time:
-                            debug_info = f"\n\n🕐 اولین update: {first_time.strftime('%H:%M:%S')}\n🕐 آخرین update: {last_time.strftime('%H:%M:%S')}\n🕐 Cutoff: {cutoff_time.strftime('%H:%M:%S')}"
+                            debug_info = f"\n\n🕐 اولین update: {first_time.strftime('%Y-%m-%d %H:%M:%S')}\n🕐 آخرین update: {last_time.strftime('%Y-%m-%d %H:%M:%S')}\n🕐 Cutoff: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}"
                     except:
                         pass
                 
@@ -250,7 +251,8 @@ class ManualRecovery:
                     user_id = update['callback_query'].get('from', {}).get('id')
                 
                 if timestamp:
-                    update_time = datetime.fromtimestamp(timestamp)
+                    # تبدیل timestamp به UTC
+                    update_time = datetime.fromtimestamp(timestamp, tz=pytz.UTC)
                     # 🔥 Debug: لاگ کردن هر update
                     logger.info(f"Update from user {user_id}: time={update_time.strftime('%H:%M:%S')}, cutoff={cutoff_time.strftime('%H:%M:%S')}, included={update_time >= cutoff_time}")
                     
