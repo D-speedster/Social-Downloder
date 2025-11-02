@@ -554,12 +554,12 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         last_api_error_message = None
         
         # Layered retry: try API and fallback concurrently, up to N cycles
-        # تنظیمات retry بر اساس platform (بهبود یافته)
+        # تنظیمات retry بر اساس platform (ساده‌تر و کارآمدتر)
         retry_config = {
-            "Instagram": {"cycles": 7, "timeout": 12},  # افزایش cycles و timeout
-            "TikTok": {"cycles": 4, "timeout": 8},
-            "Pinterest": {"cycles": 4, "timeout": 8},
-            "Facebook": {"cycles": 4, "timeout": 8},
+            "Instagram": {"cycles": 4, "timeout": 10},  # ساده‌تر: 4 تلاش
+            "TikTok": {"cycles": 3, "timeout": 8},
+            "Pinterest": {"cycles": 3, "timeout": 8},
+            "Facebook": {"cycles": 3, "timeout": 8},
         }
         
         config = retry_config.get(platform, {"cycles": 3, "timeout": 6})
@@ -569,15 +569,28 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         api_data = None
         fallback_media = None
         last_api_error_message = None
+        successful_cycle = 0
 
         for cycle in range(max_cycles):
+            # نمایش پیشرفت به کاربر
+            if cycle > 0:
+                try:
+                    await status_msg.edit_text(
+                        f"🔄 **تلاش {cycle + 1}/{max_cycles}**\n\n"
+                        f"📡 در حال دریافت از {platform}...\n"
+                        f"⏳ لطفاً صبر کنید"
+                    )
+                except Exception:
+                    pass
+            
             # Create tasks for API and fallback (Instagram only)
             tasks = [("api", asyncio.create_task(get_universal_data_from_api(url)))]
             if platform == "Instagram":
                 tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
 
             pending = {t for _, t in tasks}
-            wait_timeout = base_timeout + (2 * cycle)  # grow timeout per cycle based on platform
+            # Adaptive timeout: کاهش timeout در تلاش‌های بعدی
+            wait_timeout = base_timeout if cycle == 0 else base_timeout - (cycle * 1)
 
             try:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=wait_timeout)
@@ -615,6 +628,7 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
 
                 # If we got a valid result, cancel remaining tasks and break
                 if api_data or fallback_media:
+                    successful_cycle = cycle + 1
                     for remaining_task in pending:
                         remaining_task.cancel()
                     break
@@ -651,78 +665,29 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
 
             # Prepare for next cycle if not successful
             if not (api_data or fallback_media) and cycle + 1 < max_cycles:
+                # Adaptive backoff: کاهش delay در تلاش‌های بعدی
+                delay = 0.5 if cycle == 0 else 0.3
                 try:
-                    await status_msg.edit_text(f"🔁 تلاش دوباره برای دریافت اطلاعات از {platform}... (تلاش {cycle+2}/{max_cycles})")
-                except Exception:
-                    pass
-                # small backoff jitter
-                try:
-                    await asyncio.sleep(0.6 * (cycle + 1))
+                    await asyncio.sleep(delay)
                 except Exception:
                     pass
         
         # Check results
         if not api_data and not fallback_media:
             # لاگ تفصیلی برای debug
-            _log(f"[UNIV] Both API and fallback failed for {platform}")
+            _log(f"[UNIV] Both API and fallback failed for {platform} after {max_cycles} attempts")
             _log(f"[UNIV] Last API error: {last_api_error_message}")
             print(f"❌ Both API and fallback failed for {platform}")
             print(f"   Last error: {last_api_error_message}")
             
-            # 🔥 UX بهبود یافته: برای اینستاگرام، اضافه به صف retry (فقط اگر retry نیست)
-            if platform == "Instagram" and not is_retry:
-                try:
-                    from plugins.retry_queue import retry_queue, RetryRequest
-                    
-                    # ایجاد درخواست retry
-                    retry_request = RetryRequest(
-                        user_id=user_id,
-                        chat_id=message.chat.id,
-                        url=url,
-                        platform=platform,
-                        message_id=message.message_id,
-                        status_message_id=status_msg.message_id,
-                        error_message=str(last_api_error_message) if last_api_error_message else "API failed"
-                    )
-                    
-                    # اضافه به صف
-                    retry_queue.add(retry_request)
-                    _log(f"[UNIV] ✅ Added to retry queue successfully")
-                    print(f"✅ Instagram request added to retry queue for user {user_id}")
-                    
-                    # پیام امیدوارکننده به کاربر
-                    await status_msg.edit_text(
-                        "⏳ **در حال پردازش...**\n\n"
-                        "🔄 سرور اینستاگرام کمی شلوغ است\n"
-                        "💡 ما خودکار دوباره تلاش می‌کنیم!\n\n"
-                        "⏱️ لطفاً 30-60 ثانیه صبر کنید\n"
-                        "✨ فایل شما به زودی ارسال می‌شود\n\n"
-                        "🙏 از صبر شما متشکریم!"
-                    )
-                    
-                    try:
-                        if user_reserved:
-                            release_user(user_id)
-                    except Exception:
-                        pass
-                    return
-                    
-                except Exception as e:
-                    _log(f"[UNIV] ❌ Error adding to retry queue: {e}")
-                    print(f"❌ Failed to add to retry queue: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # اگر retry queue کار نکرد، پیام عادی نمایش بده
-            
-            # برای سایر پلتفرم‌ها یا اگر retry queue کار نکرد
+            # پیام خطا به کاربر
             if last_api_error_message:
                 error_msg = get_user_friendly_error_message(last_api_error_message, platform)
             else:
                 error_msg = f"❌ خطا در دریافت اطلاعات از {platform}"
             
-            # اضافه کردن پیشنهاد برای اینستاگرام
-            if platform == "Instagram":
-                error_msg += "\n\n💡 **نکته:** اگر این لینک روی یک اکانت کار می‌کند اما روی اکانت دیگر نه، احتمالاً API موقتاً محدود شده است. لطفاً 10-15 دقیقه صبر کنید."
+            # اضافه کردن تعداد تلاش‌ها
+            error_msg += f"\n\n🔄 تلاش شد: {max_cycles} بار"
             
             await status_msg.edit_text(error_msg)
             try:
@@ -915,6 +880,17 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 
                 for attempt in range(max_attempts):
                     try:
+                        # نمایش پیشرفت به کاربر
+                        if attempt > 0:
+                            try:
+                                await status_msg.edit_text(
+                                    f"📥 **دانلود {platform}**\n\n"
+                                    f"🔄 تلاش {attempt + 1}/{max_attempts}\n"
+                                    f"⏳ در حال دانلود..."
+                                )
+                            except Exception:
+                                pass
+                        
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} for {platform}")
                         download_result = await download_stream_to_file(download_url, filename, headers=instagram_headers)
                         _log(f"[UNIV] Download success on attempt {attempt+1}")
@@ -924,28 +900,16 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         error_str = str(e).lower()
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} failed: {e}")
                         
-                        if attempt < max_attempts - 1:  # Only sleep if not last attempt
-                            # محاسبه delay بر اساس نوع خطا
+                        if attempt < max_attempts - 1:
+                            # Adaptive delay: سریع‌تر و ساده‌تر
                             if "403" in error_str or "forbidden" in error_str:
-                                # برای 403، delay بیشتر
-                                delay = min(base_delay * (3 ** attempt), max_delay)  # 2, 6, 18, 30
-                                _log(f"[UNIV] 403 error detected, waiting {delay}s before retry")
-                            
-                            elif "429" in error_str or "rate limit" in error_str or "too many" in error_str:
-                                # برای rate limit، delay خیلی بیشتر
-                                delay = min(base_delay * (5 ** attempt), max_delay)  # 2, 10, 30
-                                _log(f"[UNIV] Rate limit detected, waiting {delay}s before retry")
-                            
-                            elif "timeout" in error_str:
-                                # برای timeout، delay متوسط
-                                delay = min(base_delay * (2 ** attempt), max_delay)  # 2, 4, 8, 16, 30
-                                _log(f"[UNIV] Timeout detected, waiting {delay}s before retry")
-                            
+                                delay = base_delay * (2 ** attempt)  # 1, 2, 4
+                            elif "429" in error_str or "rate limit" in error_str:
+                                delay = base_delay * (3 ** attempt)  # 1, 3, 9
                             else:
-                                # برای سایر خطاها، delay عادی
-                                delay = min(base_delay * (2 ** attempt), max_delay)
-                                _log(f"[UNIV] Generic error, waiting {delay}s before retry")
+                                delay = base_delay * (1.5 ** attempt)  # 1, 1.5, 2.25
                             
+                            _log(f"[UNIV] Waiting {delay:.1f}s before retry")
                             await asyncio.sleep(delay)
                 t_dl_end = time.perf_counter()
                 _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
@@ -1384,12 +1348,25 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         pass
                     return
         
-        # Delete status message safely
+        # پیام نهایی به کاربر با تعداد تلاش‌ها
         try:
+            total_attempts = successful_cycle if successful_cycle > 0 else max_cycles
+            success_msg = f"✅ **فایل آماده است!**\n\n"
+            if total_attempts > 1:
+                success_msg += f"🔄 تلاش {total_attempts}/{max_cycles}\n"
+            success_msg += f"📦 {platform}"
+            
+            await status_msg.edit_text(success_msg)
+            await asyncio.sleep(2)  # نمایش 2 ثانیه
             await status_msg.delete()
-            status_msg = None  # Mark as deleted
+            status_msg = None
         except Exception:
-            pass
+            # اگر edit نشد، فقط delete کن
+            try:
+                await status_msg.delete()
+                status_msg = None
+            except Exception:
+                pass
         
         # Send advertisement after content if enabled and position is 'after'
         try:
