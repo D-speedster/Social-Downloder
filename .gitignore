@@ -107,12 +107,41 @@ dmypy.json
 # Bot specific
 logs/
 downloads/
+Downloads/
 *.session
 *.session-journal
 config_local.py
 test_*.py
 debug_*.py
 example_*.py
+auto_cookie_manager.log
+startup.log
+loader.log
+youtube_performance.log
+
+# Cookies
+cookie_youtube.txt
+youtube_cookies.txt
+cookies/
+
+# Database
+data/
+plugins/database.json
+
+# Reports and analysis (temporary)
+reports/
+*.md
+!README.md
+!.github/*.md
+!scripts/*.md
+
+# Temporary download files
+*.part
+*.ytdl
+*.mp4
+*.mp3
+*.webm
+*.mkv
 
 # Temporary files
 *.tmp
@@ -121,6 +150,7 @@ example_*.py
 *.swp
 *.swo
 *~
+yt_dlp_info.json
 
 # OS generated files
 .DS_Store
