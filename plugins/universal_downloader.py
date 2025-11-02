@@ -859,7 +859,17 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             
             # Try memory streaming for small files first (optimization A)
             use_memory = False
-            memory_stream = await download_to_memory_stream(download_url, max_size_mb=10)
+            # ساخت headers برای Instagram
+            memory_headers = None
+            if platform == "Instagram":
+                memory_headers = {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                    'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': 'https://www.instagram.com/',
+                    'Origin': 'https://www.instagram.com'
+                }
+            memory_stream = await download_to_memory_stream(download_url, max_size_mb=10, headers=memory_headers)
             if memory_stream:
                 total_size = memory_stream.tell()
                 t_dl_end = time.perf_counter()
@@ -886,10 +896,27 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     base_delay = 1.0
                     max_delay = 10.0
                 
+                # ساخت headers مخصوص Instagram
+                instagram_headers = None
+                if platform == "Instagram":
+                    instagram_headers = {
+                        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+                        'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Accept-Encoding': 'gzip, deflate, br',
+                        'DNT': '1',
+                        'Connection': 'keep-alive',
+                        'Sec-Fetch-Dest': 'video',
+                        'Sec-Fetch-Mode': 'no-cors',
+                        'Sec-Fetch-Site': 'cross-site',
+                        'Referer': 'https://www.instagram.com/',
+                        'Origin': 'https://www.instagram.com'
+                    }
+                
                 for attempt in range(max_attempts):
                     try:
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} for {platform}")
-                        download_result = await download_stream_to_file(download_url, filename)
+                        download_result = await download_stream_to_file(download_url, filename, headers=instagram_headers)
                         _log(f"[UNIV] Download success on attempt {attempt+1}")
                         break
                     except Exception as e:

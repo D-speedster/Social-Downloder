@@ -49,7 +49,7 @@ async def download_to_memory_stream(url: str, max_size_mb: int = 50, headers=Non
         # Dynamic timeout based on expected file size
         timeout_seconds = min(60, max(15, max_size_mb * 2))
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_seconds)) as session:
-            async with session.get(url, headers=headers) as response:
+            async with session.get(url, headers=headers, allow_redirects=True) as response:
                 response.raise_for_status()
                 
                 # Check content length

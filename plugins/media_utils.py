@@ -282,7 +282,7 @@ async def download_stream_to_file(url, out_path, chunk_size=64*1024, headers=Non
                 headers = platform_headers['spotify']
             elif 'tiktok' in url.lower():
                 headers = platform_headers['tiktok']
-            elif 'instagram' in url.lower() or 'cdninstagram' in url.lower():
+            elif 'instagram' in url.lower() or 'cdninstagram' in url.lower() or 'fbcdn.net' in url.lower():
                 headers = platform_headers['instagram']
             else:
                 # Default headers برای سایر platformها
@@ -306,7 +306,7 @@ async def download_stream_to_file(url, out_path, chunk_size=64*1024, headers=Non
         for attempt in range(max_retries):
             try:
                 async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(url, headers=headers) as response:
+                    async with session.get(url, headers=headers, allow_redirects=True) as response:
                         # بررسی دقیق‌تر status code
                         if response.status == 403:
                             raise Exception(f"403 Forbidden: دسترسی به فایل محدود شده است")
