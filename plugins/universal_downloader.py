@@ -554,15 +554,15 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         last_api_error_message = None
         
         # Layered retry: try API and fallback concurrently, up to N cycles
-        # تنظیمات retry بر اساس platform
+        # تنظیمات retry بر اساس platform (بهبود یافته)
         retry_config = {
-            "Instagram": {"cycles": 5, "timeout": 8},
-            "TikTok": {"cycles": 3, "timeout": 6},
-            "Pinterest": {"cycles": 3, "timeout": 6},
-            "Facebook": {"cycles": 3, "timeout": 6},
+            "Instagram": {"cycles": 7, "timeout": 12},  # افزایش cycles و timeout
+            "TikTok": {"cycles": 4, "timeout": 8},
+            "Pinterest": {"cycles": 4, "timeout": 8},
+            "Facebook": {"cycles": 4, "timeout": 8},
         }
         
-        config = retry_config.get(platform, {"cycles": 2, "timeout": 5})
+        config = retry_config.get(platform, {"cycles": 3, "timeout": 6})
         max_cycles = config["cycles"]
         base_timeout = config["timeout"]
         
@@ -687,13 +687,15 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     
                     # اضافه به صف
                     retry_queue.add(retry_request)
+                    _log(f"[UNIV] ✅ Added to retry queue successfully")
+                    print(f"✅ Instagram request added to retry queue for user {user_id}")
                     
                     # پیام امیدوارکننده به کاربر
                     await status_msg.edit_text(
                         "⏳ **در حال پردازش...**\n\n"
                         "🔄 سرور اینستاگرام کمی شلوغ است\n"
                         "💡 ما خودکار دوباره تلاش می‌کنیم!\n\n"
-                        "⏱️ لطفاً 2-3 دقیقه صبر کنید\n"
+                        "⏱️ لطفاً 30-60 ثانیه صبر کنید\n"
                         "✨ فایل شما به زودی ارسال می‌شود\n\n"
                         "🙏 از صبر شما متشکریم!"
                     )
@@ -706,7 +708,10 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     return
                     
                 except Exception as e:
-                    _log(f"[UNIV] Error adding to retry queue: {e}")
+                    _log(f"[UNIV] ❌ Error adding to retry queue: {e}")
+                    print(f"❌ Failed to add to retry queue: {e}")
+                    import traceback
+                    traceback.print_exc()
                     # اگر retry queue کار نکرد، پیام عادی نمایش بده
             
             # برای سایر پلتفرم‌ها یا اگر retry queue کار نکرد
@@ -871,13 +876,13 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 download_result = None
                 last_error = None
                 
-                # تنظیمات retry بر اساس platform
+                # تنظیمات retry بر اساس platform (بهبود یافته)
                 if platform == "Instagram":
-                    max_attempts = 5  # افزایش به 5 برای Instagram
-                    base_delay = 2.0  # افزایش به 2 ثانیه
-                    max_delay = 30.0
+                    max_attempts = 8  # افزایش به 8 برای Instagram
+                    base_delay = 1.5  # کاهش به 1.5 ثانیه برای شروع سریع‌تر
+                    max_delay = 20.0  # کاهش max delay
                 else:
-                    max_attempts = 3
+                    max_attempts = 4
                     base_delay = 1.0
                     max_delay = 10.0
                 

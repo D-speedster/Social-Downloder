@@ -41,7 +41,7 @@ class RetryQueue:
     def __init__(self):
         self.queue: List[RetryRequest] = []
         self.processing = False
-        self.retry_delays = [120, 300, 600]  # 2min, 5min, 10min
+        self.retry_delays = [30, 90, 180]  # 30s, 1.5min, 3min (سریع‌تر!)
         
         logger.info("Retry queue initialized")
     
@@ -111,7 +111,7 @@ class RetryQueue:
         
         while self.processing:
             try:
-                await asyncio.sleep(60)  # هر 1 دقیقه چک کن
+                await asyncio.sleep(15)  # هر 15 ثانیه چک کن (سریع‌تر!)
                 
                 pending = self.get_pending()
                 
@@ -121,9 +121,11 @@ class RetryQueue:
                 
                 for req in pending:
                     try:
+                        print(f"   → Retrying for user {req.user_id} (attempt {req.attempt + 1}/{req.max_attempts})")
                         await self._retry_download(client, req)
                     except Exception as e:
                         logger.error(f"Error processing retry: {e}")
+                        print(f"   ✗ Retry failed: {e}")
                 
                 # بررسی درخواست‌های ناموفق
                 failed = self.get_failed()
@@ -289,6 +291,7 @@ def stop_retry_queue_processor():
 
 
 print("✅ Retry queue system ready")
-print("   - Auto-retry: 2min, 5min, 10min")
+print("   - Auto-retry: 30s, 1.5min, 3min (FAST!)")
+print("   - Check interval: 15s")
 print("   - Max attempts: 3")
 print("   - Admin notification: after all attempts failed")
