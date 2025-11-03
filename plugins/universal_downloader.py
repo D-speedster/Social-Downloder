@@ -3,6 +3,7 @@ import http.client
 import json
 import os
 import re
+import random
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
 from plugins.start import (
@@ -25,6 +26,10 @@ from PIL import Image
 import subprocess
 from config import BOT_TOKEN, RAPIDAPI_KEY
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user, get_user_active
+from pyrogram.errors import FloodWait
+from plugins.admin import ADMIN
+from plugins.circuit_breaker import get_instagram_breaker, CircuitBreakerOpenError
+import random
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -49,6 +54,48 @@ def _log(msg: str):
         print(msg)
     except Exception:
         pass
+
+def _with_jitter(delay: float, factor: float = 0.2) -> float:
+    """
+    اضافه کردن jitter تصادفی به delay برای جلوگیری از thundering herd
+    
+    Args:
+        delay: تاخیر پایه (ثانیه)
+        factor: ضریب jitter (0.2 = ±20%)
+    
+    Returns:
+        delay با jitter اضافه شده
+    """
+    if delay <= 0:
+        return 0
+    jitter = random.uniform(0, delay * factor)
+    return delay + jitter
+
+# Jitter helper
+def _with_jitter(delay: float, factor: float = 0.2) -> float:
+    try:
+        return delay + random.uniform(0, delay * factor)
+    except Exception:
+        return delay
+
+# Telegram retry delay helper
+def _telegram_retry_delay(err: Exception, base: float = 1.0) -> float:
+    if isinstance(err, FloodWait):
+        seconds = getattr(err, "value", getattr(err, "x", 1))
+        try:
+            seconds = int(seconds)
+        except Exception:
+            seconds = 1
+        delay = max(1, seconds)
+    else:
+        estr = str(err).lower()
+        if ('timeout' in estr) or ('connection' in estr) or ('network' in estr):
+            delay = max(1.0, base * 1.25)
+        elif ('429' in estr) or ('too many' in estr) or ('rate limit' in estr) or ('flood' in estr):
+            delay = base * 2.0
+        else:
+            delay = base * 1.5
+    return _with_jitter(delay)
 
 def get_user_friendly_error_message(api_response, platform):
     """Convert API error responses to user-friendly Persian messages"""
@@ -553,126 +600,142 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         fallback_media = None
         last_api_error_message = None
         
-        # Layered retry: try API and fallback concurrently, up to N cycles
-        # تنظیمات retry بر اساس platform (ساده‌تر و کارآمدتر)
+        # تنظیمات retry با زمان‌بندی مشخص و اضافه شدن jitter
         retry_config = {
-            "Instagram": {"cycles": 4, "timeout": 10},  # ساده‌تر: 4 تلاش
-            "TikTok": {"cycles": 3, "timeout": 8},
-            "Pinterest": {"cycles": 3, "timeout": 8},
-            "Facebook": {"cycles": 3, "timeout": 8},
+            "Instagram": {"cycles": 4, "timeout": 10, "schedule": [0, 5, 10, 60]},
+            "TikTok": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
+            "Pinterest": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
+            "Facebook": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
         }
         
-        config = retry_config.get(platform, {"cycles": 3, "timeout": 6})
+        config = retry_config.get(platform, {"cycles": 3, "timeout": 6, "schedule": [0, 3, 6]})
         max_cycles = config["cycles"]
         base_timeout = config["timeout"]
+        schedule_offsets = config["schedule"]
         
         api_data = None
         fallback_media = None
         last_api_error_message = None
         successful_cycle = 0
 
-        for cycle in range(max_cycles):
-            # نمایش پیشرفت به کاربر
-            if cycle > 0:
+        breaker = get_instagram_breaker() if platform == "Instagram" else None
+
+        async def _attempt_cycle(attempt_idx: int, start_delay: float):
+            await asyncio.sleep(_with_jitter(start_delay))
+            
+            if attempt_idx > 0:
                 try:
                     await status_msg.edit_text(
-                        f"🔄 **تلاش {cycle + 1}/{max_cycles}**\n\n"
+                        f"🔄 **تلاش {attempt_idx + 1}/{max_cycles}**\n\n"
                         f"📡 در حال دریافت از {platform}...\n"
                         f"⏳ لطفاً صبر کنید"
                     )
                 except Exception:
                     pass
             
-            # Create tasks for API and fallback (Instagram only)
-            tasks = [("api", asyncio.create_task(get_universal_data_from_api(url)))]
+            async def _api_call():
+                if breaker is not None:
+                    return await breaker.call(get_universal_data_from_api, url)
+                return await get_universal_data_from_api(url)
+            
+            tasks = [("api", asyncio.create_task(_api_call()))]
             if platform == "Instagram":
                 tasks.append(("fallback", asyncio.create_task(_fetch_og_media(url))))
-
+            
             pending = {t for _, t in tasks}
-            # Adaptive timeout: کاهش timeout در تلاش‌های بعدی
-            wait_timeout = base_timeout if cycle == 0 else base_timeout - (cycle * 1)
-
+            wait_timeout = base_timeout
+            cycle_start = time.perf_counter()
+            local_last_error = None
+            
             try:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED, timeout=wait_timeout)
-
-                # Process completed tasks
                 for completed_task in done:
                     for task_name, task in tasks:
                         if task is completed_task:
                             try:
                                 result = completed_task.result()
-                                _log(f"[UNIV] {task_name} completed (cycle {cycle+1}) with result: {bool(result)}")
-
+                                _log(f"[UNIV] {task_name} completed (attempt {attempt_idx+1}) with result: {bool(result)}")
                                 if task_name == "api" and result:
                                     invalid = (result.get("error", False) or
                                                result.get("data", {}).get("error", False) or
                                                not result.get("medias"))
                                     if not invalid:
-                                        api_data = result
-                                        _log(f"[UNIV] API success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
-                                        print(f"✅ API success for {platform}")
+                                        return {"api_data": result}
                                     else:
-                                        # Store the full API response for better error handling
-                                        last_api_error_message = result
-                                        _log(f"[UNIV] API returned invalid data (cycle {cycle+1}): {result}")
-                                        print(f"⚠️ API invalid data (cycle {cycle+1}): {result.get('message', 'Unknown')}")
-
+                                        local_last_error = result
+                                        _log(f"[UNIV] API returned invalid data (attempt {attempt_idx+1}): {result}")
                                 elif task_name == "fallback" and result:
-                                    fallback_media = result
-                                    _log(f"[UNIV] Fallback success in {time.perf_counter() - t_api_start:.2f}s (cycle {cycle+1})")
+                                    return {"fallback_media": result}
                             except Exception as e:
                                 _log(f"[UNIV] {task_name} task failed: {e}")
-                                if task_name == "api":
-                                    last_api_error_message = str(e)
+                                local_last_error = str(e)
                             break
-
-                # If we got a valid result, cancel remaining tasks and break
-                if api_data or fallback_media:
-                    successful_cycle = cycle + 1
-                    for remaining_task in pending:
-                        remaining_task.cancel()
-                    break
-
-                # Otherwise, wait for remaining tasks this cycle
+                
                 if pending:
-                    try:
-                        done, pending = await asyncio.wait(pending, timeout=3 + cycle)  # small grace window
-                        for completed_task in done:
+                    remaining = max(0.0, wait_timeout - (time.perf_counter() - cycle_start))
+                    if remaining > 0:
+                        done2, pending = await asyncio.wait(pending, timeout=remaining)
+                        for completed_task in done2:
                             for task_name, task in tasks:
                                 if task is completed_task:
                                     try:
                                         result = completed_task.result()
                                         if task_name == "api" and result and not (result.get("error") or result.get("data", {}).get("error") or not result.get("medias")):
-                                            api_data = result
+                                            return {"api_data": result}
                                         elif task_name == "fallback" and result:
-                                            fallback_media = result
+                                            return {"fallback_media": result}
                                     except Exception as e:
                                         _log(f"[UNIV] {task_name} secondary task failed: {e}")
+                                        local_last_error = str(e)
                                     break
-                    finally:
-                        for remaining_task in pending:
-                            remaining_task.cancel()
-
             except asyncio.TimeoutError:
-                _log(f"[UNIV] Tasks timed out after {wait_timeout} seconds (cycle {cycle+1})")
-                last_api_error_message = "Timeout: درخواست بیش از حد طول کشید"
+                _log(f"[UNIV] Tasks timed out after {wait_timeout} seconds (attempt {attempt_idx+1})")
+                local_last_error = "Timeout: درخواست بیش از حد طول کشید"
+            except CircuitBreakerOpenError as e:
+                _log(f"[UNIV] Circuit breaker OPEN: {e}")
+                local_last_error = str(e)
             except Exception as e:
-                _log(f"[UNIV] Error in parallel API/fallback (cycle {cycle+1}): {e}")
+                _log(f"[UNIV] Error in parallel API/fallback (attempt {attempt_idx+1}): {e}")
+                local_last_error = str(e)
             finally:
                 for _, task in tasks:
                     if not task.done():
                         task.cancel()
-
-            # Prepare for next cycle if not successful
-            if not (api_data or fallback_media) and cycle + 1 < max_cycles:
-                # Adaptive backoff: کاهش delay در تلاش‌های بعدی
-                delay = 0.5 if cycle == 0 else 0.3
-                try:
-                    await asyncio.sleep(delay)
-                except Exception:
-                    pass
+            return {"error": local_last_error}
         
-        # Check results
+        attempt_tasks = [asyncio.create_task(_attempt_cycle(i, schedule_offsets[i] if i < len(schedule_offsets) else (i * 5))) for i in range(max_cycles)]
+        overall_timeout = (schedule_offsets[-1] if schedule_offsets else 0) + base_timeout + 5
+        first_success = None
+        last_api_error_message = None
+        
+        try:
+            done, pending = await asyncio.wait(set(attempt_tasks), return_when=asyncio.FIRST_COMPLETED, timeout=overall_timeout)
+            for completed in done:
+                try:
+                    res = completed.result()
+                    if res.get("api_data"):
+                        api_data = res["api_data"]
+                        successful_cycle = 1
+                        break
+                    if res.get("fallback_media"):
+                        fallback_media = res["fallback_media"]
+                        successful_cycle = 1
+                        break
+                    if res.get("error"):
+                        last_api_error_message = res.get("error")
+                except Exception as e:
+                    last_api_error_message = str(e)
+            if api_data or fallback_media:
+                for t in attempt_tasks:
+                    if not t.done():
+                        t.cancel()
+            else:
+                done2, pending2 = await asyncio.wait(set(attempt_tasks), timeout=max(0.0, overall_timeout - (time.perf_counter() - t_api_start)))
+                for t in pending2:
+                    t.cancel()
+        except Exception as e:
+            _log(f"[UNIV] Error waiting attempts: {e}")
+        
         if not api_data and not fallback_media:
             # لاگ تفصیلی برای debug
             _log(f"[UNIV] Both API and fallback failed for {platform} after {max_cycles} attempts")
@@ -690,6 +753,20 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             error_msg += f"\n\n🔄 تلاش شد: {max_cycles} بار"
             
             await status_msg.edit_text(error_msg)
+            try:
+                elapsed = time.perf_counter() - t_api_start
+                if elapsed >= 60 and platform == "Instagram":
+                    for admin_id in ADMIN:
+                        try:
+                            await client.send_message(admin_id, (
+                                f"❗️ شکست دریافت داده از {platform} پس از 1 دقیقه\n"
+                                f"🔗 URL: {url}\n"
+                                f"⚠️ خطا: {str(last_api_error_message)[:300] if last_api_error_message else 'نامشخص'}"
+                            ))
+                        except Exception as e:
+                            _log(f"[ADMIN_REPORT] Failed to notify admin {admin_id}: {e}")
+            except Exception:
+                pass
             try:
                 if user_reserved:
                     release_user(user_id)
@@ -851,15 +928,15 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 download_result = None
                 last_error = None
                 
-                # تنظیمات retry بر اساس platform (بهبود یافته)
+                # تنظیمات retry بهینه با jitter
                 if platform == "Instagram":
-                    max_attempts = 8  # افزایش به 8 برای Instagram
-                    base_delay = 1.5  # کاهش به 1.5 ثانیه برای شروع سریع‌تر
-                    max_delay = 20.0  # کاهش max delay
+                    max_attempts = 4  # کاهش از 8 به 4
+                    base_delay = 1.0  # کاهش از 1.5 به 1.0
+                    max_delay = 12.0  # کاهش از 20 به 12
                 else:
-                    max_attempts = 4
-                    base_delay = 1.0
-                    max_delay = 10.0
+                    max_attempts = 3
+                    base_delay = 0.8
+                    max_delay = 8.0
                 
                 # ساخت headers مخصوص Instagram
                 instagram_headers = None
@@ -901,15 +978,20 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} failed: {e}")
                         
                         if attempt < max_attempts - 1:
-                            # Adaptive delay: سریع‌تر و ساده‌تر
+                            # Adaptive delay با jitter و ضرایب بهینه
                             if "403" in error_str or "forbidden" in error_str:
-                                delay = base_delay * (2 ** attempt)  # 1, 2, 4
+                                # 403: ضریب 2 (1s, 2s, 4s, 8s)
+                                delay = base_delay * (2 ** attempt)
                             elif "429" in error_str or "rate limit" in error_str:
-                                delay = base_delay * (3 ** attempt)  # 1, 3, 9
+                                # 429: ضریب 2.2 (1s, 2.2s, 4.8s, 10.6s)
+                                delay = base_delay * (2.2 ** attempt)
                             else:
-                                delay = base_delay * (1.5 ** attempt)  # 1, 1.5, 2.25
+                                # سایر خطاها: ضریب 1.8 (1s, 1.8s, 3.2s, 5.8s)
+                                delay = base_delay * (1.8 ** attempt)
                             
-                            _log(f"[UNIV] Waiting {delay:.1f}s before retry")
+                            delay = min(delay, max_delay)
+                            delay = _with_jitter(delay, factor=0.25)  # jitter 25%
+                            _log(f"[UNIV] Waiting {delay:.2f}s before retry")
                             await asyncio.sleep(delay)
                 t_dl_end = time.perf_counter()
                 _log(f"[UNIV] Download took {(t_dl_end - t_dl_start):.2f}s | size={os.path.getsize(filename) if os.path.exists(filename) else 'NA'}")
@@ -975,7 +1057,8 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                             per_item_error = e
                             _log(f"[UNIV] Item {idx} attempt {attempt+1}/3 failed: {e}")
                             if attempt < 2:  # Only sleep if not last attempt
-                                await asyncio.sleep(0.8)
+                                delay = _with_jitter(1.5)
+                                await asyncio.sleep(delay)
                     t_dl_end_i = time.perf_counter()
                     _log(f"[UNIV] Item {idx} download took {(t_dl_end_i - t_dl_start_i):.2f}s | type={mtype}")
                     if isinstance(dl_res, tuple):
@@ -1098,7 +1181,8 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     except Exception as e:
                         last_group_error = e
                         _log(f"[UNIV] send_media_group attempt {attempt+1}/3 failed: {e}")
-                        await asyncio.sleep(0.8)
+                        delay = _telegram_retry_delay(e, base=1.2)
+                        await asyncio.sleep(delay)
                 if last_group_error:
                     raise last_group_error
                 t_up_end = time.perf_counter()
@@ -1131,7 +1215,8 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         except Exception as e:
                             last_upload_error = e
                             _log(f"[UNIV] send_photo attempt {attempt+1}/3 failed: {e}")
-                            await asyncio.sleep(0.8)
+                            delay = _telegram_retry_delay(e, base=1.2)
+                            await asyncio.sleep(delay)
                     if last_upload_error:
                         raise last_upload_error
                     t_up_end = time.perf_counter()
@@ -1222,7 +1307,8 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                             except Exception as e:
                                 last_upload_error = e
                                 _log(f"[UNIV] send_video (memory) attempt {attempt+1}/{max_attempts} failed: {e}")
-                                await asyncio.sleep(0.8)
+                                delay = _telegram_retry_delay(e, base=1.2)
+                                await asyncio.sleep(delay)
                     elif not bot_api_sent:
                         # Prefer sending as document for faster delivery on larger videos
                         prefer_document_for_large_video = False
