@@ -1602,35 +1602,25 @@ async def handle_instagram_link(client: Client, message: Message):
     try:
         universal_logger.info(f"Instagram link detected from user {message.from_user.id}: {message.text}")
         
-        # استفاده از SmartRetryWrapper برای Instagram
-        # این wrapper به صورت transparent retry logic را اضافه می‌کند
-        try:
-            from plugins.smart_retry_wrapper import smart_retry_wrapper
-            
-            url = message.text.strip()
-            platform = "Instagram"
-            
-            # فراخوانی wrapper با handler اصلی
-            success, result_msg = await smart_retry_wrapper(
-                client=client,
-                message=message,
-                url=url,
-                platform=platform,
-                original_handler=handle_universal_link,
-                max_attempts=3,
-                retry_schedule=[0, 10, 40]  # 0s, 10s, 40s طبق requirement
-            )
-            
-            if not success:
-                universal_logger.warning(f"Instagram download failed after retries: {result_msg}")
-            else:
-                universal_logger.info(f"Instagram download successful: {result_msg}")
+        # استفاده از SmartRetryWrapper برای retry هوشمند
+        from plugins.smart_retry_wrapper import smart_retry_wrapper
         
-        except ImportError:
-            # اگر SmartRetryWrapper موجود نیست، از handler اصلی استفاده کن
-            # این backward compatibility را حفظ می‌کند
-            universal_logger.warning("SmartRetryWrapper not available, using direct handler")
-            await handle_universal_link(client, message)
+        url = message.text.strip()
+        platform = "Instagram"
+        
+        # فراخوانی wrapper با handler اصلی
+        success, result_msg = await smart_retry_wrapper(
+            client=client,
+            message=message,
+            url=url,
+            platform=platform,
+            original_handler=handle_universal_link,
+            max_attempts=3,
+            retry_schedule=[0, 10, 40]  # 0s, 10s, 40s طبق requirement
+        )
+        
+        if not success:
+            universal_logger.warning(f"Instagram download failed after all retries for user {message.from_user.id}")
     
     except Exception as e:
         universal_logger.error(f"Instagram handler error: {e}")
