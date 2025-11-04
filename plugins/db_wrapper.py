@@ -163,6 +163,27 @@ class DB:
                     ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
                     """
                 )
+                # Failed requests queue
+                self.cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS failed_requests (
+                        id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id BIGINT UNSIGNED NOT NULL,
+                        url TEXT NOT NULL,
+                        platform VARCHAR(64) NOT NULL,
+                        error_message TEXT,
+                        original_message_id BIGINT UNSIGNED,
+                        status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                        created_at VARCHAR(32) NOT NULL,
+                        processed_at VARCHAR(32),
+                        retry_count INTEGER UNSIGNED NOT NULL DEFAULT 0,
+                        admin_notified TINYINT(1) NOT NULL DEFAULT 0,
+                        INDEX idx_failed_requests_status (status),
+                        INDEX idx_failed_requests_user (user_id),
+                        INDEX idx_failed_requests_created (created_at)
+                    ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
+                    """
+                )
             else:  # SQLite
                 self.cursor.execute(
                     """CREATE TABLE IF NOT EXISTS insta_acc (
@@ -204,6 +225,26 @@ class DB:
                         last_used_at TEXT
                     )"""
                 )
+                # Failed requests queue
+                self.cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS failed_requests (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        url TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        error_message TEXT,
+                        original_message_id INTEGER,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        created_at TEXT NOT NULL,
+                        processed_at TEXT,
+                        retry_count INTEGER NOT NULL DEFAULT 0,
+                        admin_notified INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+                # Create indexes for failed_requests
+                self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_status ON failed_requests(status)")
+                self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_user ON failed_requests(user_id)")
+                self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_created ON failed_requests(created_at)")
             self.mydb.commit()
         except Exception as e:
             print(f"Database setup failed: {e}")
@@ -769,3 +810,250 @@ class DB:
         except Exception as e:
             print(f"Failed to get next cookie: {e}")
             return None
+
+    # --- Failed requests queue operations ---
+    def add_failed_request(self, user_id: int, url: str, platform: str, error_message: str, original_message_id: int) -> int:
+        """Add a failed request to the queue"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            if self.db_type == 'mysql':
+                q = ('INSERT INTO failed_requests (user_id, url, platform, error_message, original_message_id, status, created_at, retry_count, admin_notified) '
+                     'VALUES (%s, %s, %s, %s, %s, %s, %s, 0, 0)')
+                self.cursor.execute(q, (user_id, url, platform, error_message, original_message_id, 'pending', now))
+            else:
+                q = ('INSERT INTO failed_requests (user_id, url, platform, error_message, original_message_id, status, created_at, retry_count, admin_notified) '
+                     'VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)')
+                self.cursor.execute(q, (user_id, url, platform, error_message, original_message_id, 'pending', now))
+            self.mydb.commit()
+            return self.cursor.lastrowid or 0
+        except Exception as e:
+            print(f"Failed to add failed request: {e}")
+            return 0
+
+    def get_pending_failed_requests(self, limit: int = 100) -> list[dict]:
+        """Get all pending failed requests"""
+        try:
+            if self.db_type == 'mysql':
+                q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                     'FROM failed_requests WHERE status = %s ORDER BY created_at ASC LIMIT %s')
+                self.cursor.execute(q, ('pending', limit))
+            else:
+                q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                     'FROM failed_requests WHERE status = ? ORDER BY created_at ASC LIMIT ?')
+                self.cursor.execute(q, ('pending', limit))
+            rows = self.cursor.fetchall() or []
+            result = []
+            for r in rows:
+                result.append({
+                    'id': r[0],
+                    'user_id': r[1],
+                    'url': r[2],
+                    'platform': r[3],
+                    'error_message': r[4],
+                    'original_message_id': r[5],
+                    'status': r[6],
+                    'created_at': r[7],
+                    'processed_at': r[8],
+                    'retry_count': r[9],
+                    'admin_notified': r[10]
+                })
+            return result
+        except Exception as e:
+            print(f"Failed to get pending failed requests: {e}")
+            return []
+
+    def get_failed_request_by_id(self, request_id: int) -> dict:
+        """Get a specific failed request by ID"""
+        try:
+            if self.db_type == 'mysql':
+                q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                     'FROM failed_requests WHERE id = %s')
+                self.cursor.execute(q, (request_id,))
+            else:
+                q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                     'FROM failed_requests WHERE id = ?')
+                self.cursor.execute(q, (request_id,))
+            r = self.cursor.fetchone()
+            if not r:
+                return {}
+            return {
+                'id': r[0],
+                'user_id': r[1],
+                'url': r[2],
+                'platform': r[3],
+                'error_message': r[4],
+                'original_message_id': r[5],
+                'status': r[6],
+                'created_at': r[7],
+                'processed_at': r[8],
+                'retry_count': r[9],
+                'admin_notified': r[10]
+            }
+        except Exception as e:
+            print(f"Failed to get failed request by id: {e}")
+            return {}
+
+    def mark_failed_request_as_processed(self, request_id: int) -> bool:
+        """Mark a failed request as successfully processed"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            if self.db_type == 'mysql':
+                q = 'UPDATE failed_requests SET status = %s, processed_at = %s WHERE id = %s'
+                self.cursor.execute(q, ('completed', now, request_id))
+            else:
+                q = 'UPDATE failed_requests SET status = ?, processed_at = ? WHERE id = ?'
+                self.cursor.execute(q, ('completed', now, request_id))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to mark request as processed: {e}")
+            return False
+
+    def mark_failed_request_as_failed(self, request_id: int, error: str) -> bool:
+        """Mark a failed request as permanently failed"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            if self.db_type == 'mysql':
+                q = 'UPDATE failed_requests SET status = %s, processed_at = %s, error_message = %s WHERE id = %s'
+                self.cursor.execute(q, ('failed', now, error, request_id))
+            else:
+                q = 'UPDATE failed_requests SET status = ?, processed_at = ?, error_message = ? WHERE id = ?'
+                self.cursor.execute(q, ('failed', now, error, request_id))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to mark request as failed: {e}")
+            return False
+
+    def increment_failed_request_retry(self, request_id: int) -> bool:
+        """Increment retry count for a failed request"""
+        try:
+            if self.db_type == 'mysql':
+                q = 'UPDATE failed_requests SET retry_count = retry_count + 1 WHERE id = %s'
+                self.cursor.execute(q, (request_id,))
+            else:
+                q = 'UPDATE failed_requests SET retry_count = retry_count + 1 WHERE id = ?'
+                self.cursor.execute(q, (request_id,))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to increment retry count: {e}")
+            return False
+
+    def mark_failed_request_admin_notified(self, request_id: int) -> bool:
+        """Mark that admin has been notified about this request"""
+        try:
+            if self.db_type == 'mysql':
+                q = 'UPDATE failed_requests SET admin_notified = 1 WHERE id = %s'
+                self.cursor.execute(q, (request_id,))
+            else:
+                q = 'UPDATE failed_requests SET admin_notified = 1 WHERE id = ?'
+                self.cursor.execute(q, (request_id,))
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Failed to mark admin notified: {e}")
+            return False
+
+    def cleanup_old_failed_requests(self, days: int = 7) -> int:
+        """Delete failed requests older than specified days"""
+        try:
+            cutoff_date = (_dt.now() - _td(days=days)).isoformat(timespec='seconds')
+            if self.db_type == 'mysql':
+                q = 'DELETE FROM failed_requests WHERE created_at < %s AND status IN (%s, %s)'
+                self.cursor.execute(q, (cutoff_date, 'completed', 'failed'))
+            else:
+                q = 'DELETE FROM failed_requests WHERE created_at < ? AND status IN (?, ?)'
+                self.cursor.execute(q, (cutoff_date, 'completed', 'failed'))
+            deleted_count = self.cursor.rowcount
+            self.mydb.commit()
+            return deleted_count
+        except Exception as e:
+            print(f"Failed to cleanup old requests: {e}")
+            return 0
+
+    def get_failed_requests_stats(self) -> dict:
+        """Get statistics about failed requests queue"""
+        stats = {
+            'total': 0,
+            'pending': 0,
+            'processing': 0,
+            'completed': 0,
+            'failed': 0
+        }
+        try:
+            # Total count
+            self.cursor.execute('SELECT COUNT(*) FROM failed_requests')
+            row = self.cursor.fetchone()
+            stats['total'] = int(row[0] or 0) if row else 0
+
+            # Count by status
+            for status in ['pending', 'processing', 'completed', 'failed']:
+                if self.db_type == 'mysql':
+                    self.cursor.execute('SELECT COUNT(*) FROM failed_requests WHERE status = %s', (status,))
+                else:
+                    self.cursor.execute('SELECT COUNT(*) FROM failed_requests WHERE status = ?', (status,))
+                row = self.cursor.fetchone()
+                stats[status] = int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Failed to get failed requests stats: {e}")
+        return stats
+
+    def get_failed_requests_by_platform(self) -> dict:
+        """Get statistics grouped by platform"""
+        platform_stats = {}
+        try:
+            if self.db_type == 'mysql':
+                q = 'SELECT platform, status, COUNT(*) FROM failed_requests GROUP BY platform, status'
+            else:
+                q = 'SELECT platform, status, COUNT(*) FROM failed_requests GROUP BY platform, status'
+            self.cursor.execute(q)
+            rows = self.cursor.fetchall() or []
+            
+            for row in rows:
+                platform = row[0] or 'Unknown'
+                status = row[1]
+                count = int(row[2] or 0)
+                
+                if platform not in platform_stats:
+                    platform_stats[platform] = {
+                        'total': 0,
+                        'pending': 0,
+                        'processing': 0,
+                        'completed': 0,
+                        'failed': 0
+                    }
+                
+                platform_stats[platform][status] = count
+                platform_stats[platform]['total'] += count
+        except Exception as e:
+            print(f"Failed to get platform stats: {e}")
+        return platform_stats
+
+    def get_average_processing_time(self) -> float:
+        """Get average processing time for completed requests in seconds"""
+        try:
+            if self.db_type == 'mysql':
+                q = '''
+                    SELECT AVG(TIMESTAMPDIFF(SECOND, created_at, processed_at))
+                    FROM failed_requests
+                    WHERE status = %s AND processed_at IS NOT NULL
+                '''
+                self.cursor.execute(q, ('completed',))
+            else:
+                q = '''
+                    SELECT AVG(
+                        (julianday(processed_at) - julianday(created_at)) * 86400
+                    )
+                    FROM failed_requests
+                    WHERE status = ? AND processed_at IS NOT NULL
+                '''
+                self.cursor.execute(q, ('completed',))
+            
+            row = self.cursor.fetchone()
+            if row and row[0] is not None:
+                return float(row[0])
+            return 0.0
+        except Exception as e:
+            print(f"Failed to get average processing time: {e}")
+            return 0.0

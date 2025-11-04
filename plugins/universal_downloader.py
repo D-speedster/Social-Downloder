@@ -606,17 +606,25 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         last_api_error_message = None
         
         # تنظیمات retry با زمان‌بندی مشخص و اضافه شدن jitter
-        retry_config = {
-            "Instagram": {"cycles": 4, "timeout": 10, "schedule": [0, 5, 10, 60]},
-            "TikTok": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
-            "Pinterest": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
-            "Facebook": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
-        }
-        
-        config = retry_config.get(platform, {"cycles": 3, "timeout": 6, "schedule": [0, 3, 6]})
-        max_cycles = config["cycles"]
-        base_timeout = config["timeout"]
-        schedule_offsets = config["schedule"]
+        # اگر is_retry=True است (SmartRetryWrapper فعال است)، فقط یک تلاش انجام بده
+        if is_retry:
+            # SmartRetryWrapper خودش retry می‌کند، پس اینجا فقط یک تلاش
+            max_cycles = 1
+            base_timeout = 10
+            schedule_offsets = [0]
+        else:
+            # retry logic معمولی
+            retry_config = {
+                "Instagram": {"cycles": 4, "timeout": 10, "schedule": [0, 5, 10, 60]},
+                "TikTok": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
+                "Pinterest": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
+                "Facebook": {"cycles": 3, "timeout": 8, "schedule": [0, 4, 8]},
+            }
+            
+            config = retry_config.get(platform, {"cycles": 3, "timeout": 6, "schedule": [0, 3, 6]})
+            max_cycles = config["cycles"]
+            base_timeout = config["timeout"]
+            schedule_offsets = config["schedule"]
         
         api_data = None
         fallback_media = None
@@ -1590,10 +1598,40 @@ from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانس
 
 @Client.on_message(filters.private & filters.regex(INSTA_REGEX) & join)  # 🔒 فیلتر عضویت اضافه شد
 async def handle_instagram_link(client: Client, message: Message):
-    """Handler for Instagram links - delegates to universal downloader"""
+    """Handler for Instagram links - delegates to universal downloader with smart retry"""
     try:
         universal_logger.info(f"Instagram link detected from user {message.from_user.id}: {message.text}")
-        await handle_universal_link(client, message)
+        
+        # استفاده از SmartRetryWrapper برای Instagram
+        # این wrapper به صورت transparent retry logic را اضافه می‌کند
+        try:
+            from plugins.smart_retry_wrapper import smart_retry_wrapper
+            
+            url = message.text.strip()
+            platform = "Instagram"
+            
+            # فراخوانی wrapper با handler اصلی
+            success, result_msg = await smart_retry_wrapper(
+                client=client,
+                message=message,
+                url=url,
+                platform=platform,
+                original_handler=handle_universal_link,
+                max_attempts=3,
+                retry_schedule=[0, 10, 40]  # 0s, 10s, 40s طبق requirement
+            )
+            
+            if not success:
+                universal_logger.warning(f"Instagram download failed after retries: {result_msg}")
+            else:
+                universal_logger.info(f"Instagram download successful: {result_msg}")
+        
+        except ImportError:
+            # اگر SmartRetryWrapper موجود نیست، از handler اصلی استفاده کن
+            # این backward compatibility را حفظ می‌کند
+            universal_logger.warning("SmartRetryWrapper not available, using direct handler")
+            await handle_universal_link(client, message)
+    
     except Exception as e:
         universal_logger.error(f"Instagram handler error: {e}")
         try:

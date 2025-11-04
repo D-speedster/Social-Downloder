@@ -91,6 +91,16 @@ class BotLoggerManager:
             backup_count=10
         )
     
+    def get_retry_logger(self, name='retry_system'):
+        """لاگر ویژه برای سیستم retry و metrics"""
+        return self.get_logger(
+            name,
+            'retry_system.log',
+            level=logging.INFO,
+            max_bytes=10*1024*1024,  # 10MB
+            backup_count=5
+        )
+    
     def cleanup_old_logs(self, days_to_keep=30):
         """پاک‌سازی لاگ‌های قدیمی"""
         try:
@@ -121,3 +131,7 @@ def get_performance_logger():
 def get_error_logger():
     """دریافت لاگر خطا"""
     return log_manager.get_error_logger()
+
+def get_retry_logger():
+    """دریافت لاگر سیستم retry"""
+    return log_manager.get_retry_logger()

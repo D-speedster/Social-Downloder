@@ -144,6 +144,28 @@ class DB:
                    VALUES (1, 0, 0)"""
             )
             
+            # Create failed_requests table
+            self.cursor.execute(
+                """CREATE TABLE IF NOT EXISTS failed_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    url TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    error_message TEXT,
+                    original_message_id INTEGER,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TEXT NOT NULL,
+                    processed_at TEXT,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    admin_notified INTEGER NOT NULL DEFAULT 0
+                )"""
+            )
+            
+            # Create indexes for failed_requests
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_status ON failed_requests(status)")
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_user ON failed_requests(user_id)")
+            self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_created ON failed_requests(created_at)")
+            
             # Insert default waiting messages if they don't exist
             self.cursor.execute(
                 """INSERT OR IGNORE INTO waiting_messages (platform, message_type, message_content) 
@@ -608,3 +630,153 @@ class DB:
         except sqlite3.Error as e:
             print(f"Failed to get bot state: {e}")
             return {}
+
+    # --- Failed requests queue operations ---
+    def add_failed_request(self, user_id: int, url: str, platform: str, error_message: str, original_message_id: int) -> int:
+        """Add a failed request to the queue"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            q = ('INSERT INTO failed_requests (user_id, url, platform, error_message, original_message_id, status, created_at, retry_count, admin_notified) '
+                 'VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)')
+            self.cursor.execute(q, (user_id, url, platform, error_message, original_message_id, 'pending', now))
+            self.mydb.commit()
+            return self.cursor.lastrowid or 0
+        except sqlite3.Error as e:
+            print(f"Failed to add failed request: {e}")
+            return 0
+
+    def get_pending_failed_requests(self, limit: int = 100) -> list:
+        """Get all pending failed requests"""
+        try:
+            q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                 'FROM failed_requests WHERE status = ? ORDER BY created_at ASC LIMIT ?')
+            self.cursor.execute(q, ('pending', limit))
+            rows = self.cursor.fetchall() or []
+            result = []
+            for r in rows:
+                result.append({
+                    'id': r[0],
+                    'user_id': r[1],
+                    'url': r[2],
+                    'platform': r[3],
+                    'error_message': r[4],
+                    'original_message_id': r[5],
+                    'status': r[6],
+                    'created_at': r[7],
+                    'processed_at': r[8],
+                    'retry_count': r[9],
+                    'admin_notified': r[10]
+                })
+            return result
+        except sqlite3.Error as e:
+            print(f"Failed to get pending failed requests: {e}")
+            return []
+
+    def get_failed_request_by_id(self, request_id: int) -> dict:
+        """Get a specific failed request by ID"""
+        try:
+            q = ('SELECT id, user_id, url, platform, error_message, original_message_id, status, created_at, processed_at, retry_count, admin_notified '
+                 'FROM failed_requests WHERE id = ?')
+            self.cursor.execute(q, (request_id,))
+            r = self.cursor.fetchone()
+            if not r:
+                return {}
+            return {
+                'id': r[0],
+                'user_id': r[1],
+                'url': r[2],
+                'platform': r[3],
+                'error_message': r[4],
+                'original_message_id': r[5],
+                'status': r[6],
+                'created_at': r[7],
+                'processed_at': r[8],
+                'retry_count': r[9],
+                'admin_notified': r[10]
+            }
+        except sqlite3.Error as e:
+            print(f"Failed to get failed request by id: {e}")
+            return {}
+
+    def mark_failed_request_as_processed(self, request_id: int) -> bool:
+        """Mark a failed request as successfully processed"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            q = 'UPDATE failed_requests SET status = ?, processed_at = ? WHERE id = ?'
+            self.cursor.execute(q, ('completed', now, request_id))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to mark request as processed: {e}")
+            return False
+
+    def mark_failed_request_as_failed(self, request_id: int, error: str) -> bool:
+        """Mark a failed request as permanently failed"""
+        try:
+            now = _dt.now().isoformat(timespec='seconds')
+            q = 'UPDATE failed_requests SET status = ?, processed_at = ?, error_message = ? WHERE id = ?'
+            self.cursor.execute(q, ('failed', now, error, request_id))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to mark request as failed: {e}")
+            return False
+
+    def increment_failed_request_retry(self, request_id: int) -> bool:
+        """Increment retry count for a failed request"""
+        try:
+            q = 'UPDATE failed_requests SET retry_count = retry_count + 1 WHERE id = ?'
+            self.cursor.execute(q, (request_id,))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to increment retry count: {e}")
+            return False
+
+    def mark_failed_request_admin_notified(self, request_id: int) -> bool:
+        """Mark that admin has been notified about this request"""
+        try:
+            q = 'UPDATE failed_requests SET admin_notified = 1 WHERE id = ?'
+            self.cursor.execute(q, (request_id,))
+            self.mydb.commit()
+            return True
+        except sqlite3.Error as e:
+            print(f"Failed to mark admin notified: {e}")
+            return False
+
+    def cleanup_old_failed_requests(self, days: int = 7) -> int:
+        """Delete failed requests older than specified days"""
+        try:
+            cutoff_date = (_dt.now() - _td(days=days)).isoformat(timespec='seconds')
+            q = 'DELETE FROM failed_requests WHERE created_at < ? AND status IN (?, ?)'
+            self.cursor.execute(q, (cutoff_date, 'completed', 'failed'))
+            deleted_count = self.cursor.rowcount
+            self.mydb.commit()
+            return deleted_count
+        except sqlite3.Error as e:
+            print(f"Failed to cleanup old requests: {e}")
+            return 0
+
+    def get_failed_requests_stats(self) -> dict:
+        """Get statistics about failed requests queue"""
+        stats = {
+            'total': 0,
+            'pending': 0,
+            'processing': 0,
+            'completed': 0,
+            'failed': 0
+        }
+        try:
+            # Total count
+            self.cursor.execute('SELECT COUNT(*) FROM failed_requests')
+            row = self.cursor.fetchone()
+            stats['total'] = int(row[0] or 0) if row else 0
+
+            # Count by status
+            for status in ['pending', 'processing', 'completed', 'failed']:
+                self.cursor.execute('SELECT COUNT(*) FROM failed_requests WHERE status = ?', (status,))
+                row = self.cursor.fetchone()
+                stats[status] = int(row[0] or 0) if row else 0
+        except sqlite3.Error as e:
+            print(f"Failed to get failed requests stats: {e}")
+        return stats

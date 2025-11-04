@@ -125,6 +125,7 @@ def admin_inline_maker() -> list:
         ],
         [
             InlineKeyboardButton("💬 پیام انتظار", callback_data='waiting_msg'),
+            InlineKeyboardButton("📋 صف درخواست‌ها", callback_data='failed_queue'),
         ],
         [
             InlineKeyboardButton("🍪 مدیریت کوکی", callback_data='cookie_mgmt'),
@@ -141,7 +142,7 @@ def admin_inline_maker() -> list:
 
 def admin_reply_kb() -> ReplyKeyboardMarkup:
     """
-    کیبورد پنل ادمین با 12 دکمه در 6 سطر (2 ستونی)
+    کیبورد پنل ادمین با 13 دکمه در 7 سطر (2 ستونی)
     """
     return ReplyKeyboardMarkup(
         [
@@ -149,7 +150,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["📢 ارسال همگانی", "📢 تنظیم اسپانسر"],
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
-            ["📨 پیام‌های آفلاین"],
+            ["📨 پیام‌های آفلاین", "📋 صف درخواست‌ها"],
             ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
@@ -2167,3 +2168,795 @@ def _server_status_text():
         ])
     except Exception as e:
         return f"❌ خطا در دریافت وضعیت سرور: {e}"
+
+
+# ============================================================================
+# Failed Request Queue Management
+# مدیریت صف درخواست‌های ناموفق
+# ============================================================================
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📋 صف درخواست‌ها$'))
+async def admin_queue_menu(_: Client, message: Message):
+    """منوی مدیریت صف درخواست‌های ناموفق"""
+    user_id = message.from_user.id
+    print(f"[ADMIN] queue menu opened by {user_id}")
+    admin_logger.info(f"[ADMIN] Failed request queue menu opened by {user_id}")
+    
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار صف
+        stats = queue.get_queue_stats()
+        
+        # ساخت متن آمار
+        text = (
+            "📋 **صف درخواست‌های ناموفق**\n\n"
+            "📊 **آمار:**\n"
+            f"• مجموع: {stats.get('total', 0)}\n"
+            f"• در انتظار: {stats.get('pending', 0)}\n"
+            f"• در حال پردازش: {stats.get('processing', 0)}\n"
+            f"• تکمیل شده: {stats.get('completed', 0)}\n"
+            f"• شکست خورده: {stats.get('failed', 0)}\n\n"
+            "💡 **گزینه‌ها:**"
+        )
+        
+        # ساخت کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📜 لیست صف", callback_data="queue_list"),
+                InlineKeyboardButton("📊 آمار کامل", callback_data="queue_stats")
+            ],
+            [
+                InlineKeyboardButton("🗑 پاک‌سازی قدیمی‌ها", callback_data="queue_cleanup"),
+            ],
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_refresh"),
+                InlineKeyboardButton("🏠 بازگشت", callback_data="admin_back")
+            ]
+        ])
+        
+        await message.reply_text(text, reply_markup=keyboard)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue menu: {e}")
+        await message.reply_text(f"❌ خطا در نمایش منوی صف: {str(e)[:200]}")
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^failed_queue$'))
+async def admin_queue_menu_callback(client: Client, callback_query: CallbackQuery):
+    """Callback handler برای دکمه صف درخواست‌ها در پنل اصلی"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار صف
+        stats = queue.get_queue_stats()
+        
+        # ساخت متن آمار
+        text = (
+            "📋 **صف درخواست‌های ناموفق**\n\n"
+            "📊 **آمار:**\n"
+            f"• مجموع: {stats.get('total', 0)}\n"
+            f"• در انتظار: {stats.get('pending', 0)}\n"
+            f"• در حال پردازش: {stats.get('processing', 0)}\n"
+            f"• تکمیل شده: {stats.get('completed', 0)}\n"
+            f"• شکست خورده: {stats.get('failed', 0)}\n\n"
+            "💡 **گزینه‌ها:**"
+        )
+        
+        # ساخت کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📜 لیست صف", callback_data="queue_list"),
+                InlineKeyboardButton("📊 آمار کامل", callback_data="queue_stats")
+            ],
+            [
+                InlineKeyboardButton("🗑 پاک‌سازی قدیمی‌ها", callback_data="queue_cleanup"),
+            ],
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_refresh"),
+                InlineKeyboardButton("🏠 بازگشت", callback_data="admin_back")
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer()
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue menu callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_list'))
+async def queue_list_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش لیست درخواست‌های در انتظار با دکمه‌های inline"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت لیست درخواست‌های pending
+        requests = queue.get_pending_requests(limit=5)
+        
+        if not requests:
+            await callback_query.answer("✅ صف خالی است!", show_alert=True)
+            # بروزرسانی به منوی اصلی
+            await queue_refresh_callback(client, callback_query)
+            return
+        
+        # ساخت متن لیست
+        text = "📜 **لیست درخواست‌های در انتظار** (5 مورد اول)\n\n"
+        
+        buttons = []
+        for i, req in enumerate(requests, 1):
+            req_id = req.get('id', 0)
+            user_id = req.get('user_id', 0)
+            platform = req.get('platform', 'نامشخص')
+            url = req.get('url', '')
+            created_at = req.get('created_at', '')
+            error_msg = req.get('error_message', '')
+            
+            # محدود کردن طول URL
+            url_display = url[:40] + "..." if len(url) > 40 else url
+            
+            # محدود کردن طول خطا
+            error_display = error_msg[:50] + "..." if len(error_msg) > 50 else error_msg
+            
+            text += (
+                f"**{i}. درخواست #{req_id}**\n"
+                f"👤 کاربر: `{user_id}`\n"
+                f"🌐 پلتفرم: {platform}\n"
+                f"🔗 لینک: `{url_display}`\n"
+                f"❌ خطا: {error_display}\n"
+                f"⏰ زمان: {created_at}\n\n"
+            )
+            
+            # اضافه کردن دکمه‌های inline برای هر درخواست
+            buttons.append([
+                InlineKeyboardButton(
+                    f"✅ پردازش #{req_id}",
+                    callback_data=f"queue_process_{req_id}"
+                ),
+                InlineKeyboardButton(
+                    f"🗑 حذف #{req_id}",
+                    callback_data=f"queue_delete_{req_id}"
+                )
+            ])
+        
+        # ساخت کیبورد با دکمه‌های مدیریت
+        buttons.append([
+            InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_list"),
+            InlineKeyboardButton("🏠 بازگشت", callback_data="queue_refresh")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(buttons)
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer()
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue list: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_stats$'))
+async def queue_stats_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش آمار کامل صف با تفکیک پلتفرم و میانگین زمان پردازش"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار کلی
+        stats = queue.get_queue_stats()
+        
+        # محاسبه نرخ موفقیت
+        total = stats.get('total', 0)
+        completed = stats.get('completed', 0)
+        failed = stats.get('failed', 0)
+        
+        success_rate = 0
+        if total > 0:
+            success_rate = (completed / total) * 100
+        
+        # دریافت آمار به تفکیک پلتفرم
+        platform_stats = db.get_failed_requests_by_platform()
+        
+        # دریافت میانگین زمان پردازش
+        avg_time = db.get_average_processing_time()
+        
+        # تبدیل ثانیه به فرمت قابل خواندن
+        if avg_time > 0:
+            if avg_time < 60:
+                avg_time_str = f"{avg_time:.1f} ثانیه"
+            elif avg_time < 3600:
+                avg_time_str = f"{avg_time/60:.1f} دقیقه"
+            else:
+                avg_time_str = f"{avg_time/3600:.1f} ساعت"
+        else:
+            avg_time_str = "نامشخص"
+        
+        # ساخت متن آمار کامل
+        text = (
+            "📊 **آمار کامل صف درخواست‌ها**\n\n"
+            "📈 **آمار کلی:**\n"
+            f"• مجموع: {total}\n"
+            f"• در انتظار: {stats.get('pending', 0)}\n"
+            f"• در حال پردازش: {stats.get('processing', 0)}\n"
+            f"• تکمیل شده: {completed}\n"
+            f"• شکست خورده: {failed}\n\n"
+            f"📊 **نرخ موفقیت:** {success_rate:.1f}%\n"
+            f"⏱ **میانگین زمان پردازش:** {avg_time_str}\n"
+        )
+        
+        # اضافه کردن آمار به تفکیک پلتفرم (محدود به 5 پلتفرم برتر)
+        if platform_stats:
+            text += "\n🌐 **آمار به تفکیک پلتفرم:**\n"
+            sorted_platforms = sorted(platform_stats.items(), key=lambda x: x[1]['total'], reverse=True)[:5]
+            
+            for platform, pstats in sorted_platforms:
+                platform_total = pstats.get('total', 0)
+                platform_completed = pstats.get('completed', 0)
+                platform_pending = pstats.get('pending', 0)
+                
+                platform_success_rate = 0
+                if platform_total > 0:
+                    platform_success_rate = (platform_completed / platform_total) * 100
+                
+                text += (
+                    f"\n**{platform}:**\n"
+                    f"  کل: {platform_total} | "
+                    f"انتظار: {platform_pending} | "
+                    f"موفق: {platform_completed} ({platform_success_rate:.0f}%)\n"
+                )
+        
+        # ساخت کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_stats"),
+                InlineKeyboardButton("🏠 بازگشت", callback_data="queue_refresh")
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer()
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue stats: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_cleanup$'))
+async def queue_cleanup_callback(client: Client, callback_query: CallbackQuery):
+    """پاک‌سازی درخواست‌های قدیمی (بیش از 7 روز) با تأیید"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار برای نمایش قبل از حذف
+        stats = queue.get_queue_stats()
+        completed = stats.get('completed', 0)
+        failed = stats.get('failed', 0)
+        total_to_delete = completed + failed
+        
+        if total_to_delete == 0:
+            await callback_query.answer("✅ هیچ درخواست قدیمی برای پاک کردن وجود ندارد!", show_alert=True)
+            return
+        
+        # ارسال پیام تأیید
+        text = (
+            "⚠️ **تأیید پاک‌سازی صف**\n\n"
+            f"🗑 تعداد درخواست‌های قابل حذف:\n"
+            f"• تکمیل شده: {completed}\n"
+            f"• شکست خورده: {failed}\n"
+            f"• **مجموع: {total_to_delete}**\n\n"
+            "📅 درخواست‌های قدیمی‌تر از 7 روز حذف خواهند شد.\n\n"
+            "❓ آیا مطمئن هستید؟"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ بله، پاک کن", callback_data="queue_clear_confirm"),
+                InlineKeyboardButton("❌ لغو", callback_data="queue_clear_cancel")
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer()
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue cleanup: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_clear_confirm$'))
+async def queue_clear_confirm_callback(client: Client, callback_query: CallbackQuery):
+    """تأیید پاک‌سازی صف"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # پاک‌سازی درخواست‌های قدیمی
+        deleted_count = queue.cleanup_old_requests(days=7)
+        
+        await callback_query.answer(
+            f"✅ {deleted_count} درخواست قدیمی پاک شد",
+            show_alert=True
+        )
+        
+        # بروزرسانی نمایش به منوی اصلی
+        await queue_refresh_callback(client, callback_query)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue clear confirm: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_clear_cancel$'))
+async def queue_clear_cancel_callback(client: Client, callback_query: CallbackQuery):
+    """لغو پاک‌سازی صف"""
+    try:
+        await callback_query.answer("❌ پاک‌سازی لغو شد")
+        
+        # بازگشت به منوی اصلی
+        await queue_refresh_callback(client, callback_query)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue clear cancel: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_refresh$'))
+async def queue_refresh_callback(client: Client, callback_query: CallbackQuery):
+    """بروزرسانی نمایش صف"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار صف
+        stats = queue.get_queue_stats()
+        
+        # ساخت متن آمار
+        text = (
+            "📋 **صف درخواست‌های ناموفق**\n\n"
+            "📊 **آمار:**\n"
+            f"• مجموع: {stats.get('total', 0)}\n"
+            f"• در انتظار: {stats.get('pending', 0)}\n"
+            f"• در حال پردازش: {stats.get('processing', 0)}\n"
+            f"• تکمیل شده: {stats.get('completed', 0)}\n"
+            f"• شکست خورده: {stats.get('failed', 0)}\n\n"
+            "💡 **گزینه‌ها:**"
+        )
+        
+        # ساخت کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📜 لیست صف", callback_data="queue_list"),
+                InlineKeyboardButton("📊 آمار کامل", callback_data="queue_stats")
+            ],
+            [
+                InlineKeyboardButton("🗑 پاک‌سازی قدیمی‌ها", callback_data="queue_cleanup"),
+            ],
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_refresh"),
+                InlineKeyboardButton("🏠 بازگشت", callback_data="admin_back")
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer("🔄 بروزرسانی شد")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue refresh: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_process_(\d+)$'))
+async def queue_process_callback(client: Client, callback_query: CallbackQuery):
+    """Callback handler برای دکمه پردازش درخواست از صف"""
+    try:
+        # استخراج request_id از callback data
+        match = re.match(r'^queue_process_(\d+)$', callback_query.data)
+        if not match:
+            await callback_query.answer("❌ فرمت نامعتبر", show_alert=True)
+            return
+        
+        request_id = int(match.group(1))
+        
+        # فراخوانی handler از admin_notification
+        from plugins.admin_notification import handle_retry_callback
+        
+        await handle_retry_callback(client, callback_query, request_id)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue_process_callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^queue_delete_(\d+)$'))
+async def queue_delete_callback(client: Client, callback_query: CallbackQuery):
+    """Callback handler برای دکمه حذف درخواست از صف"""
+    try:
+        # استخراج request_id از callback data
+        match = re.match(r'^queue_delete_(\d+)$', callback_query.data)
+        if not match:
+            await callback_query.answer("❌ فرمت نامعتبر", show_alert=True)
+            return
+        
+        request_id = int(match.group(1))
+        
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # حذف درخواست با علامت‌گذاری به عنوان failed
+        success = queue.mark_as_failed(request_id, "Deleted by admin")
+        
+        if success:
+            await callback_query.answer("✅ درخواست حذف شد", show_alert=True)
+            
+            # بروزرسانی نمایش
+            try:
+                # دریافت لیست جدید
+                requests = queue.get_pending_requests(limit=5)
+                
+                if not requests:
+                    await callback_query.message.edit_text("✅ صف خالی است!")
+                    return
+                
+                # ساخت متن لیست جدید
+                text = "📜 **لیست درخواست‌های در انتظار** (5 مورد اول)\n\n"
+                
+                buttons = []
+                for i, req in enumerate(requests, 1):
+                    req_id = req.get('id', 0)
+                    user_id = req.get('user_id', 0)
+                    platform = req.get('platform', 'نامشخص')
+                    url = req.get('url', '')
+                    created_at = req.get('created_at', '')
+                    error_msg = req.get('error_message', '')
+                    
+                    url_display = url[:40] + "..." if len(url) > 40 else url
+                    error_display = error_msg[:50] + "..." if len(error_msg) > 50 else error_msg
+                    
+                    text += (
+                        f"**{i}. درخواست #{req_id}**\n"
+                        f"👤 کاربر: `{user_id}`\n"
+                        f"🌐 پلتفرم: {platform}\n"
+                        f"🔗 لینک: `{url_display}`\n"
+                        f"❌ خطا: {error_display}\n"
+                        f"⏰ زمان: {created_at}\n\n"
+                    )
+                    
+                    buttons.append([
+                        InlineKeyboardButton(
+                            f"✅ پردازش #{req_id}",
+                            callback_data=f"queue_process_{req_id}"
+                        ),
+                        InlineKeyboardButton(
+                            f"🗑 حذف #{req_id}",
+                            callback_data=f"queue_delete_{req_id}"
+                        )
+                    ])
+                
+                buttons.append([
+                    InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_list_page_0"),
+                    InlineKeyboardButton("📊 آمار", callback_data="queue_stats")
+                ])
+                
+                keyboard = InlineKeyboardMarkup(buttons)
+                await callback_query.message.edit_text(text, reply_markup=keyboard)
+            except Exception as update_error:
+                admin_logger.error(f"Error updating queue list after delete: {update_error}")
+        else:
+            await callback_query.answer("❌ خطا در حذف درخواست", show_alert=True)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue_delete_callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^retry_failed_(\d+)$'))
+async def retry_failed_callback(client: Client, callback_query: CallbackQuery):
+    """
+    Callback handler برای دکمه "پردازش مجدد" در گزارش‌های ادمین
+    این handler به admin_notification.handle_retry_callback متصل می‌شود
+    """
+    try:
+        # استخراج request_id از callback data
+        match = re.match(r'^retry_failed_(\d+)$', callback_query.data)
+        if not match:
+            await callback_query.answer("❌ فرمت نامعتبر", show_alert=True)
+            return
+        
+        request_id = int(match.group(1))
+        
+        # فراخوانی handler از admin_notification
+        from plugins.admin_notification import handle_retry_callback
+        
+        await handle_retry_callback(client, callback_query, request_id)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in retry_failed_callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:100]}", show_alert=True)
+
+
+# دستورات مدیریت صف
+@Client.on_message(filters.command('queue') & filters.user(ADMIN))
+async def queue_command(_: Client, message: Message):
+    """دستور نمایش صف درخواست‌های ناموفق با pagination و دکمه‌های inline"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت لیست درخواست‌های pending
+        requests = queue.get_pending_requests(limit=5)
+        
+        if not requests:
+            await message.reply_text("✅ صف خالی است!")
+            return
+        
+        # ساخت متن لیست
+        text = "📜 **لیست درخواست‌های در انتظار** (5 مورد اول)\n\n"
+        
+        buttons = []
+        for i, req in enumerate(requests, 1):
+            req_id = req.get('id', 0)
+            user_id = req.get('user_id', 0)
+            platform = req.get('platform', 'نامشخص')
+            url = req.get('url', '')
+            created_at = req.get('created_at', '')
+            error_msg = req.get('error_message', '')
+            
+            # محدود کردن طول URL
+            url_display = url[:40] + "..." if len(url) > 40 else url
+            
+            # محدود کردن طول خطا
+            error_display = error_msg[:50] + "..." if len(error_msg) > 50 else error_msg
+            
+            text += (
+                f"**{i}. درخواست #{req_id}**\n"
+                f"👤 کاربر: `{user_id}`\n"
+                f"🌐 پلتفرم: {platform}\n"
+                f"🔗 لینک: `{url_display}`\n"
+                f"❌ خطا: {error_display}\n"
+                f"⏰ زمان: {created_at}\n\n"
+            )
+            
+            # اضافه کردن دکمه‌های inline برای هر درخواست
+            buttons.append([
+                InlineKeyboardButton(
+                    f"✅ پردازش #{req_id}",
+                    callback_data=f"queue_process_{req_id}"
+                ),
+                InlineKeyboardButton(
+                    f"🗑 حذف #{req_id}",
+                    callback_data=f"queue_delete_{req_id}"
+                )
+            ])
+        
+        # اضافه کردن دکمه‌های navigation
+        buttons.append([
+            InlineKeyboardButton("🔄 بروزرسانی", callback_data="queue_list_page_0"),
+            InlineKeyboardButton("📊 آمار", callback_data="queue_stats")
+        ])
+        
+        keyboard = InlineKeyboardMarkup(buttons)
+        
+        await message.reply_text(text, reply_markup=keyboard)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
+@Client.on_message(filters.command('queue_stats') & filters.user(ADMIN))
+async def queue_stats_command(_: Client, message: Message):
+    """دستور نمایش آمار کامل صف با تفکیک پلتفرم و میانگین زمان پردازش"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار کلی
+        stats = queue.get_queue_stats()
+        
+        # محاسبه نرخ موفقیت
+        total = stats.get('total', 0)
+        completed = stats.get('completed', 0)
+        
+        success_rate = 0
+        if total > 0:
+            success_rate = (completed / total) * 100
+        
+        # دریافت آمار به تفکیک پلتفرم
+        platform_stats = db.get_failed_requests_by_platform()
+        
+        # دریافت میانگین زمان پردازش
+        avg_time = db.get_average_processing_time()
+        
+        # تبدیل ثانیه به فرمت قابل خواندن
+        if avg_time > 0:
+            if avg_time < 60:
+                avg_time_str = f"{avg_time:.1f} ثانیه"
+            elif avg_time < 3600:
+                avg_time_str = f"{avg_time/60:.1f} دقیقه"
+            else:
+                avg_time_str = f"{avg_time/3600:.1f} ساعت"
+        else:
+            avg_time_str = "نامشخص"
+        
+        # ساخت متن آمار کلی
+        text = (
+            "📊 **آمار کامل صف درخواست‌ها**\n\n"
+            "📈 **آمار کلی:**\n"
+            f"• مجموع: {total}\n"
+            f"• در انتظار: {stats.get('pending', 0)}\n"
+            f"• در حال پردازش: {stats.get('processing', 0)}\n"
+            f"• تکمیل شده: {completed}\n"
+            f"• شکست خورده: {stats.get('failed', 0)}\n\n"
+            f"📊 **نرخ موفقیت:** {success_rate:.1f}%\n"
+            f"⏱ **میانگین زمان پردازش:** {avg_time_str}\n"
+        )
+        
+        # اضافه کردن آمار به تفکیک پلتفرم
+        if platform_stats:
+            text += "\n🌐 **آمار به تفکیک پلتفرم:**\n"
+            for platform, pstats in sorted(platform_stats.items(), key=lambda x: x[1]['total'], reverse=True):
+                platform_total = pstats.get('total', 0)
+                platform_completed = pstats.get('completed', 0)
+                platform_pending = pstats.get('pending', 0)
+                
+                platform_success_rate = 0
+                if platform_total > 0:
+                    platform_success_rate = (platform_completed / platform_total) * 100
+                
+                text += (
+                    f"\n**{platform}:**\n"
+                    f"  • کل: {platform_total} | "
+                    f"در انتظار: {platform_pending} | "
+                    f"موفق: {platform_completed} ({platform_success_rate:.0f}%)\n"
+                )
+        
+        await message.reply_text(text)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue_stats command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
+@Client.on_message(filters.command('queue_clear') & filters.user(ADMIN))
+async def queue_clear_command(_: Client, message: Message):
+    """دستور پاک کردن درخواست‌های قدیمی از صف با تأیید"""
+    try:
+        from plugins.failed_request_queue import FailedRequestQueue
+        from plugins.db_wrapper import DB
+        
+        db = DB()
+        queue = FailedRequestQueue(db)
+        
+        # دریافت آمار برای نمایش قبل از حذف
+        stats = queue.get_queue_stats()
+        completed = stats.get('completed', 0)
+        failed = stats.get('failed', 0)
+        total_to_delete = completed + failed
+        
+        if total_to_delete == 0:
+            await message.reply_text("✅ هیچ درخواست قدیمی برای پاک کردن وجود ندارد!")
+            return
+        
+        # ارسال پیام تأیید با دکمه‌های inline
+        text = (
+            "⚠️ **تأیید پاک‌سازی صف**\n\n"
+            f"🗑 تعداد درخواست‌های قابل حذف:\n"
+            f"• تکمیل شده: {completed}\n"
+            f"• شکست خورده: {failed}\n"
+            f"• **مجموع: {total_to_delete}**\n\n"
+            "📅 درخواست‌های قدیمی‌تر از 7 روز حذف خواهند شد.\n\n"
+            "❓ آیا مطمئن هستید؟"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ بله، پاک کن", callback_data="queue_clear_confirm"),
+                InlineKeyboardButton("❌ لغو", callback_data="queue_clear_cancel")
+            ]
+        ])
+        
+        await message.reply_text(text, reply_markup=keyboard)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in queue_clear command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
+@Client.on_message(filters.command('retry_metrics') & filters.user(ADMIN))
+async def retry_metrics_command(_: Client, message: Message):
+    """دستور نمایش metrics سیستم retry"""
+    try:
+        from plugins.retry_metrics import retry_metrics
+        
+        # دریافت گزارش فرمت شده
+        report = retry_metrics.get_formatted_report()
+        
+        await message.reply_text(report)
+        
+        # لاگ خلاصه metrics
+        retry_metrics.log_summary()
+    
+    except ImportError:
+        await message.reply_text(
+            "❌ **سیستم metrics فعال نیست**\n\n"
+            "ماژول retry_metrics در دسترس نیست."
+        )
+    except Exception as e:
+        admin_logger.error(f"Error in retry_metrics command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
+@Client.on_message(filters.command('retry_stats') & filters.user(ADMIN))
+async def retry_stats_command(_: Client, message: Message):
+    """دستور نمایش آمار خلاصه retry (نسخه کوتاه)"""
+    try:
+        from plugins.retry_metrics import retry_metrics
+        
+        stats = retry_metrics.get_comprehensive_stats()
+        
+        # ساخت متن خلاصه
+        text = "📊 **آمار Smart Retry**\n\n"
+        text += f"⏱️ زمان فعالیت: {stats['uptime_hours']:.1f} ساعت\n"
+        text += f"🔄 کل تلاش‌ها: {stats['total_retries']}\n"
+        text += f"✅ نرخ موفقیت کلی: {stats['overall_success_rate']:.1f}%\n\n"
+        
+        text += "**نرخ موفقیت به تفکیک تلاش:**\n"
+        for attempt, rate in stats['attempt_success_rates'].items():
+            text += f"  • تلاش {attempt}: {rate:.1f}%\n"
+        
+        queue = stats['queue_stats']
+        text += f"\n**صف:**\n"
+        text += f"  • اندازه: {queue['current_size']}\n"
+        text += f"  • نرخ موفقیت: {queue['queue_success_rate']:.1f}%\n"
+        
+        text += f"\n⚡ فعالیت اخیر: {stats['recent_activity_rate']:.1f} retry/دقیقه"
+        
+        await message.reply_text(text)
+    
+    except ImportError:
+        await message.reply_text(
+            "❌ **سیستم metrics فعال نیست**\n\n"
+            "ماژول retry_metrics در دسترس نیست."
+        )
+    except Exception as e:
+        admin_logger.error(f"Error in retry_stats command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
+admin_logger.info("Failed request queue management handlers loaded")
+admin_logger.info("Retry metrics handlers loaded")
