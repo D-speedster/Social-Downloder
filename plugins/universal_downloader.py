@@ -340,8 +340,8 @@ def get_platform_name(url):
 async def get_universal_data_from_api(url):
     """Get media data from the universal API for Spotify, TikTok, and SoundCloud with timeout"""
     try:
-        # Use asyncio.wait_for with 6 second timeout (more robust)
-        result = await asyncio.wait_for(_api_request_sync(url), timeout=6.0)
+        # افزایش timeout برای Instagram (API کند است)
+        result = await asyncio.wait_for(_api_request_sync(url), timeout=15.0)
         return result
     except asyncio.TimeoutError:
         universal_logger.warning(f"API timeout for URL: {url}")
@@ -356,7 +356,8 @@ def _api_request_sync(url):
     
     def _make_request():
         try:
-            conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com", timeout=5.0)
+            # افزایش timeout برای Instagram
+            conn = http.client.HTTPSConnection("social-download-all-in-one.p.rapidapi.com", timeout=12.0)
             
             payload = json.dumps({"url": url})
             
