@@ -258,6 +258,16 @@ async def main():
             print("🏥 سیستم نظارت سلامت راه‌اندازی شد")
         except Exception as e:
             logger.warning(f"Could not start health monitor: {e}")
+        
+        # 🧠 Start Memory Monitor
+        try:
+            from plugins.admin import ADMIN
+            from plugins.memory_monitor import start_memory_monitor
+            asyncio.create_task(start_memory_monitor(client, ADMIN))
+            logger.info("Memory Monitor started")
+            print("🧠 سیستم نظارت حافظه راه‌اندازی شد")
+        except Exception as e:
+            logger.warning(f"Could not start memory monitor: {e}")
             print(f"⚠️ خطا در راه‌اندازی health monitor: {e}")
         
         logger.info("Bot started successfully")

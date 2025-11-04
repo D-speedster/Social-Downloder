@@ -548,6 +548,10 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         _log("[UNIV] Start processing message")
         user_id = message.from_user.id
         
+        # Debug mode برای ادمین
+        is_admin = user_id == 79049016
+        debug_mode = is_admin
+        
         # Check if user is in database
         db = DB()
         if not db.check_user_register(user_id):
@@ -900,6 +904,7 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             t_dl_start = time.perf_counter()
             
             # Try memory streaming for small files first (optimization A)
+            # برای Instagram: سریع شروع کن تا URL منقضی نشه
             use_memory = False
             # ساخت headers برای Instagram
             memory_headers = None
@@ -911,7 +916,10 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     'Referer': 'https://www.instagram.com/',
                     'Origin': 'https://www.instagram.com'
                 }
-            memory_stream = await download_to_memory_stream(download_url, max_size_mb=10, headers=memory_headers)
+                # برای Instagram: افزایش max_size به 20MB برای استفاده بیشتر از memory
+                memory_stream = await download_to_memory_stream(download_url, max_size_mb=20, headers=memory_headers)
+            else:
+                memory_stream = await download_to_memory_stream(download_url, max_size_mb=10, headers=memory_headers)
             if memory_stream:
                 total_size = memory_stream.tell()
                 t_dl_end = time.perf_counter()
@@ -1009,8 +1017,16 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         # اضافه کردن پیشنهاد خاص برای مشکلات سرور
                         if any(code in str(last_error).lower() for code in ["502", "503", "504", "سرور در دسترس نیست"]):
                             err_txt += f"\n\n💡 **نکته:** اگر مشکل ادامه داشت، لطفاً 15-30 دقیقه بعد دوباره تلاش کنید."
+                        
+                        # Debug info برای ادمین
+                        if debug_mode:
+                            err_txt += f"\n\n🔧 **Debug (Admin):**\n"
+                            err_txt += f"Error: {str(last_error)[:200]}\n"
+                            err_txt += f"URL: {download_url[:100]}\n"
+                            err_txt += f"Attempts: {max_attempts}"
                     else:
                         err_txt = f"❌ خطا در دانلود فایل از {platform}.\n\n🔄 لطفاً دوباره تلاش کنید."
+                    
                     await status_msg.edit_text(err_txt)
                     try:
                         if slot_acquired:
