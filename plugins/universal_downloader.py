@@ -861,15 +861,23 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 return
         
         # Prefer video over audio, and highest quality
+        # ذخیره تمام media ها برای fallback
         selected_media = None
+        fallback_medias = []
         if not is_album:
             for media in medias:
                 if media.get("type") == "video":
-                    selected_media = media
-                    break
+                    if selected_media is None:
+                        selected_media = media
+                    else:
+                        fallback_medias.append(media)
+                else:
+                    fallback_medias.append(media)
+            
             if not selected_media:
                 # If no video found, take the first available media
                 selected_media = medias[0]
+                fallback_medias = medias[1:] if len(medias) > 1 else []
         
         if not is_album:
             download_url = selected_media.get("url")
@@ -986,6 +994,22 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         _log(f"[UNIV] Download attempt {attempt+1}/{max_attempts} failed: {e}")
                         
                         if attempt < max_attempts - 1:
+                            # 🔥 برای 403 در Instagram: تلاش برای refresh URL
+                            if "403" in error_str and platform == "Instagram" and attempt == 1:
+                                _log(f"[UNIV] 403 detected, trying to refresh URL from API")
+                                try:
+                                    # دریافت مجدد از API برای URL تازه
+                                    fresh_data = await get_universal_data_from_api(url)
+                                    if fresh_data and not fresh_data.get('error') and fresh_data.get('medias'):
+                                        fresh_medias = fresh_data.get('medias', [])
+                                        for m in fresh_medias:
+                                            if m.get('type') == 'video':
+                                                download_url = m.get('url')
+                                                _log(f"[UNIV] Got fresh URL from API")
+                                                break
+                                except Exception as refresh_error:
+                                    _log(f"[UNIV] Failed to refresh URL: {refresh_error}")
+                            
                             # Adaptive delay با jitter و ضرایب بهینه
                             if "403" in error_str or "forbidden" in error_str:
                                 # 403: ضریب 2 (1s, 2s, 4s, 8s)
