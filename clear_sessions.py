@@ -10,8 +10,8 @@ print("=" * 70)
 print("🧹 پاکسازی Session ها و Cache")
 print("=" * 70)
 
-# 1. حذف session ها
-session_files = glob.glob("*.session*")
+# 1. حذف session ها (در پوشه فعلی و downloads)
+session_files = glob.glob("*.session*") + glob.glob("downloads/*.session*")
 if session_files:
     print(f"\n📁 {len(session_files)} فایل session یافت شد:")
     for f in session_files:

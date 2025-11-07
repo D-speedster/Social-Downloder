@@ -11,8 +11,8 @@ echo "======================================================================"
 echo -e "${BLUE}🧹 پاکسازی Session ها و Cache${NC}"
 echo "======================================================================"
 
-# 1. حذف session ها
-SESSION_FILES=$(ls *.session* 2>/dev/null)
+# 1. حذف session ها (در پوشه فعلی و downloads)
+SESSION_FILES=$(ls *.session* downloads/*.session* 2>/dev/null)
 if [ -n "$SESSION_FILES" ]; then
     echo -e "\n${YELLOW}📁 Session های یافت شده:${NC}"
     echo "$SESSION_FILES" | while read file; do
@@ -23,7 +23,7 @@ if [ -n "$SESSION_FILES" ]; then
     read -p "   (yes/no): " confirm
     
     if [[ "$confirm" == "yes" || "$confirm" == "y" || "$confirm" == "بله" ]]; then
-        rm -f *.session*
+        rm -f *.session* downloads/*.session*
         echo -e "${GREEN}✅ تمام session ها پاک شدند${NC}"
     else
         echo -e "${YELLOW}⏭️ لغو شد${NC}"

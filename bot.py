@@ -156,8 +156,8 @@ def check_token_change():
                 logger.warning("⚠️ توکن ربات تغییر کرده است!")
                 logger.info("🧹 در حال پاکسازی session های قدیمی...")
                 
-                # حذف تمام session ها
-                session_files = glob.glob("*.session*")
+                # حذف تمام session ها (در پوشه فعلی و downloads)
+                session_files = glob.glob("*.session*") + glob.glob("downloads/*.session*")
                 for session_file in session_files:
                     try:
                         os.remove(session_file)
@@ -187,7 +187,8 @@ def cleanup_locked_sessions():
     logger.info("🧹 بررسی session های قفل شده...")
     
     # پیدا کردن تمام فایل‌های session-journal (نشانه قفل بودن)
-    journal_files = glob.glob("*.session-journal")
+    # در پوشه فعلی و downloads
+    journal_files = glob.glob("*.session-journal") + glob.glob("downloads/*.session-journal")
     
     if journal_files:
         logger.warning(f"⚠️ {len(journal_files)} session قفل شده پیدا شد")
