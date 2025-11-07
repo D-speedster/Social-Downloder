@@ -10,9 +10,11 @@ import os
 import time
 import asyncio
 import json
+import html
 from pyrogram import Client, filters
 from pyrogram.types import CallbackQuery
 from pyrogram.enums import ParseMode
+from pyrogram.errors import MessageNotModified, MessageDeleteForbidden, FloodWait
 from plugins.logger_config import get_logger
 from plugins.youtube_handler import video_cache
 from plugins.youtube_downloader import youtube_downloader
@@ -34,15 +36,30 @@ def format_size(bytes_size: int) -> str:
     return f"{bytes_size} B"
 
 async def safe_edit_text(call: CallbackQuery, text: str, reply_markup=None):
-    """ویرایش ایمن پیام"""
-    try:
-        await call.edit_message_text(
-            text=text,
-            parse_mode=ParseMode.MARKDOWN,
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        logger.debug(f"Message edit failed: {e}")
+    """ویرایش ایمن پیام - با مدیریت FloodWait"""
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            await call.edit_message_text(
+                text=text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup
+            )
+            return
+        except FloodWait as fw:
+            # ✅ مدیریت rate limit
+            if attempt < max_retries - 1:
+                logger.warning(f"FloodWait: sleeping {fw.value}s")
+                await asyncio.sleep(fw.value)
+            else:
+                logger.error(f"FloodWait exceeded max retries")
+        except (MessageNotModified, MessageDeleteForbidden) as e:
+            # ✅ مدیریت خطاهای خاص پیام
+            logger.debug(f"Message edit skipped: {e}")
+            return
+        except Exception as e:
+            logger.debug(f"Message edit failed: {e}")
+            return
 
 @Client.on_callback_query(filters.regex(r'^yt_(dl_\d+|dl_audio|cancel)$'))
 async def handle_quality_selection(client: Client, call: CallbackQuery):
@@ -50,6 +67,9 @@ async def handle_quality_selection(client: Client, call: CallbackQuery):
     start_time = time.time()
     user_id = call.from_user.id
     data = call.data
+    
+    # ✅ مقداردهی اولیه متغیرها برای جلوگیری از UnboundLocalError
+    user_reserved = False
     
     logger.info(f"Quality selection from user {user_id}: {data}")
     
@@ -123,12 +143,14 @@ async def handle_quality_selection(client: Client, call: CallbackQuery):
             )
         except:
             await call.answer("❌ خطا در پردازش.", show_alert=True)
-        
-        try:
-            if 'user_reserved' in locals() and user_reserved:
+    
+    finally:
+        # ✅ آزادسازی user در finally برای اطمینان از آزادسازی در هر شرایطی
+        if user_reserved:
+            try:
                 release_user(user_id)
-        except:
-            pass
+            except Exception as release_error:
+                logger.warning(f"Failed to release user {user_id}: {release_error}")
 
 async def start_download(
     client: Client,
@@ -139,16 +161,22 @@ async def start_download(
     user_id: int
 ):
     """شروع فرآیند دانلود و آپلود - نسخه بهینه شده"""
+    # ✅ مقداردهی اولیه متغیرها
     slot_acquired = False
     downloaded_file = None
+    thumbnail_path = None
+    overall_start = time.time()  # ✅ زمان شروع کلی
     
     try:
         quality_text = f"{quality}p" if quality != 'audio' else "فقط صدا"
         
+        # ✅ Escape کردن عنوان برای Markdown
+        safe_title = html.escape(video_info['title'][:50])
+        
         # پیام اولیه
         initial_msg = (
             f"🚀 **شروع دانلود**\n\n"
-            f"🎬 {video_info['title'][:50]}...\n"
+            f"🎬 {safe_title}...\n"
             f"📊 کیفیت: {quality_text}\n\n"
             f"⏳ در حال آماده‌سازی..."
         )
@@ -164,18 +192,22 @@ async def start_download(
                 initial_msg + f"\n\n🕐 در صف (نفر {queue_position})\n⏳ لطفاً صبر کنید..."
             )
         
-        # Acquire slot
-        await acquire_slot()
-        slot_acquired = True
+        # ✅ Acquire slot با try/except
+        try:
+            await acquire_slot()
+            slot_acquired = True
+        except Exception as e:
+            logger.error(f"Slot acquire failed: {e}")
+            raise
         
         # 🔥 پیام ساده بدون progress برای دانلود
         await safe_edit_text(
             call,
             f"📥 **در حال دانلود**\n\n"
-            f"🎬 {video_info['title'][:50]}...\n"
+            f"🎬 {safe_title}...\n"
             f"📊 کیفیت: {quality_text}\n\n"
             f"⏳ دانلود از یوتیوب در حال انجام است...\n"
-            f"💡 این مرحله ممکن است 1-2 دقیقه طول بکشد"
+            f"💡 این مرحله ممکن است 1-2 دقیقه طول بکشد ⌛"
         )
         
         # Prepare filename (کوتاه و ساده برای جلوگیری از ارسال به عنوان document)
@@ -194,13 +226,16 @@ async def start_download(
             safe_title = "YouTube_Video"
         
         if quality == 'audio':
-            filename = f"{safe_title}.{quality_info['ext']}"
+            # ✅ پیش‌فرض برای ext در صورت نبود
+            ext = quality_info.get('ext', 'mp3')
+            filename = f"{safe_title}.{ext}"
             media_type = 'audio'
         else:
             filename = f"{safe_title}_{quality}p.mp4"
             media_type = 'video'
         
-        logger.info(f"📁 Generated filename: {filename}")
+        # ✅ لاگ کامل‌تر برای دیباگ
+        logger.info(f"📁 Generated filename: {filename} (temp dir: {youtube_downloader.download_dir})")
         
         # 🔥 دانلود بدون progress callback (سرعت بیشتر)
         download_start = time.time()
@@ -223,7 +258,7 @@ async def start_download(
         await safe_edit_text(
             call,
             f"📤 **در حال آپلود**\n\n"
-            f"🎬 {video_info['title'][:50]}...\n"
+            f"🎬 {safe_title}...\n"
             f"📊 کیفیت: {quality_text}\n"
             f"💾 حجم: {format_size(file_size)}\n\n"
             f"⏳ آپلود به تلگرام..."
@@ -249,7 +284,6 @@ async def start_download(
                 )
         
         # Download thumbnail (برای همه ویدیوها)
-        thumbnail_path = None
         if media_type == 'video' and video_info.get('thumbnail'):
             try:
                 from plugins.youtube_handler import download_thumbnail
@@ -263,8 +297,8 @@ async def start_download(
                 logger.warning(f"❌ Thumbnail download failed: {e}")
                 thumbnail_path = None
         
-        # Caption
-        caption = f"🎬 {video_info['title']}"
+        # ✅ Caption با escape کردن عنوان
+        caption = f"🎬 {html.escape(video_info['title'])}"
         
         # Check advertisement settings
         ad_enabled = False
@@ -282,13 +316,20 @@ async def start_download(
         except Exception as e:
             logger.warning(f"Failed to load advertisement settings: {e}")
         
-        # Send advertisement before content if enabled and position is 'before'
+        # ✅ Send advertisement before content با try/except
         if ad_enabled and ad_position == 'before':
-            logger.info("Sending advertisement before YouTube content")
-            send_advertisement(client, call.message.chat.id)
-            # No need to wait - advertisement runs in background
+            try:
+                logger.info("Sending advertisement before YouTube content")
+                send_advertisement(client, call.message.chat.id)
+            except Exception as e:
+                logger.warning(f"Advertisement send failed (before): {e}")
         
         # 🔥 آپلود با تنظیمات بهینه
+        # ✅ بررسی امن reply_to_message
+        reply_to_id = None
+        if call.message and call.message.reply_to_message:
+            reply_to_id = call.message.reply_to_message.message_id
+        
         upload_start = time.time()
         success = await youtube_uploader.upload_with_streaming(
             client=client,
@@ -301,7 +342,7 @@ async def start_download(
             performer=video_info['uploader'],
             thumbnail=thumbnail_path,
             progress_callback=optimized_upload_progress,  # Progress بهینه شده
-            reply_to_message_id=call.message.reply_to_message.message_id if call.message.reply_to_message else None
+            reply_to_message_id=reply_to_id  # ✅ استفاده از متغیر امن
         )
         upload_time = time.time() - upload_start
         
@@ -310,19 +351,27 @@ async def start_download(
         
         logger.info(f"✅ Upload: {upload_time:.2f}s")
         
-        # حذف پیام progress
+        # ✅ حذف ایمن پیام progress با FloodWait
         logger.debug("Deleting progress message...")
         try:
-            await call.message.delete()
-            logger.debug("Progress message deleted")
+            if call.message:
+                await call.message.delete()
+                logger.debug("Progress message deleted")
+        except FloodWait as fw:
+            logger.warning(f"FloodWait on delete: {fw.value}s - skipping")
+        except (MessageNotModified, MessageDeleteForbidden) as e:
+            logger.debug(f"Message delete skipped: {e}")
         except Exception as e:
             logger.warning(f"Failed to delete progress message: {e}")
         
-        # Send advertisement after content if enabled and position is 'after'
+        # ✅ Send advertisement after content با try/except
         if ad_enabled and ad_position == 'after':
-            logger.info("Sending advertisement after YouTube content")
-            send_advertisement(client, call.message.chat.id)
-            logger.debug("Advertisement sent")
+            try:
+                logger.info("Sending advertisement after YouTube content")
+                send_advertisement(client, call.message.chat.id)
+                logger.debug("Advertisement sent")
+            except Exception as e:
+                logger.warning(f"Advertisement send failed (after): {e}")
         
         # Update database
         logger.debug("Updating database...")
@@ -337,7 +386,8 @@ async def start_download(
         if user_id in video_cache:
             del video_cache[user_id]
         
-        total_time = time.time() - download_start
+        # ✅ محاسبه زمان کلی از overall_start
+        total_time = time.time() - overall_start
         logger.info(f"🎯 Total: {total_time:.2f}s (DL: {download_time:.2f}s, UL: {upload_time:.2f}s)")
         
     except Exception as e:
@@ -351,28 +401,30 @@ async def start_download(
         )
     
     finally:
-        # Release slot
+        # ✅ Release slot با بررسی
         if slot_acquired:
             try:
                 release_slot()
-            except:
-                pass
+                logger.debug("Slot released")
+            except Exception as e:
+                logger.warning(f"Failed to release slot: {e}")
         
-        # Release user
-        try:
-            release_user(user_id)
-        except:
-            pass
+        # ✅ Release user (این کار در handler اصلی انجام می‌شود)
+        # توجه: release_user در finally بلوک handle_quality_selection فراخوانی می‌شود
         
-        # Clean up files
-        if downloaded_file:
+        # ✅ Clean up files با بررسی امن و وجود فایل
+        if downloaded_file and os.path.exists(downloaded_file):
             try:
                 youtube_downloader.cleanup(downloaded_file)
-            except:
-                pass
+                logger.debug(f"Cleaned up downloaded file: {downloaded_file}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup downloaded file: {e}")
         
-        if 'thumbnail_path' in locals() and thumbnail_path and os.path.exists(thumbnail_path):
+        # ✅ پاک‌سازی thumbnail با try/except
+        if thumbnail_path:
             try:
-                os.unlink(thumbnail_path)
-            except:
-                pass
+                if os.path.exists(thumbnail_path):
+                    os.unlink(thumbnail_path)
+                    logger.debug(f"Cleaned up thumbnail: {thumbnail_path}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup thumbnail: {e}")
