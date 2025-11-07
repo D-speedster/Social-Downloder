@@ -170,7 +170,6 @@ logger.info(f"🚀 Using {MAX_WORKERS} workers (optimized for {os.cpu_count() or
 logger.info(f"⚡ Workers: {MAX_WORKERS}")
 
 async def main():
-    client = None
     background_tasks = []  # لیست برای مدیریت background tasks
     
     try:
@@ -219,8 +218,15 @@ async def main():
         else:
             logger.debug("No proxy configured")
         
-        # استفاده از async context manager برای مدیریت خودکار client
-        async with Client(**client_config) as client:
+        # ساخت client
+        client = Client(**client_config)
+        
+        # شروع client
+        await client.start()
+        logger.info("Bot client started successfully")
+        logger.info("🔗 متصل به تلگرام شد")
+        
+        try:
             # 🔥 بهینه‌سازی اضافی بعد از ساخت client
             try:
                 from plugins.youtube_uploader import optimize_client_for_upload
@@ -228,9 +234,6 @@ async def main():
                 logger.info("✅ Client optimized for ultra-fast uploads")
             except Exception as e:
                 logger.warning(f"Could not apply additional optimizations: {e}")
-            
-            logger.info("Bot client started successfully")
-            logger.info("🔗 متصل به تلگرام شد")
             
             # 🔥 Record startup in database
             if hasattr(db, "record_startup"):
@@ -268,37 +271,34 @@ async def main():
             logger.info("✅ استفاده از retry logic ساده (بدون صف پس‌زمینه)")
             
             # Start Cookie Validator Service
+            logger.info("🔄 تلاش برای راه‌اندازی Cookie Validator...")
             try:
                 from plugins.admin import ADMIN
-                logger.info("🔄 در حال راه‌اندازی Cookie Validator...")
                 await start_cookie_validator(client, ADMIN)
-                logger.info("Cookie Validator service started")
-                logger.info("🍪 سرویس بررسی کوکی راه‌اندازی شد")
+                logger.info("✅ Cookie Validator service started")
             except Exception as e:
-                logger.error(f"Failed to start Cookie Validator: {e}", exc_info=True)
+                logger.warning(f"⚠️ Cookie Validator غیرفعال شد: {e}")
             
             # 🔥 Start Health Monitor
+            logger.info("🔄 تلاش برای راه‌اندازی Health Monitor...")
             try:
                 from plugins.admin import ADMIN
-                logger.info("🔄 در حال راه‌اندازی Health Monitor...")
                 task = asyncio.create_task(start_health_monitor(client, ADMIN))
                 background_tasks.append(task)
-                logger.info("Health Monitor started")
-                logger.info("🏥 سیستم نظارت سلامت راه‌اندازی شد")
+                logger.info("✅ Health Monitor started")
             except Exception as e:
-                logger.warning(f"Could not start health monitor: {e}", exc_info=True)
+                logger.warning(f"⚠️ Health Monitor غیرفعال شد: {e}")
             
             # 🧠 Start Memory Monitor
+            logger.info("🔄 تلاش برای راه‌اندازی Memory Monitor...")
             try:
                 from plugins.admin import ADMIN
                 from plugins.memory_monitor import start_memory_monitor
-                logger.info("🔄 در حال راه‌اندازی Memory Monitor...")
                 task = asyncio.create_task(start_memory_monitor(client, ADMIN))
                 background_tasks.append(task)
-                logger.info("Memory Monitor started")
-                logger.info("🧠 سیستم نظارت حافظه راه‌اندازی شد")
+                logger.info("✅ Memory Monitor started")
             except Exception as e:
-                logger.warning(f"Could not start memory monitor: {e}", exc_info=True)
+                logger.warning(f"⚠️ Memory Monitor غیرفعال شد: {e}")
             
             logger.info("Bot started successfully")
             logger.info("✅ ربات با موفقیت راه‌اندازی شد!")
@@ -315,6 +315,35 @@ async def main():
             
             logger.info("⚠️ idle() تمام شد - این نباید اتفاق بیفتد!")
         
+        finally:
+            # cleanup داخل try block
+            logger.info("🧹 شروع cleanup...")
+            
+            # لغو background tasks
+            if background_tasks:
+                logger.info(f"🛑 در حال لغو {len(background_tasks)} background task...")
+                for task in background_tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*background_tasks, return_exceptions=True)
+                logger.info("✅ Background tasks متوقف شدند")
+            
+            # Stop Cookie Validator
+            try:
+                logger.info("🍪 در حال توقف Cookie Validator...")
+                await stop_cookie_validator()
+                logger.info("✅ Cookie Validator متوقف شد")
+            except Exception as e:
+                logger.warning(f"خطا در توقف Cookie Validator: {e}")
+            
+            # Stop client
+            try:
+                logger.info("🔌 در حال توقف Client...")
+                await client.stop()
+                logger.info("✅ Client متوقف شد")
+            except Exception as e:
+                logger.error(f"خطا در توقف Client: {e}")
+        
     except KeyboardInterrupt:
         logger.info("\n⏹️ ربات توسط کاربر متوقف شد")
     except Exception as e:
@@ -329,45 +358,22 @@ async def main():
             except Exception as report_error:
                 logger.error(f"⚠️ خطا در تولید گزارش: {report_error}")
     finally:
-        # لغو تمام background tasks
-        if background_tasks:
-            logger.info(f"🛑 در حال لغو {len(background_tasks)} background task...")
-            for task in background_tasks:
-                task.cancel()
-            # منتظر ماندن برای اتمام tasks
-            await asyncio.gather(*background_tasks, return_exceptions=True)
-            logger.info("✅ تمام background tasks متوقف شدند")
-        
         # 🔥 Record shutdown in database
         if hasattr(db, "record_shutdown"):
             try:
                 db.record_shutdown()
                 logger.info("Shutdown recorded in database")
-                logger.info("📝 زمان توقف ثبت شد")
             except Exception as e:
                 logger.warning(f"Could not record shutdown: {e}")
-        
-        # Stop Cookie Validator Service
-        try:
-            logger.info("🍪 در حال توقف سرویس بررسی کوکی...")
-            await stop_cookie_validator()
-            logger.info("Cookie Validator service stopped")
-            logger.info("✅ سرویس کوکی با موفقیت متوقف شد")
-        except Exception as e:
-            logger.error(f"Error stopping Cookie Validator: {e}")
-        
-        # client.stop() خودکار توسط async context manager فراخوانی می‌شود
-        logger.info("🔌 کلاینت توسط context manager متوقف شد")
         
         # بستن database
         try:
             if 'db' in globals():
                 logger.info("🗄️ در حال بستن اتصال پایگاه داده...")
                 db.close()
-                logger.info("Database connection closed")
-                logger.info("✅ پایگاه داده با موفقیت بسته شد")
+                logger.info("✅ پایگاه داده بسته شد")
         except Exception as e:
-            logger.error(f"Error closing database in finally block: {e}")
+            logger.error(f"خطا در بستن database: {e}")
 
 if __name__ == "__main__":
     try:
