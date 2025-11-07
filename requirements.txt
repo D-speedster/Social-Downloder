@@ -1,6 +1,7 @@
 mysql-connector-python
 Pyrogram
 instaloader
+aiohttp
 python-dateutil
 yt-dlp
 psutil
