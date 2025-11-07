@@ -91,6 +91,96 @@ basicConfig(
 
 import logging
 logger = logging.getLogger(__name__)
+
+# 🔥 بررسی و توقف پروسس‌های قدیمی
+def check_and_stop_old_instances():
+    """بررسی و توقف نمونه‌های قدیمی ربات"""
+    try:
+        import psutil
+        current_pid = os.getpid()
+        bot_processes = []
+        
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                cmdline = proc.info.get('cmdline', [])
+                if cmdline and 'bot.py' in ' '.join(cmdline) and proc.info['pid'] != current_pid:
+                    bot_processes.append(proc)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        
+        if bot_processes:
+            logger.warning(f"⚠️ {len(bot_processes)} نمونه قدیمی ربات در حال اجراست")
+            for proc in bot_processes:
+                try:
+                    logger.info(f"🛑 توقف پروسس قدیمی: PID {proc.pid}")
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    logger.info(f"✅ پروسس {proc.pid} متوقف شد")
+                except Exception as e:
+                    logger.warning(f"⚠️ خطا در توقف پروسس {proc.pid}: {e}")
+                    try:
+                        proc.kill()
+                    except:
+                        pass
+            
+            import time
+            time.sleep(2)  # صبر برای آزاد شدن منابع
+            logger.info("✅ تمام پروسس‌های قدیمی متوقف شدند")
+        else:
+            logger.info("✅ هیچ پروسس قدیمی یافت نشد")
+            
+    except ImportError:
+        logger.warning("⚠️ psutil نصب نیست - بررسی پروسس‌ها غیرفعال است")
+    except Exception as e:
+        logger.warning(f"⚠️ خطا در بررسی پروسس‌ها: {e}")
+
+# 🔥 پاکسازی خودکار session های قفل شده
+def cleanup_locked_sessions():
+    """پاکسازی فایل‌های session قفل شده قبل از شروع"""
+    import glob
+    import time
+    
+    logger.info("🧹 بررسی session های قفل شده...")
+    
+    # پیدا کردن تمام فایل‌های session-journal (نشانه قفل بودن)
+    journal_files = glob.glob("*.session-journal")
+    
+    if journal_files:
+        logger.warning(f"⚠️ {len(journal_files)} session قفل شده پیدا شد")
+        
+        for journal_file in journal_files:
+            try:
+                # حذف فایل journal
+                os.remove(journal_file)
+                logger.info(f"✅ حذف شد: {journal_file}")
+                
+                # حذف فایل session مربوطه
+                session_file = journal_file.replace("-journal", "")
+                if os.path.exists(session_file):
+                    # فقط اگر خیلی قدیمی است حذف کن
+                    file_age = time.time() - os.path.getmtime(session_file)
+                    if file_age > 60:  # بیشتر از 1 دقیقه
+                        os.remove(session_file)
+                        logger.info(f"✅ حذف شد: {session_file}")
+                    else:
+                        logger.info(f"⏭️ نگه داشته شد: {session_file} (تازه است)")
+                    
+            except Exception as e:
+                logger.error(f"❌ خطا در حذف {journal_file}: {e}")
+        
+        logger.info("✅ پاکسازی session ها تمام شد")
+        time.sleep(0.5)  # کمی صبر کنیم
+    else:
+        logger.info("✅ هیچ session قفل شده‌ای یافت نشد")
+
+# اجرای بررسی و پاکسازی
+logger.info("=" * 70)
+logger.info("🔍 بررسی و پاکسازی قبل از شروع")
+logger.info("=" * 70)
+check_and_stop_old_instances()
+cleanup_locked_sessions()
+logger.info("=" * 70)
+
 logger.info("Bot starting up...")
 logger.info(f"Python version: {sys.version}")
 logger.info(f"Working directory: {os.getcwd()}")
