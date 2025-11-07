@@ -8,7 +8,6 @@ import time
 import asyncio
 from typing import Optional, Callable
 from pyrogram import Client
-from pyrogram.types import Message
 from plugins.logger_config import get_logger
 
 logger = get_logger('youtube_uploader')
@@ -23,15 +22,9 @@ class YouTubeUploader:
     
     def __init__(self):
         """مقداردهی اولیه با تنظیمات بهینه"""
-        # 🔥 اعمال chunk size به کلاینت Pyrogram
-        try:
-            import pyrogram
-            # Set global chunk size for all file operations
-            if hasattr(pyrogram.file_id, 'CHUNK_SIZE'):
-                pyrogram.file_id.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
-                logger.info(f"✅ Pyrogram chunk size set to {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f}MB")
-        except Exception as e:
-            logger.warning(f"Could not set global chunk size: {e}")
+        # ✅ CHUNK_SIZE در Pyrogram 2.x به صورت متفاوت تنظیم میشه
+        # این کار در upload_with_streaming برای هر client انجام میشه
+        logger.info(f"✅ YouTubeUploader initialized with {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f}MB chunk size")
     
     async def upload_video(
         self,
@@ -65,8 +58,10 @@ class YouTubeUploader:
             last_update = {'time': 0, 'percent': 0}
             
             async def optimized_progress(current, total):
+                """✅ Progress callback با throttling و error handling"""
                 nonlocal last_update
-                if not progress_callback:
+                # ✅ بررسی اینکه callback وجود داره و callable است
+                if not progress_callback or not callable(progress_callback):
                     return
                 
                 # فقط برای فایل‌های بزرگتر از 50MB progress نمایش بده
@@ -76,12 +71,16 @@ class YouTubeUploader:
                 now = time.time()
                 current_percent = int((current / total) * 100)
                 
-                # فقط هر 5 ثانیه یا هر 10 درصد یک بار
-                if (now - last_update['time'] >= 5.0) or (current_percent - last_update['percent'] >= 10):
+                # فقط هر 8 ثانیه یا هر 15 درصد یک بار (کاهش overhead)
+                if (now - last_update['time'] >= 8.0) or (current_percent - last_update['percent'] >= 15):
                     last_update['time'] = now
                     last_update['percent'] = current_percent
                     try:
-                        await progress_callback(current, total)
+                        # ✅ پشتیبانی از sync و async callbacks
+                        if asyncio.iscoroutinefunction(progress_callback):
+                            await progress_callback(current, total)
+                        else:
+                            progress_callback(current, total)
                     except Exception:
                         pass  # Ignore errors
             
@@ -95,15 +94,15 @@ class YouTubeUploader:
                 print("📤 Sending as document (>500MB)...")
                 
                 try:
+                    # ✅ اضافه کردن file_name برای جلوگیری از مشکلات کاراکترهای خاص
                     sent = await client.send_document(
                         chat_id=chat_id,
                         document=file_path,
+                        file_name=os.path.basename(file_path),  # استفاده از نام فایل امن
                         caption=f"🎬 {caption}",
                         progress=optimized_progress,
                         reply_to_message_id=reply_to_message_id,
-                        force_document=True,
-                        disable_notification=True,  # کاهش overhead
-                        file_name=os.path.basename(file_path)
+                        disable_notification=True  # کاهش overhead
                     )
                     logger.info("✅ Document sent successfully")
                     print("✅ Document sent successfully")
@@ -129,6 +128,7 @@ class YouTubeUploader:
                 }
                 
                 # اضافه کردن thumbnail اگر موجود باشد
+                temp_thumb = None
                 if thumbnail and os.path.exists(thumbnail):
                     video_kwargs['thumb'] = thumbnail
                     logger.info(f"✅ Using provided thumbnail: {thumbnail}")
@@ -141,6 +141,7 @@ class YouTubeUploader:
                         quick_thumb = generate_thumbnail(file_path)
                         if quick_thumb:
                             video_kwargs['thumb'] = quick_thumb
+                            temp_thumb = quick_thumb  # ذخیره برای پاکسازی بعدی
                             logger.info(f"✅ Generated quick thumbnail: {quick_thumb}")
                             print(f"✅ Thumbnail generated: {os.path.basename(quick_thumb)}")
                         else:
@@ -161,6 +162,14 @@ class YouTubeUploader:
                     logger.error(f"❌ Send video failed: {send_error}")
                     print(f"❌ Send video failed: {send_error}")
                     raise
+                finally:
+                    # ✅ پاکسازی thumbnail موقت
+                    if temp_thumb and os.path.exists(temp_thumb):
+                        try:
+                            os.unlink(temp_thumb)
+                            logger.debug(f"🗑️ Cleaned up temp thumbnail: {temp_thumb}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not delete temp thumbnail: {e}")
             
             else:
                 # فایل‌های کوچک: ویدیو با تمام ویژگی‌ها و metadata کامل
@@ -178,6 +187,7 @@ class YouTubeUploader:
                 }
                 
                 # اضافه کردن thumbnail
+                temp_thumb = None
                 if thumbnail and os.path.exists(thumbnail):
                     video_kwargs['thumb'] = thumbnail
                     logger.info(f"✅ Using provided thumbnail: {thumbnail}")
@@ -188,6 +198,7 @@ class YouTubeUploader:
                         quick_thumb = generate_thumbnail(file_path)
                         if quick_thumb:
                             video_kwargs['thumb'] = quick_thumb
+                            temp_thumb = quick_thumb  # ذخیره برای پاکسازی بعدی
                             logger.info(f"✅ Generated thumbnail: {quick_thumb}")
                     except Exception as e:
                         logger.warning(f"⚠️ Thumbnail generation failed: {e}")
@@ -219,6 +230,14 @@ class YouTubeUploader:
                     logger.error(f"❌ Send video failed: {send_error}")
                     print(f"❌ Send video failed: {send_error}")
                     raise
+                finally:
+                    # ✅ پاکسازی thumbnail موقت
+                    if temp_thumb and os.path.exists(temp_thumb):
+                        try:
+                            os.unlink(temp_thumb)
+                            logger.debug(f"🗑️ Cleaned up temp thumbnail: {temp_thumb}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not delete temp thumbnail: {e}")
             
             upload_time = time.time() - upload_start
             upload_speed = file_size_mb / upload_time if upload_time > 0 else 0
@@ -266,15 +285,21 @@ class YouTubeUploader:
             last_update = {'time': 0}
             
             async def optimized_progress(current, total):
+                """✅ Progress callback با error handling"""
                 nonlocal last_update
-                if not progress_callback:
+                # ✅ بررسی اینکه callback وجود داره و callable است
+                if not progress_callback or not callable(progress_callback):
                     return
                 
                 now = time.time()
-                if now - last_update['time'] >= 3.0:
+                if now - last_update['time'] >= 5.0:  # افزایش به 5 ثانیه
                     last_update['time'] = now
                     try:
-                        await progress_callback(current, total)
+                        # ✅ پشتیبانی از sync و async callbacks
+                        if asyncio.iscoroutinefunction(progress_callback):
+                            await progress_callback(current, total)
+                        else:
+                            progress_callback(current, total)
                     except Exception:
                         pass
             
@@ -362,27 +387,24 @@ class YouTubeUploader:
 # 🔥 Global instance با تنظیمات بهینه
 youtube_uploader = YouTubeUploader()
 
-# 🔥 تابع کمکی برای تنظیم chunk size در کلاینت
+# ✅ تابع کمکی برای تنظیم chunk size در کلاینت (Pyrogram 2.x compatible)
 def optimize_client_for_upload(client: Client):
     """
     بهینه‌سازی کلاینت برای آپلود سریع
     این تابع را در main.py یا هنگام ساخت کلاینت صدا بزنید
     """
     try:
-        # Patch Pyrogram's internal chunk size
-        import pyrogram.methods.messages.send_document as send_doc
-        import pyrogram.methods.messages.send_video as send_vid
-        import pyrogram.methods.messages.send_audio as send_aud
+        # ✅ در Pyrogram 2.x، chunk size در session تنظیم میشه
+        if hasattr(client, 'storage') and hasattr(client.storage, 'session'):
+            session = client.storage.session
+            if hasattr(session, 'CHUNK_SIZE'):
+                session.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
+                logger.info(f"✅ Session chunk size set to {OPTIMAL_CHUNK_SIZE / (1024*1024):.1f}MB")
+                return True
         
-        # تلاش برای تغییر chunk size در ماژول‌های Pyrogram
-        for module in [send_doc, send_vid, send_aud]:
-            if hasattr(module, 'CHUNK_SIZE'):
-                module.CHUNK_SIZE = OPTIMAL_CHUNK_SIZE
-                logger.info(f"✅ Patched {module.__name__} chunk size")
-        
-        logger.info("✅ Client optimized for ultra-fast uploads")
-        return True
+        logger.warning("Could not set chunk size - client structure not compatible")
+        return False
         
     except Exception as e:
-        logger.warning(f"Could not fully optimize client: {e}")
+        logger.warning(f"Could not optimize client: {e}")
         return False

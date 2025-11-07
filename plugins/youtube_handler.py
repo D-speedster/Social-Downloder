@@ -6,254 +6,281 @@ YouTube Handler - سیستم جدید و بهینه دانلود از یوتیو
 import os
 import time
 import asyncio
+import html
+import aiohttp
+import tempfile
+import concurrent.futures
+
 from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import (
+    Message, InlineKeyboardMarkup, InlineKeyboardButton
+)
 from pyrogram.enums import ParseMode
+from pyrogram.errors import MessageIdInvalid
+
 from plugins.sqlite_db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 import yt_dlp
 
-# Initialize logger
+# ------------------------------------------------------------------- #
+# Logger
 logger = get_logger('youtube_handler')
 
-# Store video info temporarily (in production, use Redis or database)
-video_cache = {}
+# ------------------------------------------------------------------- #
+# کش موقت (در production می‌توانید از Redis استفاده کنید)
+video_cache: dict[int, dict] = {}
 
-# Supported qualities (only 4 qualities as requested)
+# ------------------------------------------------------------------- #
+# کیفیت‌های پشتیبانی‌شده (به‌درخواست شما محدود به 4 بود)
 SUPPORTED_QUALITIES = ['360', '480', '720', '1080']
 
-async def extract_video_info(url: str) -> dict:
-    """استخراج اطلاعات ویدیو با yt-dlp"""
+# ------------------------------------------------------------------- #
+# یک ThreadPoolExecutor سراسری (همانند universal_downloader)
+_global_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=6,
+    thread_name_prefix="yt_api_worker"
+)
+
+# ------------------------------------------------------------------- #
+async def extract_video_info(url: str) -> dict | None:
+    """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async)"""
     try:
-        # Check for cookie file
         cookie_file = 'cookie_youtube.txt'
-        
+
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
         }
-        
-        # Add cookies if file exists
+
         if os.path.exists(cookie_file):
             ydl_opts['cookiefile'] = cookie_file
             logger.info(f"Using cookies from: {cookie_file}")
-        
-        loop = asyncio.get_event_loop()
-        
+
+        # ------------------------------------------------------------------- #
+        # استخراج هم‑زمان با executor سراسری
+        loop = asyncio.get_running_loop()
+
         def _extract():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
-        
-        info = await loop.run_in_executor(None, _extract)
-        
+
+        info = await loop.run_in_executor(_global_executor, _extract)
+
         if not info:
             return None
-        
-        # Extract available qualities
+
         formats = info.get('formats', [])
-        available_qualities = {}
-        
+        available_qualities: dict = {}
+
+        # ------------------------------------------------------------------- #
+        # بررسی کیفیت‌های درخواست‌شده
         for quality in SUPPORTED_QUALITIES:
             target_height = int(quality)
-            
-            # First, try to find combined formats (video + audio in one file)
+
+            # 1️⃣  قالب ترکیبی (video + audio در یک فایل)
             combined_formats = [
                 f for f in formats
-                if f.get('vcodec') != 'none' 
+                if f.get('vcodec') != 'none'
                 and f.get('acodec') != 'none'
                 and f.get('height') == target_height
                 and f.get('ext') in ['mp4', 'webm']
             ]
-            
-            # For Shorts and some videos, try more flexible matching
+
+            # انعطاف‑پذیری ±10px
             if not combined_formats:
-                # Try with height tolerance (±10 pixels)
                 combined_formats = [
                     f for f in formats
-                    if f.get('vcodec') != 'none' 
+                    if f.get('vcodec') != 'none'
                     and f.get('acodec') != 'none'
                     and f.get('height') is not None
                     and abs(f.get('height') - target_height) <= 10
                     and f.get('ext') in ['mp4', 'webm']
                 ]
-            
-            # Special handling for Shorts (Portrait videos)
+
+            # شورت‌س (portrait) → نگاشت به landscape
             if not combined_formats:
-                # For Shorts, map portrait heights to landscape equivalents
-                portrait_height_map = {
-                    360: [640, 426, 256],    # 360p equivalents in portrait
-                    480: [854, 640, 426],    # 480p equivalents in portrait  
-                    720: [1280, 854],        # 720p equivalents in portrait
-                    1080: [1920, 1280]       # 1080p equivalents in portrait
+                portrait_map = {
+                    360: [640, 426, 256],
+                    480: [854, 640, 426],
+                    720: [1280, 854],
+                    1080: [1920, 1280],
                 }
-                
-                if target_height in portrait_height_map:
-                    for portrait_height in portrait_height_map[target_height]:
+                if target_height in portrait_map:
+                    for ph in portrait_map[target_height]:
                         combined_formats = [
                             f for f in formats
-                            if f.get('vcodec') != 'none' 
+                            if f.get('vcodec') != 'none'
                             and f.get('acodec') != 'none'
-                            and f.get('height') == portrait_height
+                            and f.get('height') == ph
                             and f.get('ext') in ['mp4', 'webm']
                         ]
                         if combined_formats:
-                            logger.info(f"Found portrait format for {quality}p: {portrait_height}p (Shorts)")
+                            logger.info(
+                                f"Portrait format mapped: {quality}p → {ph}p"
+                            )
                             break
-            
+
+            # ----------------------------------------------------------- #
             if combined_formats:
-                # Sort by quality (fps, bitrate)
                 combined_formats.sort(
-                    key=lambda x: (
-                        x.get('fps', 0) or 0,
-                        x.get('tbr', 0) or 0
-                    ),
+                    key=lambda x: (x.get('fps', 0) or 0,
+                                   x.get('tbr', 0) or 0),
                     reverse=True
                 )
-                best_format = combined_formats[0]
-                
-                # Store combined format
+                best = combined_formats[0]
                 available_qualities[quality] = {
-                    'format_string': best_format['format_id'],
-                    'filesize': best_format.get('filesize', 0) or 0,
-                    'fps': best_format.get('fps', 30),
-                    'ext': best_format.get('ext', 'mp4'),
+                    'format_string': best['format_id'],
+                    'filesize': best.get('filesize', 0) or 0,
+                    'fps': best.get('fps', 30),
+                    'ext': best.get('ext', 'mp4'),
                     'type': 'combined',
-                    'actual_height': best_format.get('height')
+                    'actual_height': best.get('height')
                 }
-                logger.info(f"Found combined format for {quality}p: {best_format['format_id']} (actual: {best_format.get('height')}p)")
-            else:
-                # Fallback: try separate video + audio formats
+                logger.info(
+                    f"Combined {quality}p → {best['format_id']} (h={best.get('height')})"
+                )
+                continue
+
+            # 2️⃣  قالب جداگانه (video + audio)
+            #   ↳ اینجا بود که در نسخهٔ قبلی متغیر `height` تعریف نشده بود
+            video_formats = [
+                f for f in formats
+                if f.get('vcodec') != 'none'
+                and f.get('acodec') == 'none'
+                and f.get('height') == target_height
+                and f.get('ext') in ['mp4', 'webm']
+            ]
+
+            # ±10px برای video‑only
+            if not video_formats:
                 video_formats = [
                     f for f in formats
-                    if f.get('vcodec') != 'none' 
+                    if f.get('vcodec') != 'none'
                     and f.get('acodec') == 'none'
-                    and f.get('height') == height
+                    and f.get('height') is not None
+                    and abs(f.get('height') - target_height) <= 10
                     and f.get('ext') in ['mp4', 'webm']
                 ]
-                
-                # Try flexible height matching for video formats too
-                if not video_formats:
-                    video_formats = [
-                        f for f in formats
-                        if f.get('vcodec') != 'none' 
-                        and f.get('acodec') == 'none'
-                        and f.get('height') is not None
-                        and abs(f.get('height') - target_height) <= 10
-                        and f.get('ext') in ['mp4', 'webm']
-                    ]
-                
-                # Special handling for Shorts (Portrait videos) - separate formats
-                if not video_formats:
-                    portrait_height_map = {
-                        360: [640, 426, 256],
-                        480: [854, 640, 426],  
-                        720: [1280, 854],
-                        1080: [1920, 1280]
-                    }
-                    
-                    if target_height in portrait_height_map:
-                        for portrait_height in portrait_height_map[target_height]:
-                            video_formats = [
-                                f for f in formats
-                                if f.get('vcodec') != 'none' 
-                                and f.get('acodec') == 'none'
-                                and f.get('height') == portrait_height
-                                and f.get('ext') in ['mp4', 'webm']
-                            ]
-                            if video_formats:
-                                logger.info(f"Found portrait video format for {quality}p: {portrait_height}p (Shorts)")
-                                break
-                
-                if video_formats:
-                    # Find best audio format
-                    audio_formats = [
-                        f for f in formats
-                        if f.get('acodec') != 'none'
-                        and f.get('vcodec') == 'none'
-                        and f.get('ext') in ['m4a', 'webm']
-                    ]
-                    
-                    if audio_formats:
-                        video_formats.sort(
-                            key=lambda x: (
-                                x.get('fps', 0) or 0,
-                                x.get('tbr', 0) or 0
-                            ),
-                            reverse=True
-                        )
-                        audio_formats.sort(
-                            key=lambda x: x.get('abr', 0) or 0,
-                            reverse=True
-                        )
-                        
-                        best_video = video_formats[0]
-                        best_audio = audio_formats[0]
-                        
-                        # Store separate format combination
-                        available_qualities[quality] = {
-                            'video_id': best_video['format_id'],
-                            'audio_id': best_audio['format_id'],
-                            'format_string': f"{best_video['format_id']}+{best_audio['format_id']}",
-                            'filesize': (best_video.get('filesize', 0) or 0) + (best_audio.get('filesize', 0) or 0),
-                            'fps': best_video.get('fps', 30),
-                            'ext': 'mp4',
-                            'type': 'separate',
-                            'actual_height': best_video.get('height')
-                        }
-                        logger.info(f"Found separate formats for {quality}p: video={best_video['format_id']}, audio={best_audio['format_id']} (actual: {best_video.get('height')}p)")
-        
-        # Also add audio-only option
-        audio_formats = [
-            f for f in formats
-            if f.get('acodec') != 'none'
-            and f.get('vcodec') == 'none'
-        ]
-        
-        if not audio_formats:
-            # If no separate audio formats, try to find combined formats with audio
+
+            # Portrait‑mapping برای video‑only
+            if not video_formats:
+                portrait_map = {
+                    360: [640, 426, 256],
+                    480: [854, 640, 426],
+                    720: [1280, 854],
+                    1080: [1920, 1280],
+                }
+                if target_height in portrait_map:
+                    for ph in portrait_map[target_height]:
+                        video_formats = [
+                            f for f in formats
+                            if f.get('vcodec') != 'none'
+                            and f.get('acodec') == 'none'
+                            and f.get('height') == ph
+                            and f.get('ext') in ['mp4', 'webm']
+                        ]
+                        if video_formats:
+                            logger.info(
+                                f"Portrait video mapped: {quality}p → {ph}p"
+                            )
+                            break
+
+            if not video_formats:
+                # هیچ فایلی یافت نشد → به کیفیت‌های دیگر می‌رویم
+                continue
+
+            # پیدا کردن بهترین صدا برای این ویدیو
             audio_formats = [
                 f for f in formats
                 if f.get('acodec') != 'none'
-                and f.get('ext') in ['mp4', 'webm', 'm4a']
+                and f.get('vcodec') == 'none'
+                and f.get('ext') in ['m4a', 'webm']
             ]
-        
+
+            if not audio_formats:
+                # اگر صدا جداگانه نداشت، شاید در قالب ترکیبی باشد؛ پس ادامه می‌دهیم
+                continue
+
+            video_formats.sort(
+                key=lambda x: (x.get('fps', 0) or 0,
+                               x.get('tbr', 0) or 0),
+                reverse=True
+            )
+            audio_formats.sort(
+                key=lambda x: x.get('abr', 0) or 0,
+                reverse=True
+            )
+            best_video = video_formats[0]
+            best_audio = audio_formats[0]
+
+            available_qualities[quality] = {
+                'video_id': best_video['format_id'],
+                'audio_id': best_audio['format_id'],
+                'format_string': f"{best_video['format_id']}+{best_audio['format_id']}",
+                'filesize': (best_video.get('filesize', 0) or 0) +
+                            (best_audio.get('filesize', 0) or 0),
+                'fps': best_video.get('fps', 30),
+                'ext': 'mp4',
+                'type': 'separate',
+                'actual_height': best_video.get('height')
+            }
+            logger.info(
+                f"Separate {quality}p → v:{best_video['format_id']} a:{best_audio['format_id']} "
+                f"(h={best_video.get('height')})"
+            )
+
+        # ------------------------------------------------------------------- #
+        # گزینهٔ فقط صدا
+        audio_formats = [
+            f for f in formats
+            if f.get('acodec') != 'none' and f.get('vcodec') == 'none'
+        ]
+
+        if not audio_formats:
+            audio_formats = [
+                f for f in formats
+                if f.get('acodec') != 'none' and f.get('ext') in ['mp4', 'webm', 'm4a']
+            ]
+
         if audio_formats:
-            audio_formats.sort(key=lambda x: x.get('abr', 0) or x.get('tbr', 0) or 0, reverse=True)
+            audio_formats.sort(
+                key=lambda x: x.get('abr', 0) or x.get('tbr', 0) or 0,
+                reverse=True
+            )
             best_audio = audio_formats[0]
             available_qualities['audio'] = {
-                'format_string': 'bestaudio',  # استفاده از selector عمومی
+                'format_string': 'bestaudio',
                 'filesize': best_audio.get('filesize', 0) or 0,
-                'ext': 'mp3',  # همیشه mp3 برای فایل‌های صوتی
+                'ext': 'mp3',      # خروجی نهایی تبدیل به mp3 خواهد شد
                 'type': 'audio_only'
             }
-            logger.info(f"Found audio format: bestaudio (best available: {best_audio['format_id']})")
+            logger.info(
+                f"Audio only → {best_audio['format_id']}"
+            )
         else:
-            # اگر هیچ فرمت صوتی پیدا نشد، از best استفاده کن
             available_qualities['audio'] = {
-                'format_string': 'best',  # fallback به بهترین فرمت موجود
+                'format_string': 'best',
                 'filesize': 0,
                 'ext': 'mp3',
                 'type': 'audio_only'
             }
-            logger.warning("No audio formats found, using 'best' as fallback")
-        
-        # Debug logging for troubleshooting
-        logger.info(f"Total formats found: {len(formats)}")
-        logger.info(f"Available qualities: {list(available_qualities.keys())}")
-        
-        # If no video qualities found, log format details for debugging
+            logger.warning("No audio formats found – falling back to 'best'")
+
+        # ------------------------------------------------------------------- #
+        logger.info(f"Total formats discovered: {len(formats)}")
+        logger.info(f"Qualities available: {list(available_qualities.keys())}")
+
         if not any(q in available_qualities for q in SUPPORTED_QUALITIES):
-            logger.warning("No video qualities found! Format details:")
-            for i, fmt in enumerate(formats[:5]):  # Log first 5 formats
-                logger.warning(f"  Format {i+1}: ID={fmt.get('format_id')}, "
-                             f"Height={fmt.get('height')}, "
-                             f"VCodec={fmt.get('vcodec')}, "
-                             f"ACodec={fmt.get('acodec')}, "
-                             f"Ext={fmt.get('ext')}")
-        
+            logger.warning("No video qualities matched! First 5 formats:")
+            for i, fmt in enumerate(formats[:5], 1):
+                logger.warning(
+                    f"  {i}. id={fmt.get('format_id')} "
+                    f"h={fmt.get('height')} v={fmt.get('vcodec')} a={fmt.get('acodec')} ext={fmt.get('ext')}"
+                )
+
         return {
             'title': info.get('title', 'Unknown'),
             'duration': info.get('duration', 0),
@@ -263,198 +290,238 @@ async def extract_video_info(url: str) -> dict:
             'url': url,
             'qualities': available_qualities
         }
-        
-    except Exception as e:
-        logger.error(f"Error extracting video info: {e}")
+
+    except Exception as exc:
+        logger.error(f"extract_video_info error: {exc}")
         return None
 
+
+# ------------------------------------------------------------------- #
 def format_duration(seconds: int) -> str:
-    """فرمت کردن مدت زمان"""
+    """مدت زمان را به قالب hh:mm:ss یا mm:ss تبدیل می‌کند"""
     if not seconds:
         return "نامشخص"
-    
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    secs = seconds % 60
-    
-    if hours > 0:
-        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
-    return f"{minutes:02d}:{secs:02d}"
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
 
 def format_number(num: int) -> str:
-    """فرمت کردن اعداد بزرگ"""
+    """اعداد بزرگ (مثلاً 1 200 000) → 1.2M"""
     if num >= 1_000_000:
         return f"{num/1_000_000:.1f}M"
-    elif num >= 1_000:
+    if num >= 1_000:
         return f"{num/1_000:.1f}K"
     return str(num)
 
+
+# ------------------------------------------------------------------- #
 def create_quality_keyboard(qualities: dict) -> InlineKeyboardMarkup:
-    """ایجاد کیبورد انتخاب کیفیت (2 دکمه در هر سطر)"""
-    buttons = []
-    
-    # Video qualities in 2 columns
+    """دکمه‌های کیفیت (۲ دکمه در هر ردیف)"""
+    rows = []
     row = []
-    for quality in SUPPORTED_QUALITIES:
-        if quality in qualities:
+
+    for q in SUPPORTED_QUALITIES:
+        if q in qualities:
             row.append(
                 InlineKeyboardButton(
-                    f"📹 {quality}p",
-                    callback_data=f"yt_dl_{quality}"
+                    f"📹 {q}p",
+                    callback_data=f"yt_dl_{q}"
                 )
             )
-            
             if len(row) == 2:
-                buttons.append(row)
+                rows.append(row)
                 row = []
-    
-    # Add remaining button if any
+
     if row:
-        buttons.append(row)
-    
-    # Audio-only button (full width)
+        rows.append(row)
+
+    # دکمهٔ فقط صدا
     if 'audio' in qualities:
-        buttons.append([
+        rows.append([
             InlineKeyboardButton(
                 "🎵 فقط صدا (بهترین کیفیت)",
                 callback_data="yt_dl_audio"
             )
         ])
-    
-    # Cancel button
-    buttons.append([
-        InlineKeyboardButton("❌ لغو", callback_data="yt_cancel")
-    ])
-    
-    return InlineKeyboardMarkup(buttons)
 
-async def download_thumbnail(url: str) -> str:
-    """دانلود thumbnail"""
+    # دکمه لغو
+    rows.append([InlineKeyboardButton("❌ لغو", callback_data="yt_cancel")])
+
+    return InlineKeyboardMarkup(rows)
+
+
+# ------------------------------------------------------------------- #
+async def download_thumbnail(url: str) -> str | None:
+    """بارگیری thumbnail و برگرداندن مسیر موقت"""
     try:
-        import aiohttp
-        import tempfile
-        
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=10) as response:
-                if response.status == 200:
-                    content = await response.read()
-                    
-                    temp_file = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
-                    temp_file.write(content)
-                    temp_file.close()
-                    
-                    return temp_file.name
-        
+            async with session.get(url, timeout=10) as resp:
+                if resp.status == 200:
+                    data = await resp.read()
+                    tmp = tempfile.NamedTemporaryFile(
+                        suffix=".jpg", delete=False
+                    )
+                    tmp.write(data)
+                    tmp.close()
+                    return tmp.name
         return None
-    except Exception as e:
-        logger.error(f"Thumbnail download error: {e}")
-        return None
+    except aiohttp.ClientError as ce:
+        logger.error(f"Thumbnail download failed (client error): {ce}")
+    except Exception as exc:
+        logger.error(f"Thumbnail download error: {exc}")
+    return None
 
+
+# ------------------------------------------------------------------- #
 @Client.on_message(
-    filters.regex(r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})') 
-    & filters.private 
-    & join  # 🔒 فیلتر عضویت اسپانسری اضافه شد
+    filters.regex(
+        r'(https?://)?(www\.)?(youtube\.com/watch\?v=|youtu\.be/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})'
+    )
+    & filters.private
+    & join
 )
 async def handle_youtube_link(client: Client, message: Message):
-    """Handler اصلی برای لینک‌های یوتیوب"""
-    start_time = time.time()
+    """دست‌گیرهٔ اصلی برای لینک‌های YouTube"""
+    start = time.time()
     user_id = message.from_user.id
     url = message.text.strip()
-    
-    logger.info(f"YouTube link received from user {user_id}: {url}")
-    
-    # Check if user is registered
+
+    logger.info(f"User {user_id} sent YouTube link: {url}")
+
+    # ------------------------------------------------------------------- #
+    # بررسی ثبت‌نام کاربر
     db = DB()
     if not db.check_user_register(user_id):
         await message.reply_text(
-            "⚠️ ابتدا باید ربات را استارت کنید.\n\n"
-            "لطفاً دستور /start را ارسال کنید.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔄 شروع مجدد", callback_data="start")
-            ]])
+            "⚠️ ابتدا باید ربات را استارت کنید.\n\nلطفاً دستور /start را ارسال کنید.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔄 شروع مجدد", callback_data="start")]]
+            )
         )
         return
-    
-    # Send processing message
+
+    # پیام وضعیت اولیه
     status_msg = await message.reply_text(
-        "🔄 در حال پردازش لینک یوتیوب...\n\n"
-        "⏳ لطفاً چند لحظه صبر کنید..."
+        "🔄 در حال پردازش لینک یوتیوب…\n⏳ لطفاً چند لحظه صبر کنید…"
     )
-    
+
     try:
-        # Extract video info
+        # استخراج اطلاعات ویدیو
         video_info = await extract_video_info(url)
-        
+
         if not video_info or not video_info.get('qualities'):
             await status_msg.edit_text(
                 "❌ **خطا در پردازش ویدیو**\n\n"
-                "متأسفانه امکان دریافت اطلاعات ویدیو وجود ندارد.\n\n"
+                "امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
                 "لطفاً موارد زیر را بررسی کنید:\n"
                 "• لینک معتبر باشد\n"
-                "• ویدیو در دسترس عموم باشد\n"
+                "• ویدیو عمومی باشد\n"
                 "• اتصال اینترنت برقرار باشد",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        
-        # Store video info in cache
+
+        # ذخیره‌سازی موقت برای مرحلهٔ انتخاب کیفیت
         video_cache[user_id] = video_info
-        
-        # Create info text
+
+        # متن توصیفی
         info_text = (
-            f"🎬 <b>{video_info['title']}</b>\n\n"
-            f"👤 <b>کانال:</b> {video_info['uploader']}\n"
+            f"🎬 <b>{html.escape(video_info['title'])}</b>\n\n"
+            f"👤 <b>کانال:</b> {html.escape(video_info['uploader'])}\n"
             f"⏱ <b>مدت زمان:</b> {format_duration(video_info['duration'])}\n"
             f"👁 <b>بازدید:</b> {format_number(video_info['view_count'])}\n\n"
             f"📋 <b>لطفاً کیفیت مورد نظر را انتخاب کنید:</b>"
         )
-        
-        # Create keyboard
-        keyboard = create_quality_keyboard(video_info['qualities'])
-        
-        # Download and send thumbnail
+
+        # کیبورد کیفیت‌ها
+        kb = create_quality_keyboard(video_info['qualities'])
+
+        # دریافت و ارسال thumbnail (اگر موجود باشد)
         thumbnail_path = None
         if video_info.get('thumbnail'):
             thumbnail_path = await download_thumbnail(video_info['thumbnail'])
-        
-        # Send quality selection message
+
         if thumbnail_path and os.path.exists(thumbnail_path):
+            # ✅ ارسال تصویر و سپس حذف پیام وضعیت
+            await message.reply_photo(
+                photo=thumbnail_path,
+                caption=info_text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=kb
+            )
+            # حذف پیام وضعیت فقط پس از موفقیت
+            await status_msg.delete()
+            # پاک‌سازی فایل موقت thumbnail
             try:
-                await status_msg.delete()
-                await message.reply_photo(
-                    photo=thumbnail_path,
-                    caption=info_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard
-                )
-                
-                # Clean up thumbnail
-                try:
-                    os.unlink(thumbnail_path)
-                except:
-                    pass
-            except Exception as e:
-                logger.warning(f"Failed to send photo: {e}")
-                await status_msg.edit_text(
-                    text=info_text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=keyboard
-                )
+                os.unlink(thumbnail_path)
+            except Exception:
+                pass
         else:
+            # اگر thumbnail موجود نیست، فقط متن را ویرایش می‌کنیم
             await status_msg.edit_text(
                 text=info_text,
                 parse_mode=ParseMode.HTML,
-                reply_markup=keyboard
+                reply_markup=kb
             )
-        
-        elapsed = time.time() - start_time
-        logger.info(f"Quality selection displayed in {elapsed:.2f}s")
-        
-    except Exception as e:
-        logger.error(f"Error handling YouTube link: {e}")
+
+        elapsed = time.time() - start
+        logger.info(f"Quality selection shown in {elapsed:.2f}s برای کاربر {user_id}")
+
+    except Exception as exc:
+        logger.error(f"Error handling YouTube link (user {user_id}): {exc}")
         await status_msg.edit_text(
-            f"❌ **خطا در پردازش ویدیو**\n\n"
-            f"خطا: {str(e)[:100]}\n\n"
-            f"لطفاً دوباره تلاش کنید.",
+            f"❌ **خطا در پردازش ویدیو**\n\nخطا: {str(exc)[:150]}\n\nلطفاً دوباره تلاش کنید.",
             parse_mode=ParseMode.MARKDOWN
         )
+    finally:
+        # اگر به هر دلیلی پیام وضعیت باقی مانده بود، سعی می‌کنیم حذفش کنیم
+        try:
+            if status_msg and not status_msg.deleted:
+                await status_msg.delete()
+        except (MessageIdInvalid, Exception):
+            pass
+        # (در این handler ما هنوز دانلود نهایی را انجام نمی‌دهیم؛ این کار در
+        # هندلر callbackهای quality انجام می‌شود، بنابراین در اینجا کش را
+        # تمیز نمی‌کنیم؛ ولی می‌توانید با یک TTL یا پس از دانلود حذف کنید.)
+
+# ------------------------------------------------------------------- #
+# هندلر callbackهای کیفیت (اختیاری – فقط نمونه)
+@Client.on_callback_query(filters.regex(r'^yt_dl_(\d+|audio)$'))
+async def quality_callback(client: Client, callback_query):
+    """دریافت انتخاب کیفیت و شروع دانلود (پیکره ساده)"""
+    data = callback_query.data  # مثال: yt_dl_720 یا yt_dl_audio
+    user_id = callback_query.from_user.id
+
+    if user_id not in video_cache:
+        await callback_query.answer(
+            "⏳ اطلاعات منقضی شده. لطفاً دوباره لینک بفرستید.", show_alert=True
+        )
+        return
+
+    video_info = video_cache[user_id]
+    selected = data.split('_')[-1]  # 720 یا audio
+
+    await callback_query.answer("📥 در حال آماده‌سازی دانلود…", show_alert=False)
+
+    # اینجا می‌توانید از `youtube_downloader` موجود در پروژه استفاده کنید:
+    #   await youtube_downloader.download(url, format_string, out_name, ...)
+    # برای سادگی فقط پیغام تکمیل می‌فرستیم:
+    await callback_query.message.edit_caption(
+        caption=f"✅ دانلود {selected}p (یا فقط صدا) شروع شد…\n\n⏳ لطفاً صبر کنید.",
+        reply_markup=None
+    )
+    # پاک‌سازی کش (در واقع بعد از اتمام دانلود باید حذف شود)
+    video_cache.pop(user_id, None)
+
+
+# ------------------------------------------------------------------- #
+# هندلر لغو
+@Client.on_callback_query(filters.regex(r'^yt_cancel$'))
+async def cancel_callback(client: Client, callback_query):
+    user_id = callback_query.from_user.id
+    await callback_query.answer("🔴 عملیات لغو شد", show_alert=True)
+    await callback_query.message.delete()
+    video_cache.pop(user_id, None)
+

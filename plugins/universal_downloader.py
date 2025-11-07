@@ -1,11 +1,21 @@
+# ✅ Removed duplicate import random
 import asyncio
 import http.client
 import json
 import os
 import re
 import random
+import logging
+import requests
+import time
+import subprocess
+import shutil
+from datetime import datetime as _dt
+from PIL import Image
 from pyrogram import Client
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto, InputMediaVideo
+from pyrogram.errors import FloodWait
+from config import BOT_TOKEN, RAPIDAPI_KEY
 from plugins.start import (
     SPOTIFY_REGEX, TIKTOK_REGEX, SOUNDCLOUD_REGEX,
     PINTEREST_REGEX, TWITTER_REGEX, THREADS_REGEX, FACEBOOK_REGEX,
@@ -18,18 +28,9 @@ from plugins.stream_utils import download_to_memory_stream, smart_upload_strateg
 from plugins.db_wrapper import DB
 from plugins import constant
 from plugins.caption_builder import build_caption
-from datetime import datetime as _dt
-import logging
-import requests
-import time
-from PIL import Image
-import subprocess
-from config import BOT_TOKEN, RAPIDAPI_KEY
 from plugins.concurrency import acquire_slot, release_slot, get_queue_stats, reserve_user, release_user, get_user_active
-from pyrogram.errors import FloodWait
 from plugins.admin import ADMIN
 from plugins.circuit_breaker import get_instagram_breaker, CircuitBreakerOpenError
-import random
 
 # Configure Universal Downloader logger
 os.makedirs('./logs', exist_ok=True)
@@ -44,6 +45,11 @@ universal_logger.addHandler(universal_handler)
 # Use the same database system as Instagram handler
 txt = constant.TEXT
 
+# ✅ Single thread-pool executor for all API calls (reused, not recreated)
+# محدود کردن به 6 worker برای جلوگیری از اجرای موازی بیش‌ازحد
+import concurrent.futures
+_global_executor = concurrent.futures.ThreadPoolExecutor(max_workers=6, thread_name_prefix="api_worker")
+
 # Simple helper to log to file and console
 def _log(msg: str):
     try:
@@ -55,6 +61,7 @@ def _log(msg: str):
     except Exception:
         pass
 
+# ✅ Single robust implementation with error handling
 def _with_jitter(delay: float, factor: float = 0.2) -> float:
     """
     اضافه کردن jitter تصادفی به delay برای جلوگیری از thundering herd
@@ -66,17 +73,13 @@ def _with_jitter(delay: float, factor: float = 0.2) -> float:
     Returns:
         delay با jitter اضافه شده
     """
-    if delay <= 0:
-        return 0
-    jitter = random.uniform(0, delay * factor)
-    return delay + jitter
-
-# Jitter helper
-def _with_jitter(delay: float, factor: float = 0.2) -> float:
     try:
-        return delay + random.uniform(0, delay * factor)
+        if delay <= 0:
+            return 0
+        jitter = random.uniform(0, delay * factor)
+        return delay + jitter
     except Exception:
-        return delay
+        return delay if delay > 0 else 0
 
 # Telegram retry delay helper
 def _telegram_retry_delay(err: Exception, base: float = 1.0) -> float:
@@ -352,8 +355,6 @@ async def get_universal_data_from_api(url):
 
 def _api_request_sync(url):
     """Synchronous API request wrapped for async execution"""
-    import concurrent.futures
-    
     def _make_request():
         try:
             # افزایش timeout برای Instagram
@@ -380,15 +381,13 @@ def _api_request_sync(url):
             universal_logger.error(f"API request failed for URL {url}: {e}")
             return {"error": True, "message": f"network error: {str(e)}", "data": {}}
     
-    # Run in thread pool to avoid blocking
+    # ✅ Use global executor instead of creating new one each time
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        return loop.run_in_executor(executor, _make_request)
+    return loop.run_in_executor(_global_executor, _make_request)
 
 def _extract_video_metadata(video_path: str):
     """Extract basic metadata and a small thumbnail for Telegram.
     Uses ffprobe/ffmpeg when available; keeps lightweight and skips for large files."""
-    import shutil
     try:
         if not video_path or not os.path.exists(video_path):
             return {'width': 0, 'height': 0, 'duration': 0, 'thumbnail': None}
@@ -484,10 +483,10 @@ def _progress_callback(current, total):
     try:
         # Only log at specific thresholds to reduce overhead
         if current == total:  # 100% completion
-            univ_logger.info(f"Upload completed: {current} bytes")
+            universal_logger.info(f"Upload completed: {current} bytes")  # ✅ Fixed wrong logger name
         elif current > 0 and (current * 10) % total == 0:  # Every 10% without float division
             percentage = (current * 100) // total
-            univ_logger.info(f"Upload progress: {percentage}% ({current}/{total} bytes)")
+            universal_logger.info(f"Upload progress: {percentage}% ({current}/{total} bytes)")  # ✅ Fixed wrong logger name
     except Exception:
         pass
 
@@ -505,8 +504,6 @@ async def _fetch_og_media(url: str):
 
 def _og_request_sync(url: str):
     """Synchronous OG request wrapped for async execution"""
-    import concurrent.futures
-    
     def _make_og_request():
         try:
             headers = {
@@ -515,14 +512,13 @@ def _og_request_sync(url: str):
             }
             resp = requests.get(url, headers=headers, timeout=3.5, allow_redirects=True)
             html = resp.text
-            # Try og:video first
-            import re as _re
-            vid = _re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+            # Try og:video first (استفاده از re که در بالا import شده)
+            vid = re.search(r'<meta[^>]*property=["\"]og:video["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)
             if vid:
                 vurl = vid.group(1)
                 ext = 'mp4' if '.mp4' in vurl else 'mp4'
                 return { 'url': vurl, 'extension': ext, 'type': 'video', 'quality': 'unknown', 'title': None, 'author': None, 'duration': 'Unknown' }
-            img = _re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=_re.IGNORECASE)
+            img = re.search(r'<meta[^>]*property=["\"]og:image["\"][^>]*content=["\"]([^"\"]+)["\"]', html, flags=re.IGNORECASE)
             if img:
                 iurl = img.group(1)
                 # Prefer original image if Pinterest provides srcset
@@ -537,13 +533,18 @@ def _og_request_sync(url: str):
             universal_logger.warning(f"OG request failed: {e}")
             return None
     
-    # Run in thread pool to avoid blocking
+    # ✅ Use global executor instead of creating new one each time
     loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        return loop.run_in_executor(executor, _make_og_request)
+    return loop.run_in_executor(_global_executor, _make_og_request)
 
 async def handle_universal_link(client: Client, message: Message, is_retry: bool = False):
     """Handle downloads for Spotify, TikTok, and SoundCloud links"""
+    # ✅ Initialize resource tracking variables at the start
+    slot_acquired = False
+    user_reserved = False
+    status_msg = None
+    user_id = None
+    
     try:
         t0 = time.perf_counter()
         _log("[UNIV] Start processing message")
@@ -1441,7 +1442,8 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             
             # For video files larger than 50MB, don't fallback to document
             # Instead, try to send as video with streaming support using smart strategy
-            if (media_type == "video" or file_extension.lower() in video_exts) and file_size_mb > 50:
+            # ✅ فقط برای دانلودهای تک‌فایلی (نه آلبوم) - جلوگیری از NameError
+            if not is_album and (media_type == "video" or file_extension.lower() in video_exts) and file_size_mb > 50:
                 try:
                     # Use smart upload strategy for large video files
                     success = await smart_upload_strategy(
@@ -1559,27 +1561,6 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
     except Exception as e:
         error_msg = str(e)
         print(f"Universal download error: {error_msg}")
-        try:
-            if 'slot_acquired' in locals() and slot_acquired:
-                release_slot()
-                slot_acquired = False
-        except Exception:
-            pass
-        
-        # Release per-user reservation on error
-        try:
-            if 'user_reserved' in locals() and user_reserved:
-                release_user(user_id)
-                user_reserved = False
-        except Exception:
-            pass
-        
-        # Clean up status message if it still exists
-        try:
-            if 'status_msg' in locals() and status_msg is not None:
-                await status_msg.delete()
-        except Exception:
-            pass
         
         try:
             if "API Error" in error_msg:
@@ -1589,6 +1570,29 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             else:
                 await message.reply_text(f"❌ خطا در پردازش لینک {platform}: {error_msg}")
         except:
+            pass
+    
+    finally:
+        # ✅ Ensure slots and user reservations are always released
+        # آزادسازی slot
+        try:
+            if slot_acquired:
+                release_slot()
+        except Exception as exc:
+            universal_logger.debug(f"Failed to release slot: {exc}")
+        
+        # آزادسازی رزرو کاربر
+        try:
+            if user_reserved and user_id:
+                release_user(user_id)
+        except Exception as exc:
+            universal_logger.debug(f"Failed to release user reservation: {exc}")
+        
+        # حذف پیام وضعیت در صورت باقی ماندن
+        try:
+            if status_msg and not is_retry:
+                await status_msg.delete()
+        except Exception:
             pass
 
 

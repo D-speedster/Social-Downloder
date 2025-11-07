@@ -88,7 +88,8 @@ class ManualRecovery:
                 }
             
             # فیلتر بر اساس زمان (با timezone UTC)
-            cutoff_time = datetime.now(pytz.UTC) - timedelta(minutes=minutes)
+            # 🔥 استفاده از utcnow() به جای now(pytz.UTC) برای دقت بیشتر
+            cutoff_time = datetime.utcnow().replace(tzinfo=pytz.UTC) - timedelta(minutes=minutes)
             filtered_updates = self._filter_by_time(updates, cutoff_time)
             
             # 🔥 Debug: لاگ کردن اطلاعات
@@ -234,8 +235,11 @@ class ManualRecovery:
             return []
     
     def _filter_by_time(self, updates: List[Dict], cutoff_time: datetime) -> List[Dict]:
-        """فیلتر updates بر اساس زمان"""
+        """فیلتر updates بر اساس زمان - با استفاده از Unix timestamp"""
         filtered = []
+        
+        # تبدیل cutoff_time به Unix timestamp
+        cutoff_timestamp = int(cutoff_time.timestamp())
         
         for update in updates:
             try:
@@ -251,12 +255,10 @@ class ManualRecovery:
                     user_id = update['callback_query'].get('from', {}).get('id')
                 
                 if timestamp:
-                    # تبدیل timestamp به UTC
-                    update_time = datetime.fromtimestamp(timestamp, tz=pytz.UTC)
-                    # 🔥 Debug: لاگ کردن هر update
-                    logger.info(f"Update from user {user_id}: time={update_time.strftime('%H:%M:%S')}, cutoff={cutoff_time.strftime('%H:%M:%S')}, included={update_time >= cutoff_time}")
+                    # 🔥 مقایسه مستقیم Unix timestamps (بدون timezone)
+                    logger.info(f"Update from user {user_id}: timestamp={timestamp}, cutoff={cutoff_timestamp}, diff={(timestamp - cutoff_timestamp)/60:.1f} min, included={timestamp >= cutoff_timestamp}")
                     
-                    if update_time >= cutoff_time:
+                    if timestamp >= cutoff_timestamp:
                         filtered.append(update)
             except Exception as e:
                 logger.warning(f"Error filtering update: {e}")
