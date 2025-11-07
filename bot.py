@@ -134,6 +134,50 @@ def check_and_stop_old_instances():
     except Exception as e:
         logger.warning(f"⚠️ خطا در بررسی پروسس‌ها: {e}")
 
+# 🔥 بررسی تغییر توکن و پاکسازی session
+def check_token_change():
+    """بررسی تغییر توکن و پاکسازی session در صورت نیاز"""
+    import glob
+    import hashlib
+    
+    logger.info("🔑 بررسی تغییر توکن...")
+    
+    try:
+        # محاسبه hash توکن فعلی
+        current_token_hash = hashlib.md5(BOT_TOKEN.encode()).hexdigest()
+        token_cache_file = ".token_cache"
+        
+        # بررسی توکن قبلی
+        if os.path.exists(token_cache_file):
+            with open(token_cache_file, 'r') as f:
+                old_token_hash = f.read().strip()
+            
+            if old_token_hash != current_token_hash:
+                logger.warning("⚠️ توکن ربات تغییر کرده است!")
+                logger.info("🧹 در حال پاکسازی session های قدیمی...")
+                
+                # حذف تمام session ها
+                session_files = glob.glob("*.session*")
+                for session_file in session_files:
+                    try:
+                        os.remove(session_file)
+                        logger.info(f"✅ حذف شد: {session_file}")
+                    except Exception as e:
+                        logger.error(f"❌ خطا در حذف {session_file}: {e}")
+                
+                logger.info("✅ تمام session های قدیمی پاک شدند")
+            else:
+                logger.info("✅ توکن تغییری نکرده است")
+        else:
+            logger.info("ℹ️ اولین اجرا - ذخیره توکن")
+        
+        # ذخیره hash توکن جدید
+        with open(token_cache_file, 'w') as f:
+            f.write(current_token_hash)
+        
+    except Exception as e:
+        logger.warning(f"⚠️ خطا در بررسی تغییر توکن: {e}")
+
 # 🔥 پاکسازی خودکار session های قفل شده
 def cleanup_locked_sessions():
     """پاکسازی فایل‌های session قفل شده قبل از شروع"""
@@ -178,6 +222,7 @@ logger.info("=" * 70)
 logger.info("🔍 بررسی و پاکسازی قبل از شروع")
 logger.info("=" * 70)
 check_and_stop_old_instances()
+check_token_change()  # بررسی تغییر توکن
 cleanup_locked_sessions()
 logger.info("=" * 70)
 
