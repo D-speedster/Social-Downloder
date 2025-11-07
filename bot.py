@@ -270,32 +270,35 @@ async def main():
             # Start Cookie Validator Service
             try:
                 from plugins.admin import ADMIN
+                logger.info("🔄 در حال راه‌اندازی Cookie Validator...")
                 await start_cookie_validator(client, ADMIN)
                 logger.info("Cookie Validator service started")
                 logger.info("🍪 سرویس بررسی کوکی راه‌اندازی شد")
             except Exception as e:
-                logger.error(f"Failed to start Cookie Validator: {e}")
+                logger.error(f"Failed to start Cookie Validator: {e}", exc_info=True)
             
             # 🔥 Start Health Monitor
             try:
                 from plugins.admin import ADMIN
+                logger.info("🔄 در حال راه‌اندازی Health Monitor...")
                 task = asyncio.create_task(start_health_monitor(client, ADMIN))
                 background_tasks.append(task)
                 logger.info("Health Monitor started")
                 logger.info("🏥 سیستم نظارت سلامت راه‌اندازی شد")
             except Exception as e:
-                logger.warning(f"Could not start health monitor: {e}")
+                logger.warning(f"Could not start health monitor: {e}", exc_info=True)
             
             # 🧠 Start Memory Monitor
             try:
                 from plugins.admin import ADMIN
                 from plugins.memory_monitor import start_memory_monitor
+                logger.info("🔄 در حال راه‌اندازی Memory Monitor...")
                 task = asyncio.create_task(start_memory_monitor(client, ADMIN))
                 background_tasks.append(task)
                 logger.info("Memory Monitor started")
                 logger.info("🧠 سیستم نظارت حافظه راه‌اندازی شد")
             except Exception as e:
-                logger.warning(f"Could not start memory monitor: {e}")
+                logger.warning(f"Could not start memory monitor: {e}", exc_info=True)
             
             logger.info("Bot started successfully")
             logger.info("✅ ربات با موفقیت راه‌اندازی شد!")
@@ -306,8 +309,11 @@ async def main():
             logger.info(f"   • Chunk Size: 2MB")
             logger.info("=" * 70)
             logger.info("🔄 ربات در حال اجرا است... (Ctrl+C برای توقف)")
+            logger.info("⏳ در حال ورود به حالت idle...")
             
             await idle()
+            
+            logger.info("⚠️ idle() تمام شد - این نباید اتفاق بیفتد!")
         
     except KeyboardInterrupt:
         logger.info("\n⏹️ ربات توسط کاربر متوقف شد")
