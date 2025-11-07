@@ -8,9 +8,9 @@
 import requests
 import asyncio
 import time
-import pytz
+import re
 from typing import List, Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from plugins.logger_config import get_logger
 from plugins.sqlite_db_wrapper import DB
 
@@ -27,6 +27,7 @@ class ManualRecovery:
         self.bot_token = bot_token
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
         self.is_processing = False
+        self._lock = asyncio.Lock()  # Fix #1: Thread-safe state management
         logger.info("Manual Recovery System initialized")
     
     async def recover_by_minutes(self, client, minutes: int, admin_id: int) -> Dict:
@@ -41,20 +42,29 @@ class ManualRecovery:
         Returns:
             Dict با آمار بازیابی
         """
-        if self.is_processing:
-            return {
-                'success': False,
-                'message': 'یک فرآیند بازیابی در حال اجرا است'
-            }
-        
-        self.is_processing = True
+        # Fix #1: Use async lock for thread-safe state management
+        async with self._lock:
+            if self.is_processing:
+                return {
+                    'success': False,
+                    'message': 'یک فرآیند بازیابی در حال اجرا است',
+                    'total': 0,
+                    'processed': 0,
+                    'notified': 0
+                }
+            
+            self.is_processing = True
         
         try:
-            # اعتبارسنجی
+            # اعتبارسنجی - Fix: Return complete dict structure
             if minutes < 1 or minutes > 1440:
                 return {
                     'success': False,
-                    'message': 'تعداد دقیقه باید بین 1 تا 1440 باشد'
+                    'message': 'تعداد دقیقه باید بین 1 تا 1440 باشد',
+                    'total': 0,
+                    'processed': 0,
+                    'notified': 0,
+                    'in_timeframe': 0
                 }
             
             logger.info(f"🔄 Starting manual recovery for last {minutes} minutes")
@@ -71,8 +81,8 @@ class ManualRecovery:
             db = DB()
             last_update_id = db.get_last_update_id()
             
-            # 🔥 برای manual recovery، همیشه از 0 شروع کن تا همه رو ببینی
-            updates = await self._fetch_all_updates(0)  # از 0 شروع کن، نه last_update_id
+            # Fix #2 & #3: Use last_update_id and implement pagination
+            updates = await self._fetch_all_updates(last_update_id)
             
             if not updates:
                 await client.send_message(
@@ -84,17 +94,18 @@ class ManualRecovery:
                     'success': True,
                     'total': 0,
                     'processed': 0,
-                    'notified': 0
+                    'notified': 0,
+                    'in_timeframe': 0
                 }
             
             # فیلتر بر اساس زمان (با timezone UTC)
-            # 🔥 استفاده از utcnow() به جای now(pytz.UTC) برای دقت بیشتر
-            cutoff_time = datetime.utcnow().replace(tzinfo=pytz.UTC) - timedelta(minutes=minutes)
+            # Fix #17: Use datetime.now(timezone.utc) instead of pytz
+            cutoff_time = datetime.now(timezone.utc) - timedelta(minutes=minutes)
             filtered_updates = self._filter_by_time(updates, cutoff_time)
             
-            # 🔥 Debug: لاگ کردن اطلاعات
-            logger.info(f"Total updates: {len(updates)}")
-            logger.info(f"Cutoff time: {cutoff_time}")
+            # Fix #5 & #20: Reduce excessive logging
+            logger.debug(f"Total updates: {len(updates)}")
+            logger.debug(f"Cutoff time: {cutoff_time}")
             logger.info(f"Filtered updates: {len(filtered_updates)}")
             
             if not filtered_updates:
@@ -113,7 +124,8 @@ class ManualRecovery:
                                 timestamp = update['callback_query']['message'].get('date')
                             
                             if timestamp:
-                                update_time = datetime.fromtimestamp(timestamp, tz=pytz.UTC)
+                                # Fix #1: Use timezone.utc instead of pytz.UTC
+                                update_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
                                 if first_time is None:
                                     first_time = update_time
                                 last_time = update_time
@@ -139,7 +151,8 @@ class ManualRecovery:
                     'success': True,
                     'total': len(updates),
                     'processed': 0,
-                    'notified': 0
+                    'notified': 0,
+                    'in_timeframe': 0
                 }
             
             # پردازش updates
@@ -193,49 +206,85 @@ class ManualRecovery:
             except:
                 pass
             
+            # Fix #12: Return complete dict structure on error
             return {
                 'success': False,
-                'message': str(e)
+                'message': str(e),
+                'total': 0,
+                'processed': 0,
+                'notified': 0,
+                'in_timeframe': 0
             }
         
         finally:
             self.is_processing = False
     
     async def _fetch_all_updates(self, last_update_id: int) -> List[Dict]:
-        """دریافت تمام updates موجود"""
+        """
+        دریافت تمام updates موجود با pagination
+        Fix #2: Implement proper pagination to avoid missing messages
+        """
+        all_updates = []
+        # Fix #2: Handle None value for last_update_id
+        offset = (last_update_id or 0) + 1
+        max_iterations = 50  # Safety limit to prevent infinite loops
+        
         try:
-            url = f"{self.base_url}/getUpdates"
-            params = {
-                'offset': last_update_id + 1,
-                'timeout': 0,
-                'limit': 100,
-                'allowed_updates': ['message', 'callback_query']
-            }
+            for _ in range(max_iterations):
+                url = f"{self.base_url}/getUpdates"
+                params = {
+                    'offset': offset,
+                    'timeout': 0,
+                    'limit': 100,
+                    'allowed_updates': ['message', 'callback_query']
+                }
+                
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: requests.get(url, params=params, timeout=10)
+                )
+                
+                if response.status_code != 200:
+                    logger.error(f"Failed to fetch updates: HTTP {response.status_code}")
+                    break
+                
+                data = response.json()
+                
+                if not data.get('ok'):
+                    logger.error(f"Telegram API error: {data.get('description')}")
+                    break
+                
+                result = data.get('result', [])
+                
+                if not result:
+                    break
+                
+                all_updates.extend(result)
+                
+                # If we got less than limit, we've reached the end
+                if len(result) < 100:
+                    break
+                
+                # Update offset for next iteration
+                offset = result[-1]['update_id'] + 1
+                
+                # Small delay to avoid rate limiting
+                await asyncio.sleep(0.1)
             
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.get(url, params=params, timeout=10)
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"Failed to fetch updates: HTTP {response.status_code}")
-                return []
-            
-            data = response.json()
-            
-            if not data.get('ok'):
-                logger.error(f"Telegram API error: {data.get('description')}")
-                return []
-            
-            return data.get('result', [])
+            logger.info(f"Fetched {len(all_updates)} total updates with pagination")
+            return all_updates
             
         except Exception as e:
             logger.error(f"Error fetching updates: {e}")
-            return []
+            return all_updates  # Return what we have so far
     
     def _filter_by_time(self, updates: List[Dict], cutoff_time: datetime) -> List[Dict]:
-        """فیلتر updates بر اساس زمان - با استفاده از Unix timestamp"""
+        """
+        فیلتر updates بر اساس زمان - با استفاده از Unix timestamp
+        Fix #4: Correct timestamp extraction for callback_query
+        Fix #5: Reduce excessive logging
+        """
         filtered = []
         
         # تبدیل cutoff_time به Unix timestamp
@@ -251,12 +300,15 @@ class ManualRecovery:
                     timestamp = update['message'].get('date')
                     user_id = update['message'].get('from', {}).get('id')
                 elif 'callback_query' in update:
-                    timestamp = update['callback_query']['message'].get('date')
+                    # Fix #4: Use callback_query date first, fallback to message date
+                    timestamp = update['callback_query'].get('date')
+                    if not timestamp:
+                        timestamp = update['callback_query'].get('message', {}).get('date')
                     user_id = update['callback_query'].get('from', {}).get('id')
                 
                 if timestamp:
-                    # 🔥 مقایسه مستقیم Unix timestamps (بدون timezone)
-                    logger.info(f"Update from user {user_id}: timestamp={timestamp}, cutoff={cutoff_timestamp}, diff={(timestamp - cutoff_timestamp)/60:.1f} min, included={timestamp >= cutoff_timestamp}")
+                    # Fix #5: Use debug level for per-update logging
+                    logger.debug(f"Update from user {user_id}: timestamp={timestamp}, cutoff={cutoff_timestamp}, diff={(timestamp - cutoff_timestamp)/60:.1f} min, included={timestamp >= cutoff_timestamp}")
                     
                     if timestamp >= cutoff_timestamp:
                         filtered.append(update)
@@ -267,21 +319,39 @@ class ManualRecovery:
         return filtered
     
     async def _process_updates(self, client, updates: List[Dict], admin_id: int) -> Dict:
-        """پردازش updates و اطلاع‌رسانی به کاربران"""
+        """
+        پردازش updates و اطلاع‌رسانی به کاربران
+        Fix #6: Edit single progress message instead of sending multiple
+        Fix #7: Handle FloodWait properly
+        """
+        from pyrogram.errors import FloodWait
+        
         processed = 0
         notified = 0
-        
         total = len(updates)
+        
+        # Fix #6: Send initial progress message and edit it
+        progress_msg = None
+        try:
+            progress_msg = await client.send_message(
+                admin_id,
+                f"⏳ در حال پردازش... 0/{total}"
+            )
+        except:
+            pass
+        
+        last_update_time = time.time()
         
         for idx, update in enumerate(updates):
             try:
-                # گزارش پیشرفت هر 10 پیام
-                if (idx + 1) % 10 == 0:
+                # Fix #6: Update progress message every 10 updates or every 10 seconds
+                if progress_msg and ((idx + 1) % 10 == 0 or time.time() - last_update_time > 10):
                     try:
-                        await client.send_message(
-                            admin_id,
-                            f"⏳ در حال پردازش... {idx + 1}/{total}"
+                        await progress_msg.edit_text(
+                            f"⏳ در حال پردازش... {idx + 1}/{total}\n"
+                            f"✅ اطلاع‌رسانی شده: {notified}"
                         )
+                        last_update_time = time.time()
                     except:
                         pass
                 
@@ -299,12 +369,29 @@ class ManualRecovery:
                         notified += 1
                     processed += 1
                 
-                # تأخیر کوچک برای جلوگیری از FloodWait
-                await asyncio.sleep(0.2)
+                # Fix #7 & #9: Normal delay (will be skipped if FloodWait occurs)
+                await asyncio.sleep(0.3)
                 
+            except FloodWait as e:
+                # Fix #7 & #9: Handle FloodWait properly without double delay
+                logger.warning(f"FloodWait: sleeping for {e.value} seconds")
+                await asyncio.sleep(e.value)
+                # Continue to next iteration without the normal 0.3s delay
+                continue
             except Exception as e:
                 logger.error(f"Error processing update: {e}")
                 continue
+        
+        # Final progress update
+        if progress_msg:
+            try:
+                await progress_msg.edit_text(
+                    f"✅ پردازش کامل شد!\n"
+                    f"📊 کل: {total}\n"
+                    f"✉️ اطلاع‌رسانی شده: {notified}"
+                )
+            except:
+                pass
         
         return {
             'processed': processed,
@@ -312,7 +399,14 @@ class ManualRecovery:
         }
     
     async def _process_message(self, client, message_data: Dict) -> bool:
-        """پردازش یک message"""
+        """
+        پردازش یک message
+        Fix #8: Use regex for URL detection
+        Fix #9: Handle reply errors gracefully
+        """
+        import re
+        from pyrogram.errors import MessageIdInvalid, BadRequest
+        
         try:
             user_id = message_data.get('from', {}).get('id')
             chat_id = message_data.get('chat', {}).get('id')
@@ -322,8 +416,8 @@ class ManualRecovery:
             if not user_id or not chat_id:
                 return False
             
-            # 🔥 Debug: لاگ کردن هر پیام
-            logger.info(f"Processing message from user {user_id}: {text[:50] if text else 'no text'}")
+            # Fix #5: Reduce logging
+            logger.debug(f"Processing message from user {user_id}: {text[:50] if text else 'no text'}")
             
             # ✅ بررسی دستور /start
             if text.strip() == '/start':
@@ -346,29 +440,52 @@ class ManualRecovery:
                 logger.debug(f"Skipping old command from user {user_id}")
                 return False
             
-            # اطلاع‌رسانی به کاربر
-            if any(keyword in text.lower() for keyword in ['http', 'youtu', 'insta', 'spotify', 'tiktok']):
-                # لینک است
-                await client.send_message(
-                    chat_id=chat_id,
-                    text=f"⚠️ **پیام شما دریافت شد**\n\n"
-                         f"متأسفانه ربات موقتاً آفلاین بود.\n\n"
-                         f"🔄 **لطفاً لینک خود را دوباره ارسال کنید:**\n"
-                         f"`{text[:100]}`\n\n"
-                         f"💡 ربات اکنون آنلاین است.",
-                    reply_to_message_id=message_id
-                )
-            else:
-                # پیام عادی
-                await client.send_message(
-                    chat_id=chat_id,
-                    text=f"⚠️ **پیام شما دریافت شد**\n\n"
-                         f"ربات موقتاً آفلاین بود.\n"
-                         f"اکنون آنلاین است و آماده دریافت درخواست‌های شماست. 🚀",
-                    reply_to_message_id=message_id
-                )
+            # Fix #8: Use regex for proper URL detection
+            has_url = bool(re.search(r'https?://\S+', text))
             
-            logger.info(f"Notified user {user_id} about missed message")
+            # اطلاع‌رسانی به کاربر
+            try:
+                if has_url:
+                    # لینک است
+                    await client.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ **پیام شما دریافت شد**\n\n"
+                             f"متأسفانه ربات موقتاً آفلاین بود.\n\n"
+                             f"🔄 **لطفاً لینک خود را دوباره ارسال کنید:**\n"
+                             f"`{text[:100]}`\n\n"
+                             f"💡 ربات اکنون آنلاین است.",
+                        reply_to_message_id=message_id
+                    )
+                else:
+                    # پیام عادی
+                    await client.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ **پیام شما دریافت شد**\n\n"
+                             f"ربات موقتاً آفلاین بود.\n"
+                             f"اکنون آنلاین است و آماده دریافت درخواست‌های شماست. 🚀",
+                        reply_to_message_id=message_id
+                    )
+            except (MessageIdInvalid, BadRequest) as e:
+                # Fix #9: If reply fails, send without reply_to
+                logger.warning(f"Reply failed for message {message_id}, sending without reply: {e}")
+                if has_url:
+                    await client.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ **پیام شما دریافت شد**\n\n"
+                             f"متأسفانه ربات موقتاً آفلاین بود.\n\n"
+                             f"🔄 **لطفاً لینک خود را دوباره ارسال کنید:**\n"
+                             f"`{text[:100]}`\n\n"
+                             f"💡 ربات اکنون آنلاین است."
+                    )
+                else:
+                    await client.send_message(
+                        chat_id=chat_id,
+                        text=f"⚠️ **پیام شما دریافت شد**\n\n"
+                             f"ربات موقتاً آفلاین بود.\n"
+                             f"اکنون آنلاین است و آماده دریافت درخواست‌های شماست. 🚀"
+                    )
+            
+            logger.debug(f"Notified user {user_id} about missed message")
             return True
             
         except Exception as e:
@@ -399,15 +516,20 @@ class ManualRecovery:
             return False
 
 
-# 🔥 Global instance
+# Global instance
 _manual_recovery: Optional[ManualRecovery] = None
+_instance_lock = asyncio.Lock()
 
 
-def get_manual_recovery(bot_token: str = None) -> Optional[ManualRecovery]:
-    """دریافت instance سیستم بازیابی دستی"""
+async def get_manual_recovery(bot_token: str = None) -> Optional[ManualRecovery]:
+    """
+    دریافت instance سیستم بازیابی دستی
+    Fix #16: Thread-safe singleton creation
+    """
     global _manual_recovery
-    if _manual_recovery is None and bot_token:
-        _manual_recovery = ManualRecovery(bot_token)
+    async with _instance_lock:
+        if _manual_recovery is None and bot_token:
+            _manual_recovery = ManualRecovery(bot_token)
     return _manual_recovery
 
 
@@ -424,13 +546,17 @@ async def manual_recover_messages(client, bot_token: str, minutes: int, admin_id
     Returns:
         Dict با نتیجه
     """
-    recovery = get_manual_recovery(bot_token)
+    recovery = await get_manual_recovery(bot_token)
     if recovery:
         return await recovery.recover_by_minutes(client, minutes, admin_id)
-    return {'success': False, 'message': 'Recovery system not initialized'}
+    return {
+        'success': False, 
+        'message': 'Recovery system not initialized',
+        'total': 0,
+        'processed': 0,
+        'notified': 0
+    }
 
 
-print("✅ Manual Recovery System ready")
-print("   - Admin controlled")
-print("   - Time-based filtering (1-1440 minutes)")
-print("   - Progress reporting")
+# Fix #15: Remove duplicate print statements
+logger.info("✅ Manual Recovery System ready - Admin controlled, Time-based filtering (1-1440 minutes)")

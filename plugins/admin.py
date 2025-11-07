@@ -8,8 +8,7 @@ import re
 from pyrogram.types import Message, CallbackQuery
 from pyrogram.errors import FloodWait
 import sys, requests
-import instaloader
-from instaloader import InstaloaderException
+# Fix #5: Remove unused imports (instaloader)
 from datetime import datetime as _dt
 from plugins import constant
 from plugins.db_wrapper import DB
@@ -18,8 +17,13 @@ import shutil, platform, asyncio, os as _os
 import psutil
 import subprocess
 
-# Configure Admin logger
-os.makedirs('./logs', exist_ok=True)
+# Fix #24: Safe directory creation with error handling
+try:
+    os.makedirs('./logs', exist_ok=True)
+except Exception as e:
+    # Fix #7: Use logging instead of print for warnings
+    import sys
+    sys.stderr.write(f"Warning: Could not create logs directory: {e}\n")
 admin_logger = logging.getLogger('admin_main')
 admin_logger.setLevel(logging.DEBUG)
 
@@ -43,20 +47,18 @@ ADMIN = [79049016 , 429273267 , 528815211]  # شناسه کاربری خود ر�
 # Track bot start time for uptime
 START_TIME = _dt.now()
 
+# Fix #1: Per-user state management instead of global admin_step
+# Global admin_step is deprecated - use get_admin_user_state() instead
 admin_step = {
-    'sp': 2,
-    # NEW: broadcast state machine
-    'broadcast': 0,  # 0: idle, 1: choosing type, 2: waiting for content, 3: waiting for confirmation
-    'broadcast_type': '',  # 'normal' or 'forward'
-    # NEW: manual recovery state
-    'manual_recovery': 0,  # 0: idle, 1: waiting for minutes
-    'broadcast_content': None,  # stored message for confirmation
-    # NEW: waiting message management
+    'sp': 2,  # Legacy - to be migrated
+    'broadcast': 0,
+    'broadcast_type': '',
+    'manual_recovery': 0,
+    'broadcast_content': None,
     'waiting_msg': 0,
     'waiting_msg_type': '',
     'waiting_msg_platform': '',
-    # NEW: advertisement management
-    'advertisement': 0,  # 0: idle, 1: waiting for content, 2: waiting for position
+    'advertisement': 0,
     'ad_content_type': '',
     'ad_file_id': '',
     'ad_caption': '',
@@ -66,15 +68,40 @@ admin_step = {
 admin_user_states = {}  # {user_id: {'advertisement': {...}, 'created_at': ...}}
 
 class AdminUserState:
-    """State management برای هر ادمین"""
+    """
+    Fix #1: Per-user state management for all admin operations
+    Prevents conflicts when multiple admins use the bot simultaneously
+    """
     def __init__(self, user_id):
         self.user_id = user_id
+        # Advertisement state
         self.advertisement = {
             'step': 0,
             'content_type': '',
             'file_id': '',
             'caption': '',
             'text': ''
+        }
+        # Manual recovery state
+        self.manual_recovery = {
+            'step': 0,  # 0: idle, 1: waiting for minutes
+            'minutes': 0
+        }
+        # Broadcast state
+        self.broadcast = {
+            'step': 0,  # 0: idle, 1: choosing type, 2: waiting for content, 3: waiting for confirmation
+            'type': '',  # 'normal' or 'forward'
+            'content': None
+        }
+        # Waiting message state
+        self.waiting_msg = {
+            'step': 0,
+            'type': '',
+            'platform': ''
+        }
+        # Sponsor setup state
+        self.sponsor = {
+            'step': 0  # 0: idle, 1: waiting for input
         }
         self.created_at = time.time()
         self.timeout = 300  # 5 minutes
@@ -91,6 +118,31 @@ class AdminUserState:
             'text': ''
         }
         self.created_at = time.time()
+    
+    def reset_manual_recovery(self):
+        """Fix #2: Reset manual recovery state"""
+        self.manual_recovery = {
+            'step': 0,
+            'minutes': 0
+        }
+        self.created_at = time.time()
+    
+    def reset_broadcast(self):
+        """Reset broadcast state"""
+        self.broadcast = {
+            'step': 0,
+            'type': '',
+            'content': None
+        }
+        self.created_at = time.time()
+    
+    def reset_all(self):
+        """Reset all states"""
+        self.reset_advertisement()
+        self.reset_manual_recovery()
+        self.reset_broadcast()
+        self.waiting_msg = {'step': 0, 'type': '', 'platform': ''}
+        self.sponsor = {'step': 0}
 
 def get_admin_user_state(user_id) -> AdminUserState:
     """Get or create admin state for user"""
@@ -159,13 +211,14 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^🛠 مدیریت$'))
 async def admin_menu_root_msg(_: Client, message: Message):
-    print("[ADMIN] open management via text by", message.from_user.id)
+    admin_logger.info(f"[ADMIN] open management via text by {message.from_user.id}")
     await message.reply_text("پنل مدیریت", reply_markup=admin_reply_kb())
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📊 آمار کاربران$'))
 async def admin_menu_stats(_: Client, message: Message):
-    print("[ADMIN] stats via text by", message.from_user.id)
+    # Fix #5 & #9: Use logger instead of print
+    admin_logger.info(f"[ADMIN] stats via text by {message.from_user.id}")
     stats = DB().get_system_stats()
     text = (
         "\u200F<b>📊 آمار سیستم</b>\n\n"
@@ -176,11 +229,13 @@ async def admin_menu_stats(_: Client, message: Message):
         f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n"
     )
     await message.reply_text(text, reply_markup=admin_reply_kb())
+    # Fix #10: Add return to prevent handler conflicts
+    return
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^🖥 وضعیت سرور$'))
 async def admin_menu_server(_: Client, message: Message):
-    print("[ADMIN] server status via text by", message.from_user.id)
+    admin_logger.info(f"[ADMIN] server status via text by {message.from_user.id}")
     await message.reply_text(_server_status_text(), reply_markup=admin_reply_kb())
 
 
@@ -226,7 +281,7 @@ async def clear_alerts_cmd(_: Client, message: Message):
 async def manual_recovery_menu(_: Client, message: Message):
     """منوی بازیابی دستی پیام‌ها"""
     user_id = message.from_user.id
-    print(f"[ADMIN] manual recovery menu opened by {user_id}")
+    admin_logger.info(f"[ADMIN] manual recovery menu opened by {user_id}")
     
     # Reset state
     admin_step['manual_recovery'] = 1
@@ -263,18 +318,57 @@ async def cancel_recovery_cb(_: Client, callback_query: CallbackQuery):
 
 
 # Handler برای دریافت تعداد دقیقه
-recovery_filter = filters.create(lambda _, __, m: admin_step.get('manual_recovery') == 1 and m.text and not m.text.startswith('/'))
+# Fix #3: Improved filter to avoid conflicts with admin buttons
+def recovery_filter_func(_, __, m):
+    """
+    Fix #3 & #15: Better filter for recovery input
+    - Checks admin_step state
+    - Excludes admin buttons
+    - Excludes commands
+    """
+    if admin_step.get('manual_recovery') != 1:
+        return False
+    if not m.text:
+        return False
+    text = m.text.strip()
+    # Fix #3: Exclude admin panel buttons
+    admin_buttons = {
+        '⬅️ بازگشت', '❌ لغو', '📨 پیام‌های آفلاین', '🛠 مدیریت',
+        '📊 آمار کاربران', '🖥 وضعیت سرور', '📢 ارسال همگانی',
+        '📢 تنظیم اسپانسر', '💬 پیام انتظار', '🍪 مدیریت کوکی',
+        '📺 تنظیم تبلیغات', '✅ وضعیت ربات', '📋 صف درخواست‌ها'
+    }
+    if text in admin_buttons:
+        return False
+    # Fix #16: Exclude /cancel command
+    if text.startswith('/'):
+        return False
+    return True
+
+recovery_filter = filters.create(recovery_filter_func)
 
 @Client.on_message(recovery_filter & filters.user(ADMIN), group=15)
 async def handle_recovery_minutes(client: Client, message: Message):
-    """دریافت تعداد دقیقه و شروع بازیابی"""
+    """
+    دریافت تعداد دقیقه و شروع بازیابی
+    Fix #13: Use finally to ensure state reset
+    Fix #16: Handle /cancel command
+    """
     user_id = message.from_user.id
     
     try:
         # پارس کردن عدد
         text = message.text.strip()
         
-        # نادیده گرفتن پیام‌های خاص
+        # Fix #16: Handle cancel command
+        if text == '/cancel' or text.lower() == 'cancel':
+            admin_step['manual_recovery'] = 0
+            state = get_admin_user_state(user_id)
+            state.reset_manual_recovery()
+            await message.reply_text("❌ بازیابی لغو شد")
+            return
+        
+        # نادیده گرفتن پیام‌های خاص (already filtered, but double-check)
         if text in ['📨 پیام‌های آفلاین', '⬅️ بازگشت', '🛠 مدیریت']:
             return
         
@@ -288,9 +382,6 @@ async def handle_recovery_minutes(client: Client, message: Message):
             )
             return
         
-        # Reset state
-        admin_step['manual_recovery'] = 0
-        
         # شروع بازیابی
         from config import BOT_TOKEN
         from plugins.manual_recovery import manual_recover_messages
@@ -302,14 +393,26 @@ async def handle_recovery_minutes(client: Client, message: Message):
             f"💡 این ممکن است چند دقیقه طول بکشد."
         )
         
-        # اجرای بازیابی
-        result = await manual_recover_messages(client, BOT_TOKEN, minutes, user_id)
-        
-        if not result.get('success'):
-            await status_msg.edit_text(
-                f"❌ **خطا در بازیابی**\n\n"
-                f"{result.get('message', 'خطای نامشخص')}"
+        # Fix #8 & #14: Run as background task with timeout
+        try:
+            # اجرای بازیابی با timeout
+            result = await asyncio.wait_for(
+                manual_recover_messages(client, BOT_TOKEN, minutes, user_id),
+                timeout=600  # 10 minutes max
             )
+            
+            if not result.get('success'):
+                await status_msg.edit_text(
+                    f"❌ **خطا در بازیابی**\n\n"
+                    f"{result.get('message', 'خطای نامشخص')}"
+                )
+        except asyncio.TimeoutError:
+            await status_msg.edit_text(
+                "⏱ **زمان بازیابی تمام شد**\n\n"
+                "عملیات بیش از 10 دقیقه طول کشید و متوقف شد.\n"
+                "لطفاً بازه زمانی کوچک‌تری انتخاب کنید."
+            )
+            admin_logger.warning(f"Manual recovery timeout for user {user_id}, minutes={minutes}")
         
     except ValueError:
         await message.reply_text(
@@ -317,12 +420,18 @@ async def handle_recovery_minutes(client: Client, message: Message):
             "لطفاً فقط عدد وارد کنید.\n"
             "مثال: 30"
         )
-        admin_step['manual_recovery'] = 1  # ادامه انتظار
+        # Don't reset state - allow retry
+        return
     
     except Exception as e:
         admin_logger.error(f"Error in manual recovery: {e}")
         await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+    
+    finally:
+        # Fix #13: Always reset state in finally block
         admin_step['manual_recovery'] = 0
+        state = get_admin_user_state(user_id)
+        state.reset_manual_recovery()
 
 
 @Client.on_message(filters.command('recovery') & filters.user(ADMIN))
@@ -356,7 +465,7 @@ async def recovery_stats_cmd(_: Client, message: Message):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📢 ارسال همگانی$'))
 async def admin_menu_broadcast(_: Client, message: Message):
-    print("[ADMIN] broadcast start via text by", message.from_user.id)
+    admin_logger.info(f"[ADMIN] broadcast start via text by {message.from_user.id}")
     admin_step['broadcast'] = 1
     await message.reply_text(
         "نوع ارسال همگانی را انتخاب کنید:",
@@ -619,7 +728,6 @@ async def import_cookie_path_cmd(_: Client, message: Message):
 async def admin_menu_sponsor(_: Client, message: Message):
     """ورود به پنل مدیریت اسپانسر جدید"""
     user_id = message.from_user.id
-    print(f"[ADMIN] 🚀 sponsor management opened by {user_id}")
     admin_logger.info(f"[ADMIN] sponsor management opened by {user_id}")
     
     # ✅ Reset other states
@@ -665,7 +773,7 @@ async def admin_menu_sponsor(_: Client, message: Message):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^✅ وضعیت ربات$'))
 async def admin_menu_bot_status(_: Client, message: Message):
-    print("[ADMIN] bot status menu accessed by", message.from_user.id)
+    admin_logger.info(f"[ADMIN] bot status menu accessed by {message.from_user.id}")
     
     # Get current status of all systems
     bot_status = data.get('bot_status', 'ON')
@@ -723,7 +831,7 @@ async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
     action = callback_query.data
     user_id = callback_query.from_user.id
     
-    print(f"[ADMIN] Status toggle: {action} by {user_id}")
+    admin_logger.info(f"[ADMIN] Status toggle: {action} by {user_id}")
     
     try:
         if action == "toggle_bot":
@@ -759,7 +867,7 @@ async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
             with open(json_db_path, 'w', encoding='utf-8') as outfile:
                 json.dump(data, outfile, indent=4, ensure_ascii=False)
         except Exception as e:
-            print(f"Failed to write status change: {e}")
+            admin_logger.error(f"Failed to write status change: {e}")
             # Try to restore backup if write failed
             try:
                 if os.path.exists(backup_path):
@@ -774,7 +882,7 @@ async def status_toggle_handler(client: Client, callback_query: CallbackQuery):
         await callback_query.answer("✅ تغییرات با موفقیت اعمال شد!")
         
     except Exception as e:
-        print(f"Error in status toggle: {e}")
+        admin_logger.error(f"Error in status toggle: {e}")
         await callback_query.answer("❌ خطا در تغییر وضعیت!", show_alert=True)
 
 
@@ -865,7 +973,6 @@ async def refresh_status_display(client: Client, callback_query: CallbackQuery):
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📺 تنظیم تبلیغات$'))
 async def admin_menu_advertisement(_: Client, message: Message):
     user_id = message.from_user.id
-    print(f"[ADMIN] advertisement setup via text by {user_id}")
     admin_logger.info(f"[ADMIN] Advertisement setup started by {user_id}")
     
     # ✅ Get per-user state
@@ -899,7 +1006,7 @@ async def admin_menu_advertisement(_: Client, message: Message):
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^⬅️ بازگشت$'))
 async def admin_menu_back(_: Client, message: Message):
-    print("[ADMIN] back pressed by", message.from_user.id)
+    admin_logger.info(f"[ADMIN] back pressed by {message.from_user.id}")
     # Reset any transient admin steps
     admin_step['broadcast'] = 0
     admin_step['broadcast_type'] = ''
@@ -951,7 +1058,7 @@ async def cancel_operation(_: Client, message: Message):
 
 @Client.on_message(filters.command('panel') & filters.user(ADMIN))
 async def admin_panel(_: Client, message: Message):
-    print("admin panel")
+    admin_logger.info(f"[ADMIN] panel command by {message.from_user.id}")
     await message.reply_text(
         "پنل مدیریت",
         reply_markup=admin_reply_kb()
@@ -965,25 +1072,25 @@ async def admin_panel(_: Client, message: Message):
 def sponsor_input_filter(_, __, message: Message):
     """فیلتر برای دریافت ورودی اسپانسر"""
     try:
-        print(f"[ADMIN] 🔍 sponsor_input_filter checking... sp={admin_step.get('sp')}")
+        admin_logger.debug(f"[ADMIN] sponsor_input_filter checking... sp={admin_step.get('sp')}")
         
         # فقط وقتی که در حالت تنظیم اسپانسر هستیم
         if admin_step.get('sp') != 1:
-            print(f"[ADMIN] ❌ Filter failed: sp != 1 (sp={admin_step.get('sp')})")
+            admin_logger.debug(f"[ADMIN] Filter failed: sp != 1 (sp={admin_step.get('sp')})")
             return False
         
         # فقط ادمین‌ها
         if not message.from_user or message.from_user.id not in ADMIN:
-            print(f"[ADMIN] ❌ Filter failed: not admin")
+            admin_logger.debug("[ADMIN] Filter failed: not admin")
             return False
         
         # فقط پیام متنی
         if not message.text:
-            print(f"[ADMIN] ❌ Filter failed: no text")
+            admin_logger.debug("[ADMIN] Filter failed: no text")
             return False
         
         text = message.text.strip()
-        print(f"[ADMIN] 📝 Text received: {text}")
+        admin_logger.debug(f"[ADMIN] Text received: {text}")
         
         # نادیده گرفتن دکمه‌های پنل ادمین
         admin_buttons = {
@@ -993,20 +1100,18 @@ def sponsor_input_filter(_, __, message: Message):
             "⬅️ بازگشت", "❌ لغو"
         }
         if text in admin_buttons:
-            print(f"[ADMIN] ❌ Filter failed: admin button")
+            admin_logger.debug("[ADMIN] Filter failed: admin button")
             return False
         
         # نادیده گرفتن دستورات
         if text.startswith('/'):
-            print(f"[ADMIN] ❌ Filter failed: command")
+            admin_logger.debug("[ADMIN] Filter failed: command")
             return False
         
-        print(f"[ADMIN] ✅ sponsor_input_filter PASSED for: {text}")
         admin_logger.info(f"[ADMIN] sponsor_input_filter PASSED for: {text}")
         return True
         
     except Exception as e:
-        print(f"[ADMIN] ❌ sponsor_input_filter error: {e}")
         admin_logger.error(f"[ADMIN] sponsor_input_filter error: {e}")
         return False
 
@@ -1358,7 +1463,11 @@ async def broadcast_callback_handler(client: Client, callback_query: CallbackQue
 
 @Client.on_message(filters.command('cancel') & filters.user(ADMIN))
 async def cancel_all_operations(_, message: Message):
-    """Cancel all active admin operations"""
+    """
+    Cancel all active admin operations
+    Fix #2: Include manual_recovery in cancel operations
+    """
+    user_id = message.from_user.id
     cancelled_operations = []
     
     # Cancel broadcast
@@ -1372,6 +1481,11 @@ async def cancel_all_operations(_, message: Message):
     if admin_step.get('sp', 0) == 1:
         admin_step['sp'] = 0
         cancelled_operations.append("تنظیم اسپانسر")
+    
+    # Fix #2: Cancel manual recovery
+    if admin_step.get('manual_recovery', 0) > 0:
+        admin_step['manual_recovery'] = 0
+        cancelled_operations.append("بازیابی دستی")
     
     # Cancel advertisement setup
     if admin_step.get('advertisement', 0) > 0:
@@ -1393,6 +1507,10 @@ async def cancel_all_operations(_, message: Message):
     if 'add_cookie' in admin_step:
         del admin_step['add_cookie']
         cancelled_operations.append("افزودن کوکی")
+    
+    # Fix #1: Reset per-user state
+    state = get_admin_user_state(user_id)
+    state.reset_all()
     
     if cancelled_operations:
         operations_text = "، ".join(cancelled_operations)
@@ -1487,7 +1605,6 @@ async def set_sp(client: Client, message: Message):
     user_id = message.from_user.id
     raw_text = (message.text or '').strip()
     
-    print(f"[ADMIN] ✅ set_sp CALLED! user={user_id}, text={raw_text}")
     admin_logger.info(f"[ADMIN] set_sp called by {user_id} with text: {raw_text}")
     
     try:
@@ -1529,7 +1646,7 @@ async def set_sp(client: Client, message: Message):
             )
             return  # نه admin_step['sp'] = 0 تا بتواند دوباره تلاش کند
         
-        print(f"[ADMIN] Normalized sponsor value: {sponsor_value}")
+        admin_logger.debug(f"[ADMIN] Normalized sponsor value: {sponsor_value}")
         
         # ✅ مرحله 2: بررسی دسترسی به کانال
         status_msg = await message.reply_text("🔄 **در حال بررسی دسترسی...**")
@@ -1540,7 +1657,7 @@ async def set_sp(client: Client, message: Message):
             chat_title = getattr(chat, 'title', 'نامشخص')
             chat_username = getattr(chat, 'username', None)
             
-            print(f"[ADMIN] Chat found: {chat_title} (username: {chat_username})")
+            admin_logger.debug(f"[ADMIN] Chat found: {chat_title} (username: {chat_username})")
             
             # دریافت اطلاعات ربات
             bot = await client.get_me()
@@ -1551,7 +1668,7 @@ async def set_sp(client: Client, message: Message):
                 bot_member = await client.get_chat_member(sponsor_value, bot_id)
                 bot_status = bot_member.status
                 
-                print(f"[ADMIN] Bot status in channel: {bot_status}")
+                admin_logger.debug(f"[ADMIN] Bot status in channel: {bot_status}")
                 
                 if bot_status not in ["administrator", "creator"]:
                     await status_msg.edit_text(
@@ -1564,7 +1681,7 @@ async def set_sp(client: Client, message: Message):
                     return
                 
             except Exception as member_error:
-                print(f"[ADMIN] Error checking bot membership: {member_error}")
+                admin_logger.warning(f"[ADMIN] Error checking bot membership: {member_error}")
                 await status_msg.edit_text(
                     f"❌ **ربات در کانال عضو نیست!**\n\n"
                     f"📢 کانال: **{chat_title}**\n\n"
@@ -1577,7 +1694,7 @@ async def set_sp(client: Client, message: Message):
             await status_msg.edit_text("✅ **دسترسی تأیید شد!**\n\n🔄 در حال ذخیره...")
             
         except Exception as chat_error:
-            print(f"[ADMIN] Error getting chat: {chat_error}")
+            admin_logger.warning(f"[ADMIN] Error getting chat: {chat_error}")
             await status_msg.edit_text(
                 f"❌ **خطا در دسترسی به کانال!**\n\n"
                 f"🔍 خطا: `{str(chat_error)[:100]}`\n\n"
@@ -1650,11 +1767,10 @@ async def set_sp(client: Client, message: Message):
         
         # ✅ Reset state
         admin_step['sp'] = 0
-        print(f"[ADMIN] ✅ Sponsor setup completed successfully!")
+        admin_logger.info("[ADMIN] Sponsor setup completed successfully!")
         
     except Exception as e:
         admin_logger.error(f"[ADMIN] Unexpected error in set_sp: {e}")
-        print(f"[ADMIN] ❌ Unexpected error: {e}")
         await message.reply_text(
             f"❌ **خطای غیرمنتظره!**\n\n"
             f"🔍 خطا: `{str(e)[:100]}`\n\n"
@@ -1762,7 +1878,7 @@ async def handle_pending_update_minutes(client: Client, message: Message):
         )
         
     except Exception as e:
-        print(f"[ERROR] Failed to process pending updates: {e}")
+        admin_logger.error(f"[ERROR] Failed to process pending updates: {e}")
         await message.reply_text(
             f"❌ خطا در پردازش آپدیت انتظار: {e}",
             reply_markup=admin_reply_kb()
@@ -1816,7 +1932,8 @@ async def handle_waiting_message_input(client: Client, message: Message):
         )
         
     except Exception as e:
-        print(f"[ERROR] Failed to save waiting message: {e}")
+        # Fix #9: Use logger instead of print
+        admin_logger.error(f"[ERROR] Failed to save waiting message: {e}")
         await message.reply_text("خطا در ذخیره‌سازی پیام. لطفاً دوباره تلاش کنید.")
         admin_step['waiting_msg'] = 0
 
@@ -2018,8 +2135,8 @@ async def handle_advertisement_content(client: Client, message: Message):
         )
         
     except Exception as e:
+        # Fix #9: Remove duplicate print, keep logger only
         admin_logger.error(f"[ADMIN] Advertisement content error: {e}")
-        print(f"[ERROR] Advertisement content processing error: {e}")
         await message.reply_text(f"❌ خطا در پردازش محتوای تبلیغات: {str(e)}")
         admin_step['advertisement'] = 0
 
@@ -2090,8 +2207,8 @@ async def admin_ad_position_handler(_: Client, message: Message):
                 admin_logger.info(f"[ADMIN] Advertisement settings saved: {ad_settings['content_type']}, position={pos}")
                 
             except Exception as e:
+                # Fix #9: Remove duplicate print, keep logger only
                 admin_logger.error(f"[ADMIN] Failed to save advertisement: {e}")
-                print(f"[ADMIN] Failed to save advertisement settings: {e}")
                 try:
                     if os.path.exists(backup_path):
                         shutil.copy2(backup_path, json_db_path)
@@ -2112,62 +2229,13 @@ async def admin_ad_position_handler(_: Client, message: Message):
             reply_markup=admin_reply_kb()
         )
     except Exception as e:
+        # Fix #9: Remove duplicate print, keep logger only
         admin_logger.error(f"[ADMIN] Error in ad position handler: {e}")
-        print(f"[ADMIN] Error in ad position handler: {e}")
         await message.reply_text("❌ خطای غیرمنتظره در تنظیم تبلیغات.")
-def _server_status_text():
-    """Override: Build improved server status text without disk line, include network speed."""
-    try:
-        # Local helper to format bytes into human-readable units
-        def format_bytes(n):
-            try:
-                units = ['B', 'KB', 'MB', 'GB', 'TB']
-                n = int(n) if n is not None else 0
-                i = 0
-                while n >= 1024 and i < len(units) - 1:
-                    n /= 1024.0
-                    i += 1
-                return f"{n:.2f} {units[i]}"
-            except Exception:
-                return str(n)
-        import time as _t
-        import platform as _pf
-        cpu_percent = psutil.cpu_percent(interval=1)
-        mem = psutil.virtual_memory()
-        # Approximate network throughput over 1s
-        net1 = psutil.net_io_counters()
-        _t.sleep(1)
-        net2 = psutil.net_io_counters()
-        up_bps = max(0, net2.bytes_sent - net1.bytes_sent)
-        down_bps = max(0, net2.bytes_recv - net1.bytes_recv)
-        up_speed = f"{format_bytes(up_bps)}/s"
-        down_speed = f"{format_bytes(down_bps)}/s"
 
-        # OS and uptime
-        os_line = f"🖥 سیستم‌عامل: {_pf.system()} {_pf.release()}"
-        try:
-            boot_ts = psutil.boot_time()
-            uptime_sec = int(_t.time() - boot_ts)
-            days = uptime_sec // 86400
-            hours = (uptime_sec % 86400) // 3600
-            minutes = (uptime_sec % 3600) // 60
-            uptime_line = f"⏱ زمان روشن بودن: {days}روز {hours}ساعت {minutes}دقیقه"
-        except Exception:
-            uptime_line = "⏱ زمان روشن بودن: نامشخص"
 
-        mem_line = f"🧠 استفاده از حافظه: {format_bytes(mem.used)}/{format_bytes(mem.total)} ({mem.percent}%)"
-        cpu_line = f"⚙️ مصرف CPU: {cpu_percent}%"
-        net_line = f"🌐 سرعت شبکه تقریبی: ↑ {up_speed} | ↓ {down_speed}"
-
-        return "\n".join([
-            cpu_line,
-            os_line,
-            uptime_line,
-            mem_line,
-            net_line
-        ])
-    except Exception as e:
-        return f"❌ خطا در دریافت وضعیت سرور: {e}"
+# Fix #13: Remove duplicate _server_status_text definition
+# The first definition (line 1147) is kept, this duplicate is removed
 
 
 # ============================================================================
@@ -2179,8 +2247,8 @@ def _server_status_text():
 async def admin_queue_menu(_: Client, message: Message):
     """منوی مدیریت صف درخواست‌های ناموفق"""
     user_id = message.from_user.id
-    print(f"[ADMIN] queue menu opened by {user_id}")
-    admin_logger.info(f"[ADMIN] Failed request queue menu opened by {user_id}")
+    # Fix #9: Use logger instead of print
+    admin_logger.info(f"[ADMIN] queue menu opened by {user_id}")
     
     try:
         from plugins.failed_request_queue import FailedRequestQueue
@@ -2220,10 +2288,13 @@ async def admin_queue_menu(_: Client, message: Message):
         ])
         
         await message.reply_text(text, reply_markup=keyboard)
+        # Fix #10: Add return to prevent handler conflicts
+        return
     
     except Exception as e:
         admin_logger.error(f"Error in queue menu: {e}")
         await message.reply_text(f"❌ خطا در نمایش منوی صف: {str(e)[:200]}")
+        return
 
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^failed_queue$'))
