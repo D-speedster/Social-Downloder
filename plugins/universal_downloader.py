@@ -107,37 +107,32 @@ def get_user_friendly_error_message(api_response, platform):
         if isinstance(api_response, str):
             error_lower = api_response.lower()
             
-            # 403 Forbidden
+            # 403 Forbidden - CDN access denied or expired link
             if "403" in error_lower or "forbidden" in error_lower:
                 return (
-                    "🔒 **دسترسی به محتوا محدود شده**\n\n"
-                    "💡 **احتمالات:**\n"
-                    "• پست خصوصی است (نیاز به فالو)\n"
-                    "• محدودیت موقت API\n"
-                    "• IP شما موقتاً مسدود شده\n\n"
-                    "🔄 **راه‌حل:**\n"
-                    "• چند دقیقه صبر کنید\n"
-                    "• دوباره تلاش کنید\n"
-                    "• اگر پست خصوصی است، ابتدا فالو کنید"
+                    "⚠️ **متأسفانه دانلود موفق نبود**\n\n"
+                    "🔄 **لطفاً دوباره تلاش کنید:**\n"
+                    "• لینک را مجدداً ارسال کنید\n"
+                    "• اگر مشکل ادامه داشت، 2-3 دقیقه صبر کنید\n\n"
+                    "💡 این مشکل معمولاً موقتی است و با ارسال مجدد لینک حل می‌شود."
                 )
             
             # 429 Rate Limit
             elif "429" in error_lower or "rate limit" in error_lower or "too many" in error_lower:
                 return (
-                    "⏰ **محدودیت تعداد درخواست**\n\n"
-                    "تعداد درخواست‌ها از حد مجاز گذشته.\n\n"
-                    "🔄 لطفاً 5-10 دقیقه صبر کنید و دوباره تلاش کنید."
+                    "⏱️ **درخواست‌های زیاد**\n\n"
+                    "لطفاً 5-10 دقیقه صبر کنید و دوباره تلاش کنید.\n\n"
+                    "💡 برای جلوگیری از این مشکل، فاصله بین درخواست‌ها را بیشتر کنید."
                 )
             
             # 404 Not Found
             elif "404" in error_lower or "not found" in error_lower:
                 return (
-                    "🔍 **محتوا یافت نشد**\n\n"
-                    "💡 **احتمالات:**\n"
-                    "• لینک اشتباه است\n"
-                    "• پست حذف شده\n"
-                    "• لینک منقضی شده\n\n"
-                    "🔄 لینک را بررسی کنید"
+                    "❌ **محتوا یافت نشد**\n\n"
+                    "احتمالاً:\n"
+                    "• پست حذف شده است\n"
+                    "• لینک اشتباه است\n\n"
+                    "🔄 لطفاً لینک را بررسی کنید یا لینک جدیدی ارسال کنید."
                 )
             
             # Server errors (502, 503, 504)
@@ -193,15 +188,15 @@ def get_user_friendly_error_message(api_response, platform):
                         
                         # Handle private URL error
                         if "Private Url is not supported" in data_message:
-                            return f"🔒 این {platform} خصوصی است و نیاز به ورود دارد.\n\n💡 برای دانلود:\n• ابتدا وارد حساب خود شوید\n• سپس کوکی‌های مرورگر را استخراج کنید\n• یا از لینک عمومی استفاده کنید"
+                            return f"🔒 این {platform} خصوصی است و نیاز به ورود دارد.\n\n💡 برای دانلود:\n• ابتدا وارد حساب خود شوید\n• سپس کوکی‌های مرورگر را استخراج کنید\n• یا از لینک عمومی استفاده کنید\n\n⚠️ توجه: یک بار تلاش کافی است، نیازی به ارسال مجدد نیست."
                         
                         # Handle restricted page
                         elif "Restricted personal page" in data_message:
-                            return f"⛔ این صفحه محدود شده است.\n\n💡 برای دسترسی:\n• ابتدا این حساب را فالو کنید\n• منتظر تایید بمانید\n• سپس دوباره تلاش کنید"
+                            return f"⛔ این صفحه محدود شده است.\n\n💡 برای دسترسی:\n• ابتدا این حساب را فالو کنید\n• منتظر تایید بمانید\n• سپس دوباره تلاش کنید\n\n⚠️ توجه: یک بار تلاش کافی است، نیازی به ارسال مجدد نیست."
                         
                         # Handle general private content
                         elif "follow the account" in data_message:
-                            return f"👥 برای دسترسی به این محتوا باید حساب را فالو کنید.\n\n💡 مراحل:\n• حساب را فالو کنید\n• منتظر تایید بمانید\n• دوباره لینک را ارسال کنید"
+                            return f"👥 برای دسترسی به این محتوا باید حساب را فالو کنید.\n\n💡 مراحل:\n• حساب را فالو کنید\n• منتظر تایید بمانید\n• دوباره لینک را ارسال کنید\n\n⚠️ توجه: یک بار تلاش کافی است، نیازی به ارسال مجدد نیست."
                     
                     return f"📭 هیچ محتوای قابل دانلودی در این لینک {platform} یافت نشد."
                 
@@ -670,6 +665,16 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                                 result = completed_task.result()
                                 _log(f"[UNIV] {task_name} completed (attempt {attempt_idx+1}) with result: {bool(result)}")
                                 if task_name == "api" and result:
+                                    # 🔒 چک کردن خطاهای خاص که نباید retry شوند (مثل پیج خصوصی)
+                                    if isinstance(result, dict) and result.get("error") is True:
+                                        data = result.get("data", {})
+                                        if isinstance(data, dict) and "message" in data:
+                                            data_message = data["message"]
+                                            # اگر پیج خصوصی است، بلافاصله برگردان و retry نکن
+                                            if any(keyword in data_message for keyword in ["Private Url is not supported", "Restricted personal page", "follow the account"]):
+                                                _log(f"[UNIV] Private/Restricted content detected - no retry needed")
+                                                return {"private_error": result}
+                                    
                                     invalid = (result.get("error", False) or
                                                result.get("data", {}).get("error", False) or
                                                not result.get("medias"))
@@ -735,6 +740,21 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         fallback_media = res["fallback_media"]
                         successful_cycle = 1
                         break
+                    # 🔒 اگر خطای پیج خصوصی بود، بلافاصله به کاربر اطلاع بده
+                    if res.get("private_error"):
+                        private_error_data = res["private_error"]
+                        error_message = _check_api_error(private_error_data, platform)
+                        await status_msg.edit_text(error_message)
+                        # کنسل کردن بقیه تسک‌ها
+                        for t in attempt_tasks:
+                            if not t.done():
+                                t.cancel()
+                        try:
+                            if user_reserved:
+                                release_user(user_id)
+                        except Exception:
+                            pass
+                        return
                     if res.get("error"):
                         last_api_error_message = res.get("error")
                 except Exception as e:
