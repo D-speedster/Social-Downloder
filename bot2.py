@@ -1,5 +1,5 @@
 """
-Pornhub Delivery Bot - نسخه Pyrogram
+Pornhub Delivery Bot - نسخه Pyrogram (Fixed Version)
 ربات دوم برای ارسال فایل‌های بزرگ (تا 2GB) با استفاده از Pyrogram
 """
 
@@ -12,18 +12,27 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from dotenv import load_dotenv
+from logging.handlers import RotatingFileHandler
 
 # اضافه کردن مسیر پروژه
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from plugins.pornhub_storage import pornhub_storage
 
-# تنظیمات لاگ
+# ایجاد پوشه logs اگر وجود نداشت
+os.makedirs('logs', exist_ok=True)
+
+# تنظیمات لاگ با Rotation
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO,
     handlers=[
-        logging.FileHandler('logs/pornhub_delivery.log', encoding='utf-8'),
+        RotatingFileHandler(
+            'logs/pornhub_delivery.log',
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        ),
         logging.StreamHandler()
     ]
 )
@@ -53,15 +62,17 @@ FILE_CODE_REGEX = re.compile(r'FILE_([A-Z0-9]{8})', re.IGNORECASE)
 # شناسه ادمین
 ADMIN_ID = 79049016
 
-# ساخت client
+# ساخت client (بدون plugins چون استفاده نمیشن)
 app = Client(
     "delivery_bot",
     api_id=int(API_ID),
     api_hash=API_HASH,
     bot_token=DELIVERY_BOT_TOKEN,
-    workdir=".",
-    plugins=dict(root="plugins")  # بارگذاری plugins از پوشه plugins
+    workdir="."
 )
+
+# ذخیره وضعیت دانلودهای در حال انجام برای جلوگیری از duplicate
+active_downloads = set()
 
 
 def format_size(bytes_size: int) -> str:
@@ -75,8 +86,10 @@ def format_size(bytes_size: int) -> str:
     return f"{bytes_size} B"
 
 
-async def schedule_file_deletion(file_code: str, file_path: str, delay_seconds: int) -> None:
-    """حذف خودکار فایل بعد از مدت زمان مشخص"""
+async def schedule_file_deletion(file_code: str, file_path: str, delay_seconds: int = 120) -> None:
+    """
+    حذف خودکار فایل بعد از مدت زمان مشخص (نسخه async صحیح)
+    """
     try:
         logger.info(f"Scheduled deletion for {file_code} in {delay_seconds} seconds")
         await asyncio.sleep(delay_seconds)
@@ -92,6 +105,75 @@ async def schedule_file_deletion(file_code: str, file_path: str, delay_seconds: 
     
     except Exception as e:
         logger.error(f"Error deleting file {file_code}: {e}")
+
+
+def get_video_metadata(file_path: str) -> tuple:
+    """
+    استخراج metadata ویدیو با ffprobe
+    Returns: (duration, width, height)
+    """
+    duration = 0
+    width = 0
+    height = 0
+    
+    try:
+        import subprocess
+        
+        cmd = [
+            'ffprobe', '-v', 'quiet', '-print_format', 'json',
+            '-show_format', '-show_streams', file_path
+        ]
+        
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            metadata = json.loads(result.stdout)
+            
+            # Duration
+            if 'format' in metadata and 'duration' in metadata['format']:
+                duration = int(float(metadata['format']['duration']))
+            
+            # Width & Height از اولین video stream
+            for stream in metadata.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    width = stream.get('width', 0)
+                    height = stream.get('height', 0)
+                    if width and height:  # اولین stream معتبر
+                        break
+            
+            logger.info(f"Video metadata extracted: duration={duration}s, {width}x{height}")
+        else:
+            logger.warning(f"ffprobe returned non-zero code: {result.returncode}")
+    
+    except FileNotFoundError:
+        logger.warning("ffprobe not found - metadata extraction skipped")
+    except subprocess.TimeoutExpired:
+        logger.warning("ffprobe timeout - metadata extraction skipped")
+    except Exception as e:
+        logger.warning(f"Could not extract metadata: {e}")
+    
+    return duration, width, height
+
+
+def get_thumbnail_path() -> str:
+    """دریافت مسیر thumbnail از تنظیمات ادمین"""
+    try:
+        from plugins.adult_content_admin import get_thumbnail_path as get_admin_thumb
+        admin_thumb = get_admin_thumb()
+        if admin_thumb and os.path.exists(admin_thumb):
+            logger.info(f"Using admin thumbnail: {admin_thumb}")
+            return admin_thumb
+    except ImportError:
+        logger.debug("adult_content_admin module not found")
+    except Exception as e:
+        logger.debug(f"Error getting admin thumbnail: {e}")
+    
+    return None
 
 
 @app.on_message(filters.command("start"))
@@ -143,7 +225,8 @@ async def help_command(client: Client, message: Message):
         "• کدها 24 ساعت معتبرند\n"
         "• فایل‌ها 2 دقیقه بعد حذف می‌شوند\n"
         "• فایل‌های تا 2GB پشتیبانی می‌شود\n"
-        "• سریع فایل را فوروارد کنید\n\n"
+        "• سریع فایل را فوروارد کنید\n"
+        "• هر کد فقط یکبار قابل استفاده است\n\n"
         "🔧 **دستورات:**\n"
         "/start - شروع ربات\n"
         "/help - این راهنما\n"
@@ -174,7 +257,8 @@ async def status_command(client: Client, message: Message):
             "✅ **ربات:** آنلاین و فعال\n"
             f"📁 **فایل‌های موجود:** {total_files}\n"
             f"✔️ **فایل‌های ارسال شده:** {downloaded_files}\n"
-            f"⏳ **در انتظار:** {total_files - downloaded_files}\n\n"
+            f"⏳ **در انتظار:** {total_files - downloaded_files}\n"
+            f"🔄 **در حال دانلود:** {len(active_downloads)}\n\n"
             "🔄 **پاکسازی خودکار:** فعال (2 دقیقه بعد از ارسال)\n"
             "⏰ **مدت اعتبار کد:** 24 ساعت\n"
             "📦 **حداکثر سایز فایل:** 2 GB\n\n"
@@ -214,6 +298,14 @@ async def handle_message(client: Client, message: Message):
         file_code = match.group(1).upper()
         logger.info(f"File code detected: {file_code}")
         
+        # بررسی duplicate download
+        if file_code in active_downloads:
+            await message.reply_text(
+                "⚠️ **این فایل در حال ارسال است!**\n\n"
+                "لطفاً صبر کنید تا ارسال قبلی کامل شود."
+            )
+            return
+        
         # پیام وضعیت
         status_msg = await message.reply_text(
             "🔍 **در حال بررسی کد...**\n\n⏳ لطفاً صبر کنید..."
@@ -233,6 +325,15 @@ async def handle_message(client: Client, message: Message):
             )
             return
         
+        # بررسی اینکه قبلاً دانلود نشده باشد
+        if file_info.get('downloaded', False):
+            await status_msg.edit_text(
+                "❌ **این کد قبلاً استفاده شده است**\n\n"
+                "هر کد فقط یکبار قابل استفاده است.\n\n"
+                "🔄 لطفاً کد جدید درخواست دهید."
+            )
+            return
+        
         # بررسی وجود فایل
         file_path = file_info.get('file_path')
         if not file_path or not os.path.exists(file_path):
@@ -245,22 +346,25 @@ async def handle_message(client: Client, message: Message):
             pornhub_storage.delete_file(file_code)
             return
         
-        # اطلاعات فایل
-        quality = file_info.get('quality', 'Unknown')
-        file_size = file_info.get('file_size', 0)
+        # اضافه کردن به لیست active downloads
+        active_downloads.add(file_code)
         
-        await status_msg.edit_text(
-            f"📥 **فایل پیدا شد!**\n\n"
-            f"📊 کیفیت: {quality}p\n"
-            f"💾 حجم: {format_size(file_size)}\n\n"
-            f"⏳ در حال آماده‌سازی..."
-        )
-        
-        # ارسال فایل
         try:
+            # اطلاعات فایل
+            quality = file_info.get('quality', 'Unknown')
+            file_size = file_info.get('file_size', 0)
+            
+            await status_msg.edit_text(
+                f"📥 **فایل پیدا شد!**\n\n"
+                f"📊 کیفیت: {quality}p\n"
+                f"💾 حجم: {format_size(file_size)}\n\n"
+                f"⏳ در حال آماده‌سازی..."
+            )
+            
+            # ارسال فایل
             logger.info(f"Starting upload for file: {file_path}")
             
-            # Caption - بدون تایتل برای محتوای بزرگسال
+            # Caption
             caption = f"📊 کیفیت: {quality}p"
             
             # آپدیت پیام
@@ -270,56 +374,16 @@ async def handle_message(client: Client, message: Message):
                 f"⏳ لطفاً صبر کنید..."
             )
             
-            # بررسی thumbnail از تنظیمات ادمین
-            thumbnail = None
-            try:
-                from plugins.adult_content_admin import get_thumbnail_path
-                admin_thumb = get_thumbnail_path()
-                if admin_thumb and os.path.exists(admin_thumb):
-                    thumbnail = admin_thumb
-                    logger.info(f"Using admin thumbnail: {admin_thumb}")
-            except Exception as e:
-                logger.debug(f"No admin thumbnail: {e}")
+            # دریافت thumbnail
+            thumbnail = get_thumbnail_path()
             
-            # استخراج metadata ویدیو با ffprobe
-            duration = 0
-            width = 0
-            height = 0
+            # استخراج metadata ویدیو
+            duration, width, height = get_video_metadata(file_path)
             
-            try:
-                import subprocess
-                import json as json_lib
-                
-                cmd = [
-                    'ffprobe', '-v', 'quiet', '-print_format', 'json',
-                    '-show_format', '-show_streams', file_path
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                
-                if result.returncode == 0:
-                    metadata = json_lib.loads(result.stdout)
-                    
-                    # Duration
-                    if 'format' in metadata and 'duration' in metadata['format']:
-                        duration = int(float(metadata['format']['duration']))
-                    
-                    # Width & Height
-                    for stream in metadata.get('streams', []):
-                        if stream.get('codec_type') == 'video':
-                            width = stream.get('width', 0)
-                            height = stream.get('height', 0)
-                            break
-                    
-                    logger.info(f"Video metadata: duration={duration}s, {width}x{height}")
-            except Exception as e:
-                logger.warning(f"Could not extract metadata: {e}")
-            
-            # ارسال فایل با Pyrogram (پشتیبانی تا 2GB)
+            # آماده‌سازی پارامترها
             file_size_mb = file_size / (1024 * 1024)
             logger.info(f"Sending file ({file_size_mb:.2f}MB) with Pyrogram")
             
-            # ارسال به عنوان video با metadata
-            # اگر width/height صفر باشه، اصلاً ارسال نکن تا Telegram خودش تشخیص بده
             video_params = {
                 'video': file_path,
                 'caption': caption,
@@ -330,17 +394,20 @@ async def handle_message(client: Client, message: Message):
             if thumbnail:
                 video_params['thumb'] = thumbnail
             
-            # اضافه کردن metadata فقط اگر معتبر باشه
+            # اضافه کردن duration
             if duration and duration > 0:
                 video_params['duration'] = duration
+                logger.info(f"Setting duration: {duration}s")
             
+            # اضافه کردن dimensions - فقط اگر هر دو معتبر باشند
             if width and width > 0 and height and height > 0:
                 video_params['width'] = width
                 video_params['height'] = height
-                logger.info(f"Sending with dimensions: {width}x{height}")
+                logger.info(f"Setting dimensions: {width}x{height}")
             else:
-                logger.info("Sending without dimensions (Telegram will auto-detect)")
+                logger.info("Dimensions not set - Telegram will auto-detect")
             
+            # ارسال ویدیو
             await message.reply_video(**video_params)
             
             # حذف پیام وضعیت
@@ -351,7 +418,7 @@ async def handle_message(client: Client, message: Message):
             
             logger.info(f"File {file_code} sent successfully to user {user_id}")
             
-            # پیام موفقیت با هشدار حذف
+            # پیام موفقیت
             await message.reply_text(
                 "✅ **فایل با موفقیت ارسال شد!**\n\n"
                 "⚠️ **توجه مهم:**\n"
@@ -360,29 +427,9 @@ async def handle_message(client: Client, message: Message):
                 "💡 برای دریافت فایل‌های بیشتر، کد جدید ارسال کنید."
             )
             
-            # زمان‌بندی حذف فایل بعد از 2 دقیقه
-            # استفاده از threading برای اطمینان از اجرا
-            import threading
-            
-            def delete_file_thread():
-                import time
-                time.sleep(120)  # 2 دقیقه
-                try:
-                    # حذف فایل از دیسک
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                        logger.info(f"File deleted from disk: {file_path}")
-                    
-                    # حذف از storage
-                    pornhub_storage.delete_file(file_code)
-                    logger.info(f"File {file_code} deleted after 120 seconds")
-                except Exception as e:
-                    logger.error(f"Error deleting file {file_code}: {e}")
-            
-            # شروع thread
-            delete_thread = threading.Thread(target=delete_file_thread, daemon=True)
-            delete_thread.start()
-            logger.info(f"Deletion thread started for {file_code}")
+            # زمان‌بندی حذف فایل (نسخه async صحیح)
+            asyncio.create_task(schedule_file_deletion(file_code, file_path, 120))
+            logger.info(f"Deletion task scheduled for {file_code}")
         
         except Exception as upload_error:
             logger.error(f"Upload error: {upload_error}", exc_info=True)
@@ -391,6 +438,10 @@ async def handle_message(client: Client, message: Message):
                 f"خطا: {str(upload_error)[:100]}\n\n"
                 f"🔄 لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
             )
+        
+        finally:
+            # حذف از لیست active downloads
+            active_downloads.discard(file_code)
     
     except Exception as e:
         logger.error(f"Handler error: {e}", exc_info=True)
@@ -407,17 +458,18 @@ def main():
     """تابع اصلی"""
     try:
         print("=" * 70)
-        print("🚀 Starting Pornhub Delivery Bot (Pyrogram Version)")
+        print("🚀 Starting Pornhub Delivery Bot (Fixed Version)")
         print("=" * 70)
         print()
         print("✅ Bot initialized successfully")
         print("🤖 Bot username: @wwwiranbot")
         print("📦 Max file size: 2 GB")
+        print("🔧 All bugs fixed!")
         print("⏳ Starting...")
         print("=" * 70)
         print()
         
-        logger.info("✅ Delivery bot started successfully (Pyrogram)")
+        logger.info("✅ Delivery bot started successfully (Fixed Version)")
         logger.info("🤖 Bot username: @wwwiranbot")
         logger.info("📦 Max file size: 2 GB")
         
