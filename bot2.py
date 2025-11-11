@@ -319,16 +319,29 @@ async def handle_message(client: Client, message: Message):
             logger.info(f"Sending file ({file_size_mb:.2f}MB) with Pyrogram")
             
             # ارسال به عنوان video با metadata
-            await message.reply_video(
-                video=file_path,
-                caption=caption,
-                thumb=thumbnail,
-                duration=duration if duration > 0 else 0,
-                width=width if width > 0 else 0,
-                height=height if height > 0 else 0,
-                supports_streaming=True,
-                progress=None  # می‌تونیم progress callback اضافه کنیم
-            )
+            # اگر width/height صفر باشه، اصلاً ارسال نکن تا Telegram خودش تشخیص بده
+            video_params = {
+                'video': file_path,
+                'caption': caption,
+                'supports_streaming': True
+            }
+            
+            # اضافه کردن thumbnail
+            if thumbnail:
+                video_params['thumb'] = thumbnail
+            
+            # اضافه کردن metadata فقط اگر معتبر باشه
+            if duration and duration > 0:
+                video_params['duration'] = duration
+            
+            if width and width > 0 and height and height > 0:
+                video_params['width'] = width
+                video_params['height'] = height
+                logger.info(f"Sending with dimensions: {width}x{height}")
+            else:
+                logger.info("Sending without dimensions (Telegram will auto-detect)")
+            
+            await message.reply_video(**video_params)
             
             # حذف پیام وضعیت
             await status_msg.delete()
@@ -348,8 +361,28 @@ async def handle_message(client: Client, message: Message):
             )
             
             # زمان‌بندی حذف فایل بعد از 2 دقیقه
-            # استفاده از asyncio.ensure_future به جای create_task
-            asyncio.ensure_future(schedule_file_deletion(file_code, file_path, 120))
+            # استفاده از threading برای اطمینان از اجرا
+            import threading
+            
+            def delete_file_thread():
+                import time
+                time.sleep(120)  # 2 دقیقه
+                try:
+                    # حذف فایل از دیسک
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        logger.info(f"File deleted from disk: {file_path}")
+                    
+                    # حذف از storage
+                    pornhub_storage.delete_file(file_code)
+                    logger.info(f"File {file_code} deleted after 120 seconds")
+                except Exception as e:
+                    logger.error(f"Error deleting file {file_code}: {e}")
+            
+            # شروع thread
+            delete_thread = threading.Thread(target=delete_file_thread, daemon=True)
+            delete_thread.start()
+            logger.info(f"Deletion thread started for {file_code}")
         
         except Exception as upload_error:
             logger.error(f"Upload error: {upload_error}", exc_info=True)
