@@ -409,18 +409,22 @@ async def quality_callback(client: Client, callback_query):
         if not file_code:
             raise Exception("خطا در ذخیره‌سازی فایل")
         
-        # پیام موفقیت - ساده و کوتاه
+        # حذف پیام دانلود
+        await callback_query.message.delete()
+        
+        # ارسال پیام جدید (به جای edit) تا کاربر متوجه بشه
         success_message = (
             "✅ **فایل آماده است!**\n\n"
-            "📥 **برای دریافت:**\n"
+            "� *ک*برای دریافت:**\n"
             "1️⃣ وارد ربات شوید: @wwwiranbot\n"
             "2️⃣ این پیام را فوروارد کنید\n\n"
             f"🔑 کد فایل: `FILE_{file_code}`"
         )
         
-        await callback_query.message.edit_text(
-            success_message,
-            parse_mode=ParseMode.HTML
+        await client.send_message(
+            chat_id=user_id,
+            text=success_message,
+            parse_mode=ParseMode.MARKDOWN
         )
         
         # پاک‌سازی کش

@@ -348,7 +348,8 @@ async def handle_message(client: Client, message: Message):
             )
             
             # زمان‌بندی حذف فایل بعد از 2 دقیقه
-            asyncio.create_task(schedule_file_deletion(file_code, file_path, 120))
+            # استفاده از asyncio.ensure_future به جای create_task
+            asyncio.ensure_future(schedule_file_deletion(file_code, file_path, 120))
         
         except Exception as upload_error:
             logger.error(f"Upload error: {upload_error}", exc_info=True)
