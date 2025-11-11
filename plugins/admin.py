@@ -198,7 +198,7 @@ def admin_inline_maker() -> list:
 
 def admin_reply_kb() -> ReplyKeyboardMarkup:
     """
-    کیبورد پنل ادمین با 13 دکمه در 7 سطر (2 ستونی)
+    کیبورد پنل ادمین با دکمه‌های ثابت
     """
     return ReplyKeyboardMarkup(
         [
@@ -207,7 +207,7 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
             ["📨 پیام‌های آفلاین", "📋 صف درخواست‌ها"],
-            ["⬅️ بازگشت"],
+            ["🔞 تنظیم Thumbnail", "⬅️ بازگشت"],
         ],
         resize_keyboard=True
     )
@@ -482,6 +482,45 @@ async def admin_menu_broadcast(_: Client, message: Message):
 
 
 # --- مدیریت کوکی‌ها ---
+
+# منوی تنظیم Thumbnail محتوای بزرگسال
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^🔞 تنظیم Thumbnail$'))
+async def admin_adult_thumb_menu(client: Client, message: Message):
+    """منوی مدیریت Thumbnail محتوای بزرگسال"""
+    try:
+        from plugins.adult_content_admin import load_settings
+        
+        settings = load_settings()
+        thumb_path = settings.get('thumbnail_path')
+        thumb_status = "✅ تنظیم شده" if thumb_path else "❌ تنظیم نشده"
+        
+        text = (
+            "🔞 **مدیریت Thumbnail محتوای بزرگسال**\n\n"
+            f"📸 **وضعیت:** {thumb_status}\n\n"
+            "⚙️ **توضیحات:**\n"
+            "• این thumbnail روی تمام ویدیوهای بزرگسال اعمال می‌شود\n"
+            "• برای تنظیم، یک عکس ارسال کنید\n"
+            "• برای حذف، از دکمه زیر استفاده کنید\n\n"
+            "💡 **نکته:** Thumbnail به جلوگیری از فیلتر شدن کمک می‌کند"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📸 تنظیم Thumbnail", callback_data='adult_set_thumb'),
+                InlineKeyboardButton("🗑 حذف Thumbnail", callback_data='adult_del_thumb')
+            ],
+            [
+                InlineKeyboardButton("🔙 بازگشت", callback_data='back_to_admin')
+            ]
+        ])
+        
+        await message.reply_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Adult thumbnail menu opened by {message.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in admin_adult_thumb_menu: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)}")
+
 
 # منوی اصلی مدیریت کوکی
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^🍪 مدیریت کوکی$'))
