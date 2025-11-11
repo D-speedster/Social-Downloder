@@ -216,7 +216,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         
         await status_msg.edit_text(
             f"📥 <b>فایل پیدا شد!</b>\n\n"
-            f"🎬 {title[:50]}...\n"
             f"📊 کیفیت: {quality}p\n"
             f"💾 حجم: {format_size(file_size)}\n\n"
             f"⏳ در حال آماده‌سازی...",
@@ -227,13 +226,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         try:
             logger.info(f"Starting upload for file: {file_path}")
             
-            # Caption
-            caption = f"🎬 {title}\n📊 کیفیت: {quality}p"
+            # Caption - بدون تایتل برای محتوای بزرگسال
+            caption = f"📊 کیفیت: {quality}p"
             
-            # آپدیت پیام
+            # آپدیت پیام - بدون تایتل
             await status_msg.edit_text(
                 f"📤 <b>در حال ارسال...</b>\n\n"
-                f"🎬 {title[:50]}...\n"
                 f"💾 {format_size(file_size)}\n\n"
                 f"⏳ لطفاً صبر کنید...",
                 parse_mode=ParseMode.HTML
@@ -285,28 +283,44 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 logger.debug(f"Could not extract metadata: {e}")
             
             # ارسال فایل با metadata
+            # برای فایل‌های بزرگتر از 50MB از document استفاده می‌کنیم
+            file_size_mb = file_size / (1024 * 1024)
+            
             with open(file_path, 'rb') as video_file:
-                # آماده‌سازی پارامترها
-                video_params = {
-                    'video': video_file,
-                    'caption': caption,
-                    'supports_streaming': True,
-                    'read_timeout': 300,
-                    'write_timeout': 300,
-                    'connect_timeout': 60
-                }
-                
-                # اضافه کردن metadata اگر موجود باشد
-                if duration:
-                    video_params['duration'] = duration
-                if width:
-                    video_params['width'] = width
-                if height:
-                    video_params['height'] = height
-                if thumbnail:
-                    video_params['thumbnail'] = thumbnail  # در PTB باید thumbnail باشه نه thumb
-                
-                await message.reply_video(**video_params)
+                if file_size_mb > 50:
+                    # ارسال به عنوان document برای فایل‌های بزرگ (تا 2GB)
+                    logger.info(f"Sending large file ({file_size_mb:.2f}MB) as document")
+                    await message.reply_document(
+                        document=video_file,
+                        caption=caption,
+                        filename=os.path.basename(file_path),
+                        read_timeout=600,
+                        write_timeout=600,
+                        connect_timeout=60
+                    )
+                else:
+                    # ارسال به عنوان video برای فایل‌های کوچک
+                    logger.info(f"Sending file ({file_size_mb:.2f}MB) as video")
+                    video_params = {
+                        'video': video_file,
+                        'caption': caption,
+                        'supports_streaming': True,
+                        'read_timeout': 300,
+                        'write_timeout': 300,
+                        'connect_timeout': 60
+                    }
+                    
+                    # اضافه کردن metadata اگر موجود باشد
+                    if duration:
+                        video_params['duration'] = duration
+                    if width:
+                        video_params['width'] = width
+                    if height:
+                        video_params['height'] = height
+                    if thumbnail:
+                        video_params['thumbnail'] = thumbnail
+                    
+                    await message.reply_video(**video_params)
             
             # حذف پیام وضعیت
             await status_msg.delete()
@@ -316,12 +330,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             logger.info(f"File {file_code} sent successfully to user {user_id}")
             
-            # پیام موفقیت
+            # پیام موفقیت با هشدار حذف
             await message.reply_html(
                 "✅ <b>فایل با موفقیت ارسال شد!</b>\n\n"
-                "🎉 از استفاده شما متشکریم.\n\n"
+                "⚠️ <b>توجه مهم:</b>\n"
+                "سریعاً این فایل را به جایی فوروارد کنید!\n"
+                "⏰ <b>2 دقیقه دیگر فایل از ربات حذف می‌شود.</b>\n\n"
                 "💡 برای دریافت فایل‌های بیشتر، کد جدید ارسال کنید."
             )
+            
+            # زمان‌بندی حذف فایل بعد از 2 دقیقه
+            import asyncio
+            asyncio.create_task(schedule_file_deletion(file_code, file_path, 120))
         
         except Exception as upload_error:
             logger.error(f"Upload error: {upload_error}")
@@ -343,6 +363,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             pass
 
 
+async def schedule_file_deletion(file_code: str, file_path: str, delay_seconds: int) -> None:
+    """حذف خودکار فایل بعد از مدت زمان مشخص"""
+    import asyncio
+    try:
+        logger.info(f"Scheduled deletion for {file_code} in {delay_seconds} seconds")
+        await asyncio.sleep(delay_seconds)
+        
+        # حذف فایل از دیسک
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            logger.info(f"File deleted from disk: {file_path}")
+        
+        # حذف از storage
+        pornhub_storage.delete_file(file_code)
+        logger.info(f"File {file_code} deleted from storage after {delay_seconds} seconds")
+    
+    except Exception as e:
+        logger.error(f"Error deleting file {file_code}: {e}")
+
+
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """هندلر خطاها"""
     logger.error(f"Update {update} caused error {context.error}", exc_info=context.error)
@@ -356,8 +396,16 @@ def main() -> None:
         print("=" * 70)
         print()
         
-        # ساخت application
-        application = Application.builder().token(DELIVERY_BOT_TOKEN).build()
+        # ساخت application با timeout‌های بالاتر برای فایل‌های بزرگ
+        application = (
+            Application.builder()
+            .token(DELIVERY_BOT_TOKEN)
+            .read_timeout(600)
+            .write_timeout(600)
+            .connect_timeout(60)
+            .pool_timeout(60)
+            .build()
+        )
         
         # اضافه کردن هندلرها
         application.add_handler(CommandHandler("start", start_command))
