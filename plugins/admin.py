@@ -169,14 +169,6 @@ def admin_inline_maker() -> list:
     power_label = f"قدرت: {('🔴 OFF' if power_state == 'OFF' else '🟢 ON')}"
     fj_label = f"قفل عضویت: {'🟢 روشن' if data.get('force_join', True) else '🔴 خاموش'}"
     
-    # بررسی وضعیت thumbnail
-    try:
-        from plugins.adult_content_admin import load_settings
-        settings = load_settings()
-        thumb_status = "✅" if settings.get('thumbnail_path') else "❌"
-    except:
-        thumb_status = "❌"
-    
     return [
         [
             InlineKeyboardButton("📊 آمار کاربران", callback_data='st'),
@@ -192,7 +184,7 @@ def admin_inline_maker() -> list:
         ],
         [
             InlineKeyboardButton("🍪 مدیریت کوکی", callback_data='cookie_mgmt'),
-            InlineKeyboardButton(f"{thumb_status} Thumbnail بزرگسال", callback_data='adult_thumb'),
+            InlineKeyboardButton("🔞 تنظیم Thumbnail", callback_data='adult_thumb'),
         ],
         [
             InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),

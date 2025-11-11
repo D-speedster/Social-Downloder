@@ -19,6 +19,61 @@ class FailedRequestQueue:
     def __init__(self, db: DB):
         self.db = db
     
+    def get_queue_stats(self) -> dict:
+        """
+        دریافت آمار کلی صف درخواست‌ها
+        
+        Returns:
+            dict: آمار شامل total, pending, processing, completed, failed
+        """
+        try:
+            # دریافت تمام درخواست‌ها
+            all_requests = self.db.get_all_failed_requests()
+            
+            stats = {
+                'total': len(all_requests),
+                'pending': 0,
+                'processing': 0,
+                'completed': 0,
+                'failed': 0
+            }
+            
+            # شمارش بر اساس وضعیت
+            for req in all_requests:
+                status = req.get('status', 'pending')
+                if status in stats:
+                    stats[status] += 1
+            
+            return stats
+        
+        except Exception as e:
+            logger.error(f"Error getting queue stats: {e}")
+            return {
+                'total': 0,
+                'pending': 0,
+                'processing': 0,
+                'completed': 0,
+                'failed': 0
+            }
+    
+    def get_pending_requests(self, limit: int = 10) -> list:
+        """
+        دریافت لیست درخواست‌های در انتظار
+        
+        Args:
+            limit: تعداد درخواست‌ها
+        
+        Returns:
+            list: لیست درخواست‌های pending
+        """
+        try:
+            all_requests = self.db.get_all_failed_requests()
+            pending = [r for r in all_requests if r.get('status') == 'pending']
+            return pending[:limit]
+        except Exception as e:
+            logger.error(f"Error getting pending requests: {e}")
+            return []
+    
     async def retry_request(
         self,
         client: Client,
