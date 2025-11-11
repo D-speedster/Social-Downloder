@@ -1,5 +1,6 @@
 mysql-connector-python
 Pyrogram
+python-telegram-bot>=20.0  # 🤖 For bot2.py (Delivery Bot)
 instaloader
 aiohttp
 python-dateutil
