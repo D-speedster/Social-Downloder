@@ -356,13 +356,16 @@ async def quality_callback(client: Client, callback_query):
     
     quality_info = video_info['qualities'][selected]
     
-    # شروع دانلود
+    # شروع دانلود - پیام بدون تایتل (برای جلوگیری از فیلتر)
     await callback_query.message.edit_text(
-        f"📥 **در حال دانلود از سایت بزرگسال**\n\n"
-        f"🎬 {html.escape(video_info['title'][:50])}...\n"
-        f"📊 کیفیت: {selected}p\n\n"
-        f"⏳ لطفاً صبر کنید…",
-        parse_mode=ParseMode.HTML
+        " **دانلود محتوای بزرگسال**\n\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 **کیفیت:** {selected}p\n"
+        f"⏱️ **وضعیت:** در حال دانلود...\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+        "⏳ لطفاً صبر کنید، این فرآیند ممکن است چند دقیقه طول بکشد.\n\n"
+        "💡 **نکته:** فایل به صورت خودکار برای شما ارسال خواهد شد.",
+        parse_mode=ParseMode.MARKDOWN
     )
     
     try:
@@ -406,18 +409,26 @@ async def quality_callback(client: Client, callback_query):
         if not file_code:
             raise Exception("خطا در ذخیره‌سازی فایل")
         
-        # پیام موفقیت با دستورالعمل
+        # پیام موفقیت با دستورالعمل - بدون تایتل (برای جلوگیری از فیلتر)
         success_message = (
-            f"✅ **فایل شما آماده است!**\n\n"
-            f"🎬 {html.escape(video_info['title'][:50])}...\n"
-            f"📊 کیفیت: {selected}p\n"
-            f"💾 حجم: {file_size_mb:.2f} MB\n\n"
-            f"📥 **برای دریافت فایل:**\n"
-            f"1️⃣ وارد ربات زیر شوید:\n"
-            f"👉 @wwwiranbot\n\n"
-            f"2️⃣ این پیام را برای ربات فوروارد کنید:\n\n"
-            f"🔑 <code>FILE_{file_code}</code>\n\n"
-            f"⚠️ <b>توجه:</b> این کد فقط 24 ساعت معتبر است."
+            "✅ **دانلود با موفقیت انجام شد!**\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 **کیفیت:** {selected}p\n"
+            f"💾 **حجم:** {file_size_mb:.2f} MB\n"
+            f"⏱️ **زمان دانلود:** {int(download_time)}s\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "📥 **مراحل دریافت فایل:**\n\n"
+            "**1️⃣ ورود به ربات دریافت:**\n"
+            "👉 @wwwiranbot\n\n"
+            "**2️⃣ ارسال کد فایل:**\n"
+            "این پیام را به ربات فوروارد کنید یا کد زیر را ارسال کنید:\n\n"
+            f"🔑 `FILE_{file_code}`\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ **توجه مهم:**\n"
+            "• کد فقط **24 ساعت** معتبر است\n"
+            "• فایل بعد از ارسال **2 دقیقه** حذف می‌شود\n"
+            "• سریعاً فایل را ذخیره کنید\n\n"
+            "💡 **راهنما:** این پیام را فوروارد کنید تا کد به صورت خودکار شناسایی شود."
         )
         
         await callback_query.message.edit_text(
@@ -430,8 +441,17 @@ async def quality_callback(client: Client, callback_query):
     
     except Exception as e:
         logger.error(f"Download error: {e}")
+        error_msg = str(e)[:100]  # محدود کردن طول خطا
         await callback_query.message.edit_text(
-            f"❌ **خطا در دانلود**\n\nخطا: {str(e)}\n\nلطفاً دوباره تلاش کنید.",
+            "❌ **خطا در دانلود**\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🔴 **علت:** {error_msg}\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "💡 **راهنمایی:**\n"
+            "• لینک را دوباره بررسی کنید\n"
+            "• چند دقیقه دیگر تلاش کنید\n"
+            "• در صورت تکرار، با پشتیبانی تماس بگیرید\n\n"
+            "🔄 برای تلاش مجدد، لینک را دوباره ارسال کنید.",
             parse_mode=ParseMode.MARKDOWN
         )
 
