@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# 🤖 اجرای ربات دوم (Delivery Bot)
+# 🤖 اجرای ربات دوم (Delivery Bot - Pyrogram)
 
 echo "=================================="
-echo "🚀 Starting Delivery Bot"
+echo "🚀 Starting Delivery Bot (Pyrogram)"
 echo "=================================="
 echo ""
 
@@ -21,5 +21,5 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # اجرای ربات
-echo "⏳ Starting bot2.py..."
+echo "⏳ Starting bot2.py (Pyrogram - supports up to 2GB)..."
 python3 bot2.py
