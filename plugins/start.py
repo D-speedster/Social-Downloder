@@ -781,8 +781,12 @@ async def handle_text_messages(client: Client, message: Message):
             # These are handled by dedicated handlers, do nothing here
             pass
         else:
-            # Only show help for text that looks like a URL
-            if ('http' in text.lower() or 'www.' in text.lower() or '.com' in text.lower() or 
+            # بررسی لینک‌های محتوای بزرگسال (نباید پیام راهنما نشون بده)
+            adult_domains = ['pornhub.com', 'xnxx.com', 'xvideos.com']
+            is_adult_link = any(domain in text.lower() for domain in adult_domains)
+            
+            # Only show help for text that looks like a URL (but not adult content)
+            if not is_adult_link and ('http' in text.lower() or 'www.' in text.lower() or '.com' in text.lower() or 
                 '.org' in text.lower() or '.net' in text.lower() or text.startswith('@')):
                 # Looks like a URL but not supported
                 await message.reply_text(

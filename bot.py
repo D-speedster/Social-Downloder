@@ -10,6 +10,8 @@ import asyncio
 from dotenv import load_dotenv
 import plugins.youtube_handler
 import plugins.youtube_callback
+import plugins.pornhub_handler  # 🔞 Adult content downloader
+import plugins.adult_content_admin  # 🔞 Adult content admin panel
 import plugins.sponsor_admin
 import plugins.radiojavan_handler  # 🎵 RadioJavan downloader
 import plugins.aparat_handler  # 🎬 Aparat downloader
