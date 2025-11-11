@@ -101,7 +101,6 @@ class AdminUserState:
         }
         # Adult content thumbnail state
         self.waiting_adult_thumb = False
-        }
         # Sponsor setup state
         self.sponsor = {
             'step': 0  # 0: idle, 1: waiting for input
