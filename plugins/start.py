@@ -782,7 +782,7 @@ async def handle_text_messages(client: Client, message: Message):
             pass
         else:
             # بررسی لینک‌های محتوای بزرگسال (نباید پیام راهنما نشون بده)
-            adult_domains = ['pornhub.com', 'xnxx.com', 'xvideos.com']
+            adult_domains = ['pornhub.com', 'xvideos.com', 'youporn.com', 'xhamster.com']
             is_adult_link = any(domain in text.lower() for domain in adult_domains)
             
             # Only show help for text that looks like a URL (but not adult content)

@@ -54,9 +54,14 @@ def get_thumbnail_path() -> str:
     return settings.get('thumbnail_path')
 
 
-@Client.on_message(filters.command("adult_admin") & filters.user(ADMIN_ID))
+@Client.on_message(filters.command("adult_admin") & filters.private)
 async def adult_admin_panel(client: Client, message: Message):
     """پنل ادمین محتوای بزرگسال"""
+    # بررسی دسترسی ادمین
+    if message.from_user.id != ADMIN_ID:
+        await message.reply_text("⛔ فقط ادمین به این بخش دسترسی دارد.")
+        return
+    
     settings = load_settings()
     
     thumbnail_status = "✅ تنظیم شده" if settings.get('thumbnail_path') else "❌ تنظیم نشده"
@@ -135,9 +140,13 @@ async def adult_admin_callback(client: Client, callback: CallbackQuery):
         await adult_admin_panel(client, callback.message)
 
 
-@Client.on_message(filters.photo & filters.user(ADMIN_ID) & filters.private)
+@Client.on_message(filters.photo & filters.private)
 async def handle_thumbnail_upload(client: Client, message: Message):
     """دریافت thumbnail از ادمین"""
+    # بررسی دسترسی ادمین
+    if message.from_user.id != ADMIN_ID:
+        return  # فقط برای ادمین
+    
     try:
         # دانلود عکس
         photo = message.photo

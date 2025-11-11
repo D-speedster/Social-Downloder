@@ -1,7 +1,10 @@
 @echo off
+title Delivery Bot
+color 0A
+
 echo ========================================
-echo Starting Pornhub Delivery Bot (PTB)
+echo   Starting Delivery Bot
 echo ========================================
 echo.
-python pornhub_delivery_bot_ptb.py
+python bot2.py
 pause

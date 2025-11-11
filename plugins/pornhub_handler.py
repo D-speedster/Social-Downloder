@@ -31,9 +31,22 @@ SUPPORTED_QUALITIES = ['360', '480', '720', '1080']
 
 # Regex برای تشخیص لینک‌های سایت‌های بزرگسال
 PORNHUB_REGEX = re.compile(
-    r'(https?://)?(www\.|[a-z]{2}\.)?(pornhub\.com|xnxx\.com)/(view_video\.php\?viewkey=|video-|embed/)?([a-zA-Z0-9_-]+)',
+    r'(https?://)?(www\.|[a-z]{2}\.)?(pornhub\.com|xvideos\.com|youporn\.com)/(view_video\.php\?viewkey=|video\.|watch/|embed/)?([a-zA-Z0-9_.-]+)',
     re.IGNORECASE
 )
+
+
+def safe_get_height(format_dict: dict) -> int | None:
+    """دریافت ایمن height از format"""
+    try:
+        height = format_dict.get('height')
+        if height is None:
+            return None
+        if isinstance(height, (int, float)):
+            return int(height)
+        return None
+    except:
+        return None
 
 
 async def extract_pornhub_info(url: str) -> dict | None:
@@ -47,26 +60,43 @@ async def extract_pornhub_info(url: str) -> dict | None:
         formats = info.get('formats', [])
         available_qualities: dict = {}
         
+        logger.info(f"Total formats found: {len(formats)}")
+        
         # بررسی کیفیت‌های موجود
         for quality in SUPPORTED_QUALITIES:
             target_height = int(quality)
             
-            # جستجوی فرمت‌های ترکیبی
+            # جستجوی فرمت‌های ترکیبی (دقیق)
             combined_formats = [
                 f for f in formats
                 if f.get('vcodec') != 'none'
                 and f.get('acodec') != 'none'
-                and f.get('height') == target_height
+                and safe_get_height(f) is not None
+                and safe_get_height(f) == target_height
             ]
             
-            # انعطاف‌پذیری ±10px
+            # انعطاف‌پذیری ±20px (برای XNXX و سایت‌های مشابه)
             if not combined_formats:
                 combined_formats = [
                     f for f in formats
                     if f.get('vcodec') != 'none'
                     and f.get('acodec') != 'none'
-                    and f.get('height') is not None
-                    and abs(f.get('height') - target_height) <= 10
+                    and safe_get_height(f) is not None
+                    and abs(safe_get_height(f) - target_height) <= 20
+                ]
+            
+            # اگر هنوز پیدا نشد، از format_id استفاده کن (برای XNXX)
+            if not combined_formats:
+                quality_patterns = {
+                    '360': ['360p', '358p', 'hls-360p'],
+                    '480': ['480p', '478p', 'hls-480p'],
+                    '720': ['720p', 'hls-720p'],
+                    '1080': ['1080p', 'hls-1080p']
+                }
+                patterns = quality_patterns.get(quality, [])
+                combined_formats = [
+                    f for f in formats
+                    if any(pattern in str(f.get('format_id', '')).lower() for pattern in patterns)
                 ]
             
             if combined_formats:
@@ -91,7 +121,8 @@ async def extract_pornhub_info(url: str) -> dict | None:
                 f for f in formats
                 if f.get('vcodec') != 'none'
                 and f.get('acodec') == 'none'
-                and f.get('height') == target_height
+                and safe_get_height(f) is not None
+                and safe_get_height(f) == target_height
             ]
             
             if not video_formats:
@@ -99,8 +130,24 @@ async def extract_pornhub_info(url: str) -> dict | None:
                     f for f in formats
                     if f.get('vcodec') != 'none'
                     and f.get('acodec') == 'none'
-                    and f.get('height') is not None
-                    and abs(f.get('height') - target_height) <= 10
+                    and safe_get_height(f) is not None
+                    and abs(safe_get_height(f) - target_height) <= 20
+                ]
+            
+            # اگر هنوز پیدا نشد، از format_id استفاده کن
+            if not video_formats:
+                quality_patterns = {
+                    '360': ['360p', '358p', 'hls-360p'],
+                    '480': ['480p', '478p', 'hls-480p'],
+                    '720': ['720p', 'hls-720p'],
+                    '1080': ['1080p', 'hls-1080p']
+                }
+                patterns = quality_patterns.get(quality, [])
+                video_formats = [
+                    f for f in formats
+                    if f.get('vcodec') != 'none'
+                    and f.get('acodec') == 'none'
+                    and any(pattern in str(f.get('format_id', '')).lower() for pattern in patterns)
                 ]
             
             if not video_formats:
@@ -156,14 +203,19 @@ async def extract_pornhub_info(url: str) -> dict | None:
         return None
 
 
-def format_duration(seconds: int) -> str:
+def format_duration(seconds) -> str:
     """تبدیل ثانیه به فرمت hh:mm:ss"""
     if not seconds:
         return "نامشخص"
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+    try:
+        # تبدیل به int در صورت float بودن
+        seconds = int(seconds)
+        h = seconds // 3600
+        m = (seconds % 3600) // 60
+        s = seconds % 60
+        return f"{h:02d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+    except (ValueError, TypeError):
+        return "نامشخص"
 
 
 def format_number(num: int) -> str:
@@ -253,8 +305,7 @@ async def handle_pornhub_link(client: Client, message: Message):
             f"👤 <b>آپلودر:</b> {html.escape(video_info['uploader'])}\n"
             f"⏱ <b>مدت زمان:</b> {format_duration(video_info['duration'])}\n"
             f"👁 <b>بازدید:</b> {format_number(video_info['view_count'])}\n\n"
-            f"📋 <b>لطفاً کیفیت مورد نظر را انتخاب کنید:</b>\n\n"
-            f"⚠️ <b>توجه:</b> فایل دانلود می‌شود اما فعلاً ارسال نمی‌شود."
+            f"📋 <b>لطفاً کیفیت مورد نظر را انتخاب کنید:</b>"
         )
         
         # کیبورد کیفیت‌ها
@@ -292,7 +343,7 @@ async def quality_callback(client: Client, callback_query):
         return
     
     video_info = pornhub_cache[user_id]
-    selected = data.split('_')[-1]  # مثلاً 720
+    selected = data.split('_')[-1]  # مثلاً 720 یا best
     
     if selected not in video_info['qualities']:
         await callback_query.answer(
@@ -307,7 +358,7 @@ async def quality_callback(client: Client, callback_query):
     
     # شروع دانلود
     await callback_query.message.edit_text(
-        f"📥 **در حال دانلود**\n\n"
+        f"📥 **در حال دانلود از سایت بزرگسال**\n\n"
         f"🎬 {html.escape(video_info['title'][:50])}...\n"
         f"📊 کیفیت: {selected}p\n\n"
         f"⏳ لطفاً صبر کنید…",

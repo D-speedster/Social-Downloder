@@ -59,12 +59,18 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import and run the bot
-from bot import main
+# Note: This imports from bot.py (not bot2.py)
+import importlib.util
 import asyncio
+
+# Load bot.py explicitly
+spec = importlib.util.spec_from_file_location("bot_module", "bot.py")
+bot_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bot_module)
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        asyncio.run(bot_module.main())
     except KeyboardInterrupt:
         print("Bot stopped by user")
     except Exception as e:

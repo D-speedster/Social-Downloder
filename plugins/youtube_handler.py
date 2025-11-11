@@ -96,7 +96,8 @@ async def extract_video_info(url: str) -> dict | None:
                     if f.get('vcodec') != 'none'
                     and f.get('acodec') != 'none'
                     and f.get('height') is not None
-                    and abs(f.get('height') - target_height) <= 10
+                    and isinstance(f.get('height'), (int, float))
+                    and abs(int(f.get('height')) - target_height) <= 10
                     and f.get('ext') in ['mp4', 'webm']
                 ]
 
@@ -161,7 +162,8 @@ async def extract_video_info(url: str) -> dict | None:
                     if f.get('vcodec') != 'none'
                     and f.get('acodec') == 'none'
                     and f.get('height') is not None
-                    and abs(f.get('height') - target_height) <= 10
+                    and isinstance(f.get('height'), (int, float))
+                    and abs(int(f.get('height')) - target_height) <= 10
                     and f.get('ext') in ['mp4', 'webm']
                 ]
 

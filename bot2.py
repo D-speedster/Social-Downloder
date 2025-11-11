@@ -277,18 +277,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             
             # ارسال فایل با metadata
             with open(file_path, 'rb') as video_file:
-                await message.reply_video(
-                    video=video_file,
-                    caption=caption,
-                    duration=duration,
-                    width=width,
-                    height=height,
-                    thumb=thumbnail,
-                    supports_streaming=True,
-                    read_timeout=300,
-                    write_timeout=300,
-                    connect_timeout=60
-                )
+                # آماده‌سازی پارامترها
+                video_params = {
+                    'video': video_file,
+                    'caption': caption,
+                    'supports_streaming': True,
+                    'read_timeout': 300,
+                    'write_timeout': 300,
+                    'connect_timeout': 60
+                }
+                
+                # اضافه کردن metadata اگر موجود باشد
+                if duration:
+                    video_params['duration'] = duration
+                if width:
+                    video_params['width'] = width
+                if height:
+                    video_params['height'] = height
+                if thumbnail:
+                    video_params['thumbnail'] = thumbnail  # در PTB باید thumbnail باشه نه thumb
+                
+                await message.reply_video(**video_params)
             
             # حذف پیام وضعیت
             await status_msg.delete()
