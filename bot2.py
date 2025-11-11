@@ -50,13 +50,17 @@ if not API_ID or not API_HASH:
 # Regex برای تشخیص کد فایل
 FILE_CODE_REGEX = re.compile(r'FILE_([A-Z0-9]{8})', re.IGNORECASE)
 
+# شناسه ادمین
+ADMIN_ID = 79049016
+
 # ساخت client
 app = Client(
     "delivery_bot",
     api_id=int(API_ID),
     api_hash=API_HASH,
     bot_token=DELIVERY_BOT_TOKEN,
-    workdir="."
+    workdir=".",
+    plugins=dict(root="plugins")  # بارگذاری plugins از پوشه plugins
 )
 
 
@@ -277,15 +281,51 @@ async def handle_message(client: Client, message: Message):
             except Exception as e:
                 logger.debug(f"No admin thumbnail: {e}")
             
+            # استخراج metadata ویدیو با ffprobe
+            duration = 0
+            width = 0
+            height = 0
+            
+            try:
+                import subprocess
+                import json as json_lib
+                
+                cmd = [
+                    'ffprobe', '-v', 'quiet', '-print_format', 'json',
+                    '-show_format', '-show_streams', file_path
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                
+                if result.returncode == 0:
+                    metadata = json_lib.loads(result.stdout)
+                    
+                    # Duration
+                    if 'format' in metadata and 'duration' in metadata['format']:
+                        duration = int(float(metadata['format']['duration']))
+                    
+                    # Width & Height
+                    for stream in metadata.get('streams', []):
+                        if stream.get('codec_type') == 'video':
+                            width = stream.get('width', 0)
+                            height = stream.get('height', 0)
+                            break
+                    
+                    logger.info(f"Video metadata: duration={duration}s, {width}x{height}")
+            except Exception as e:
+                logger.warning(f"Could not extract metadata: {e}")
+            
             # ارسال فایل با Pyrogram (پشتیبانی تا 2GB)
             file_size_mb = file_size / (1024 * 1024)
             logger.info(f"Sending file ({file_size_mb:.2f}MB) with Pyrogram")
             
-            # ارسال به عنوان video
+            # ارسال به عنوان video با metadata
             await message.reply_video(
                 video=file_path,
                 caption=caption,
                 thumb=thumbnail,
+                duration=duration if duration > 0 else 0,
+                width=width if width > 0 else 0,
+                height=height if height > 0 else 0,
                 supports_streaming=True,
                 progress=None  # می‌تونیم progress callback اضافه کنیم
             )
