@@ -99,6 +99,9 @@ class AdminUserState:
             'type': '',
             'platform': ''
         }
+        # Adult content thumbnail state
+        self.waiting_adult_thumb = False
+        }
         # Sponsor setup state
         self.sponsor = {
             'step': 0  # 0: idle, 1: waiting for input
@@ -166,6 +169,15 @@ def admin_inline_maker() -> list:
     power_state = data.get('bot_status', 'ON')
     power_label = f"قدرت: {('🔴 OFF' if power_state == 'OFF' else '🟢 ON')}"
     fj_label = f"قفل عضویت: {'🟢 روشن' if data.get('force_join', True) else '🔴 خاموش'}"
+    
+    # بررسی وضعیت thumbnail
+    try:
+        from plugins.adult_content_admin import load_settings
+        settings = load_settings()
+        thumb_status = "✅" if settings.get('thumbnail_path') else "❌"
+    except:
+        thumb_status = "❌"
+    
     return [
         [
             InlineKeyboardButton("📊 آمار کاربران", callback_data='st'),
@@ -181,6 +193,7 @@ def admin_inline_maker() -> list:
         ],
         [
             InlineKeyboardButton("🍪 مدیریت کوکی", callback_data='cookie_mgmt'),
+            InlineKeyboardButton(f"{thumb_status} Thumbnail بزرگسال", callback_data='adult_thumb'),
         ],
         [
             InlineKeyboardButton("✅ بررسی کانال", callback_data='sp_check'),
@@ -3031,3 +3044,141 @@ async def retry_stats_command(_: Client, message: Message):
 
 admin_logger.info("Failed request queue management handlers loaded")
 admin_logger.info("Retry metrics handlers loaded")
+
+
+# ==================== Adult Content Thumbnail Management ====================
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^adult_thumb$'))
+async def adult_thumb_callback(client: Client, callback_query: CallbackQuery):
+    """مدیریت Thumbnail محتوای بزرگسال"""
+    try:
+        from plugins.adult_content_admin import load_settings, save_settings
+        
+        settings = load_settings()
+        thumb_path = settings.get('thumbnail_path')
+        thumb_status = "✅ تنظیم شده" if thumb_path else "❌ تنظیم نشده"
+        
+        text = (
+            "🔞 **مدیریت Thumbnail محتوای بزرگسال**\n\n"
+            f"📸 **وضعیت:** {thumb_status}\n\n"
+            "⚙️ **توضیحات:**\n"
+            "• این thumbnail روی تمام ویدیوهای بزرگسال اعمال می‌شود\n"
+            "• برای تنظیم، یک عکس ارسال کنید\n"
+            "• برای حذف، از دکمه زیر استفاده کنید\n\n"
+            "💡 **نکته:** Thumbnail به جلوگیری از فیلتر شدن کمک می‌کند"
+        )
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📸 تنظیم Thumbnail", callback_data='adult_set_thumb'),
+                InlineKeyboardButton("🗑 حذف Thumbnail", callback_data='adult_del_thumb')
+            ],
+            [
+                InlineKeyboardButton("🔙 بازگشت", callback_data='back_to_admin')
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        await callback_query.answer()
+    
+    except Exception as e:
+        admin_logger.error(f"Error in adult_thumb_callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:50]}", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^adult_set_thumb$'))
+async def adult_set_thumb_callback(client: Client, callback_query: CallbackQuery):
+    """درخواست ارسال عکس برای thumbnail"""
+    # تنظیم state برای دریافت عکس
+    user_id = callback_query.from_user.id
+    if user_id not in admin_user_states:
+        admin_user_states[user_id] = AdminUserState(user_id)
+    
+    # تنظیم state
+    admin_user_states[user_id].waiting_adult_thumb = True
+    
+    await callback_query.answer("📸 لطفاً عکس را ارسال کنید", show_alert=True)
+    await callback_query.message.reply_text(
+        "📸 **تنظیم Thumbnail**\n\n"
+        "لطفاً عکس مورد نظر را ارسال کنید.\n"
+        "این عکس روی تمام ویدیوهای بزرگسال اعمال خواهد شد.\n\n"
+        "💡 برای لغو، /cancel ارسال کنید."
+    )
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^adult_del_thumb$'))
+async def adult_del_thumb_callback(client: Client, callback_query: CallbackQuery):
+    """حذف thumbnail"""
+    try:
+        from plugins.adult_content_admin import load_settings, save_settings
+        import os
+        
+        settings = load_settings()
+        old_path = settings.get('thumbnail_path')
+        
+        if old_path and os.path.exists(old_path):
+            try:
+                os.unlink(old_path)
+            except:
+                pass
+        
+        settings['thumbnail_path'] = None
+        save_settings(settings)
+        
+        await callback_query.answer("✅ Thumbnail حذف شد", show_alert=True)
+        
+        # بازگشت به منوی thumbnail
+        await adult_thumb_callback(client, callback_query)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in adult_del_thumb_callback: {e}")
+        await callback_query.answer(f"❌ خطا: {str(e)[:50]}", show_alert=True)
+
+
+# Handler برای دریافت عکس thumbnail از ادمین
+@Client.on_message(filters.photo & filters.user(ADMIN) & filters.private)
+async def handle_admin_photo(client: Client, message: Message):
+    """دریافت عکس از ادمین (برای thumbnail یا سایر موارد)"""
+    user_id = message.from_user.id
+    
+    # بررسی state
+    if user_id in admin_user_states and hasattr(admin_user_states[user_id], 'waiting_adult_thumb') and admin_user_states[user_id].waiting_adult_thumb:
+        try:
+            from plugins.adult_content_admin import load_settings, save_settings
+            
+            # دانلود عکس
+            photo = message.photo
+            file_path = f"data/adult_thumbnail_{photo.file_id}.jpg"
+            
+            status_msg = await message.reply_text("⏳ در حال دانلود عکس...")
+            
+            downloaded = await client.download_media(photo.file_id, file_name=file_path)
+            
+            if downloaded:
+                # حذف thumbnail قبلی
+                settings = load_settings()
+                old_path = settings.get('thumbnail_path')
+                if old_path and os.path.exists(old_path) and old_path != downloaded:
+                    try:
+                        os.unlink(old_path)
+                    except:
+                        pass
+                
+                # ذخیره تنظیمات جدید
+                settings['thumbnail_path'] = downloaded
+                save_settings(settings)
+                
+                # ریست state
+                admin_user_states[user_id].waiting_adult_thumb = False
+                
+                await status_msg.edit_text(
+                    "✅ **Thumbnail با موفقیت تنظیم شد!**\n\n"
+                    "این عکس روی تمام ویدیوهای بزرگسال اعمال خواهد شد."
+                )
+                admin_logger.info(f"Thumbnail set by admin {user_id}: {downloaded}")
+            else:
+                await status_msg.edit_text("❌ خطا در دانلود عکس")
+        
+        except Exception as e:
+            admin_logger.error(f"Error handling admin photo: {e}")
+            await message.reply_text(f"❌ خطا: {str(e)}")
