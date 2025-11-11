@@ -34,8 +34,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# تنظیمات ربات
-DELIVERY_BOT_TOKEN = "8311578874:AAELkdM0t3DI_kQWXIAtIT4TeyMzZofCnyk"
+# تنظیمات ربات - خواندن از environment variable
+from dotenv import load_dotenv
+load_dotenv()
+
+DELIVERY_BOT_TOKEN = os.getenv("DELIVERY_BOT_TOKEN")
+
+if not DELIVERY_BOT_TOKEN:
+    logger.error("DELIVERY_BOT_TOKEN not found in environment variables")
+    print("❌ Error: DELIVERY_BOT_TOKEN not found in .env file")
+    print("💡 Please add DELIVERY_BOT_TOKEN to your .env file")
+    sys.exit(1)
 
 # Regex برای تشخیص کد فایل
 FILE_CODE_REGEX = re.compile(r'FILE_([A-Z0-9]{8})', re.IGNORECASE)
