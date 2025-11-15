@@ -3108,6 +3108,22 @@ admin_logger.info("Failed request queue management handlers loaded")
 admin_logger.info("Retry metrics handlers loaded")
 
 
+@Client.on_message(filters.command('clearcache') & filters.user(ADMIN))
+async def clear_cache_command(_: Client, message: Message):
+    """دستور پاک کردن cache آمار"""
+    try:
+        clear_stats_cache()
+        await message.reply_text(
+            "✅ **Cache پاک شد**\n\n"
+            "تمام آمارهای ذخیره شده در cache پاک شدند.\n"
+            "آمار جدید از دیتابیس بارگذاری خواهد شد."
+        )
+        admin_logger.info(f"[ADMIN] Cache cleared by {message.from_user.id}")
+    except Exception as e:
+        admin_logger.error(f"Error in clear_cache command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
 # ==================== Adult Content Thumbnail Management ====================
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^adult_thumb$'))

@@ -269,36 +269,18 @@ class StatisticsFormatter:
         Returns:
             str: متن فرمت شده
         """
-        # محاسبه نرخ فعالیت
-        activity_rate_today = 0
-        activity_rate_week = 0
-        activity_rate_month = 0
-        
-        if stats['today'] > 0:
-            activity_rate_today = (stats['active_today'] / stats['today']) * 100
-        if stats['week'] > 0:
-            activity_rate_week = (stats['active_week'] / stats['week']) * 100
-        if stats['month'] > 0:
-            activity_rate_month = (stats['active_month'] / stats['month']) * 100
-        
         text = (
-            "👥 **آمار کاربران**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 **مجموع کاربران**\n\n"
-            f"• کل کاربران: **{StatisticsFormatter.format_number(stats['total'])}**\n"
-            f"• کاربران این ماه: **{StatisticsFormatter.format_number(stats['month'])}**\n"
-            f"• کاربران این هفته: **{StatisticsFormatter.format_number(stats['week'])}**\n"
-            f"• کاربران امروز: **{StatisticsFormatter.format_number(stats['today'])}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "✅ **کاربران فعال**\n\n"
-            f"• فعال امروز: **{StatisticsFormatter.format_number(stats['active_today'])}**\n"
-            f"• فعال این هفته: **{StatisticsFormatter.format_number(stats['active_week'])}**\n"
-            f"• فعال این ماه: **{StatisticsFormatter.format_number(stats['active_month'])}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📈 **نرخ فعالیت**\n\n"
-            f"امروز: {StatisticsFormatter.create_progress_bar(activity_rate_today)}\n"
-            f"هفته: {StatisticsFormatter.create_progress_bar(activity_rate_week)}\n"
-            f"ماه: {StatisticsFormatter.create_progress_bar(activity_rate_month)}"
+            "👥 **آمار کاربران**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "📊 **مجموع کاربران**\n"
+            f"├ کل کاربران: `{StatisticsFormatter.format_number(stats['total'])}`\n"
+            f"├ این ماه: `{StatisticsFormatter.format_number(stats['month'])}`\n"
+            f"├ این هفته: `{StatisticsFormatter.format_number(stats['week'])}`\n"
+            f"└ امروز: `{StatisticsFormatter.format_number(stats['today'])}`\n\n"
+            "✅ **کاربران فعال**\n"
+            f"├ امروز: `{StatisticsFormatter.format_number(stats['active_today'])}`\n"
+            f"├ این هفته: `{StatisticsFormatter.format_number(stats['active_week'])}`\n"
+            f"└ این ماه: `{StatisticsFormatter.format_number(stats['active_month'])}`"
         )
         
         return text
@@ -314,23 +296,25 @@ class StatisticsFormatter:
         Returns:
             str: متن فرمت شده
         """
+        total = stats['total']
+        
         text = (
-            "📈 **آمار درخواست‌ها**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"📊 **مجموع:** {StatisticsFormatter.format_number(stats['total'])} درخواست\n\n"
+            "📈 **آمار درخواست‌ها**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📊 **مجموع کل:** `{StatisticsFormatter.format_number(total)}` درخواست\n\n"
+            "**توزیع پلتفرم‌ها:**\n\n"
             f"🎬 **YouTube**\n"
-            f"{StatisticsFormatter.create_progress_bar(stats['percentages']['youtube'], 18)}\n"
-            f"{StatisticsFormatter.format_number(stats['youtube'])} درخواست\n\n"
+            f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['youtube'], 15)}\n"
+            f"   `{StatisticsFormatter.format_number(stats['youtube'])}` درخواست\n\n"
             f"📺 **Aparat**\n"
-            f"{StatisticsFormatter.create_progress_bar(stats['percentages']['aparat'], 18)}\n"
-            f"{StatisticsFormatter.format_number(stats['aparat'])} درخواست\n\n"
+            f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['aparat'], 15)}\n"
+            f"   `{StatisticsFormatter.format_number(stats['aparat'])}` درخواست\n\n"
             f"🔞 **محتوای بزرگسال**\n"
-            f"{StatisticsFormatter.create_progress_bar(stats['percentages']['adult'], 18)}\n"
-            f"{StatisticsFormatter.format_number(stats['adult'])} درخواست\n\n"
+            f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['adult'], 15)}\n"
+            f"   `{StatisticsFormatter.format_number(stats['adult'])}` درخواست\n\n"
             f"🌐 **Universal**\n"
-            f"{StatisticsFormatter.create_progress_bar(stats['percentages']['universal'], 18)}\n"
-            f"{StatisticsFormatter.format_number(stats['universal'])} درخواست"
+            f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['universal'], 15)}\n"
+            f"   `{StatisticsFormatter.format_number(stats['universal'])}` درخواست"
         )
         
         return text
@@ -349,18 +333,16 @@ class StatisticsFormatter:
         total = stats['successful'] + stats['failed']
         
         text = (
-            "⚡ **آمار عملکرد**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 **وضعیت درخواست‌ها**\n\n"
-            f"✅ موفق: **{StatisticsFormatter.format_number(stats['successful'])}**\n"
-            f"❌ ناموفق: **{StatisticsFormatter.format_number(stats['failed'])}**\n"
-            f"📊 مجموع: **{StatisticsFormatter.format_number(total)}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📈 **نرخ موفقیت**\n\n"
-            f"{StatisticsFormatter.create_progress_bar(stats['success_rate'], 18)}\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "⏱️ **عملکرد**\n\n"
-            f"میانگین زمان پردازش: **{stats['avg_processing_time']:.1f}** ثانیه"
+            "⚡ **آمار عملکرد**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            "📊 **وضعیت درخواست‌ها**\n"
+            f"├ ✅ موفق: `{StatisticsFormatter.format_number(stats['successful'])}`\n"
+            f"├ ❌ ناموفق: `{StatisticsFormatter.format_number(stats['failed'])}`\n"
+            f"└ 📊 مجموع: `{StatisticsFormatter.format_number(total)}`\n\n"
+            "📈 **نرخ موفقیت**\n"
+            f"{StatisticsFormatter.create_progress_bar(stats['success_rate'], 15)}\n\n"
+            "⏱️ **زمان پردازش**\n"
+            f"└ میانگین: `{stats['avg_processing_time']:.2f}` ثانیه"
         )
         
         return text
@@ -382,20 +364,18 @@ class StatisticsFormatter:
             str: متن فرمت شده
         """
         text = (
-            "📊 **نمای کلی آمار**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "👥 **کاربران**\n\n"
-            f"• کل کاربران: **{StatisticsFormatter.format_number(stats['total_users'])}**\n"
-            f"• فعال امروز: **{StatisticsFormatter.format_number(stats['active_today'])}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "📈 **درخواست‌ها**\n\n"
-            f"• کل درخواست‌ها: **{StatisticsFormatter.format_number(stats['total_requests'])}**\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "⚡ **عملکرد**\n\n"
-            f"• نرخ موفقیت: **{stats['success_rate']:.1f}%**\n"
-            f"• میانگین زمان: **{stats['avg_time']:.1f}** ثانیه\n\n"
+            "📊 **نمای کلی آمار**\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "💡 برای مشاهده جزئیات بیشتر، از دکمه‌های زیر استفاده کنید."
+            "👥 **کاربران**\n"
+            f"├ کل: `{StatisticsFormatter.format_number(stats['total_users'])}`\n"
+            f"└ فعال امروز: `{StatisticsFormatter.format_number(stats['active_today'])}`\n\n"
+            "📈 **درخواست‌ها**\n"
+            f"└ مجموع: `{StatisticsFormatter.format_number(stats['total_requests'])}`\n\n"
+            "⚡ **عملکرد**\n"
+            f"├ نرخ موفقیت: `{stats['success_rate']:.1f}%`\n"
+            f"└ میانگین زمان: `{stats['avg_time']:.2f}s`\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "💡 برای جزئیات بیشتر از دکمه‌های زیر استفاده کنید"
         )
         
         return text
