@@ -1,7 +1,7 @@
 {
     "sponser": "@OkAlef",
     "bot_status": "ON",
-    "force_join": true,
+    "force_join": false,
     "advertisement": {
         "enabled": false,
         "content_type": "photo",

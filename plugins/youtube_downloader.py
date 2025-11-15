@@ -104,6 +104,14 @@ class YouTubeDownloader:
             
             # تنظیمات مخصوص فایل‌های صوتی
             if is_audio_only:
+                # برای audio، نام فایل را بدون پسوند تنظیم می‌کنیم
+                # چون FFmpeg خودش .mp3 اضافه می‌کند
+                if output_path.endswith('.mp3'):
+                    output_path_no_ext = output_path[:-4]
+                else:
+                    output_path_no_ext = os.path.splitext(output_path)[0]
+                
+                ydl_opts['outtmpl'] = output_path_no_ext
                 ydl_opts.update({
                     # استفاده از format selector عمومی‌تر برای صوت
                     'format': 'bestaudio/best',  # بهترین صوت موجود
@@ -114,6 +122,8 @@ class YouTubeDownloader:
                     }],
                     'merge_output_format': 'mp3',
                 })
+                # فایل نهایی با .mp3 خواهد بود
+                output_path = output_path_no_ext + '.mp3'
             else:
                 # تنظیمات مخصوص ویدیو
                 ydl_opts.update({

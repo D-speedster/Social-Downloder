@@ -69,7 +69,15 @@ class PornhubDownloader:
             مسیر فایل دانلود شده یا None
         """
         try:
+            # Ensure output_filename is string, not bytes
+            if isinstance(output_filename, bytes):
+                output_filename = output_filename.decode('utf-8')
+            
             output_path = os.path.join(self.download_dir, output_filename)
+            
+            # Ensure output_path is string
+            if isinstance(output_path, bytes):
+                output_path = output_path.decode('utf-8')
             
             # حذف فایل قبلی اگر وجود دارد
             if os.path.exists(output_path):
@@ -81,7 +89,7 @@ class PornhubDownloader:
             # تنظیمات yt-dlp
             ydl_opts = {
                 'format': format_string,
-                'outtmpl': output_path,
+                'outtmpl': str(output_path),  # Ensure it's string
                 'quiet': True,
                 'no_warnings': True,
                 

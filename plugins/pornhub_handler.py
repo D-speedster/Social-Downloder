@@ -14,7 +14,7 @@ from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
 
-from plugins.sqlite_db_wrapper import DB
+from plugins.db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.start import join
 from plugins.pornhub_downloader import pornhub_downloader
@@ -275,6 +275,10 @@ async def handle_pornhub_link(client: Client, message: Message):
         )
         return
     
+    # ثبت درخواست در دیتابیس
+    request_id = db.log_request(user_id=user_id, platform='adult', url=url, status='pending')
+    logger.info(f"Request logged with ID: {request_id}")
+    
     # پیام وضعیت
     status_msg = await message.reply_text(
         "🔄 در حال پردازش لینک از سایت بزرگسال…\n⏳ لطفاً چند لحظه صبر کنید…"
@@ -285,6 +289,15 @@ async def handle_pornhub_link(client: Client, message: Message):
         video_info = await extract_pornhub_info(url)
         
         if not video_info or not video_info.get('qualities'):
+            # به‌روزرسانی وضعیت به failed
+            processing_time = time.time() - start
+            db.update_request_status(
+                request_id=request_id,
+                status='failed',
+                processing_time=processing_time,
+                error_message='امکان دریافت اطلاعات ویدیو وجود ندارد'
+            )
+            
             await status_msg.edit_text(
                 "❌ **خطا در پردازش ویدیو**\n\n"
                 "امکان دریافت اطلاعات ویدیو وجود ندارد.\n"
@@ -298,6 +311,8 @@ async def handle_pornhub_link(client: Client, message: Message):
         
         # ذخیره در کش
         pornhub_cache[user_id] = video_info
+        # ذخیره request_id برای استفاده در callback
+        pornhub_cache[user_id]['request_id'] = request_id
         
         # متن توصیفی
         info_text = (
@@ -318,10 +333,27 @@ async def handle_pornhub_link(client: Client, message: Message):
             reply_markup=kb
         )
         
+        # به‌روزرسانی وضعیت به success (نمایش کیفیت‌ها موفق بود)
+        processing_time = time.time() - start
+        db.update_request_status(
+            request_id=request_id,
+            status='success',
+            processing_time=processing_time
+        )
+        
         elapsed = time.time() - start
         logger.info(f"Quality selection shown in {elapsed:.2f}s for user {user_id}")
     
     except Exception as exc:
+        # به‌روزرسانی وضعیت به failed
+        processing_time = time.time() - start
+        db.update_request_status(
+            request_id=request_id,
+            status='failed',
+            processing_time=processing_time,
+            error_message=str(exc)[:500]
+        )
+        
         logger.error(f"Error handling Pornhub link (user {user_id}): {exc}")
         await status_msg.edit_text(
             f"❌ **خطا در پردازش ویدیو**\n\nخطا: {str(exc)[:150]}\n\nلطفاً دوباره تلاش کنید.",

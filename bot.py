@@ -1,22 +1,24 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+# Fix Unicode encoding for Windows console
+import sys
+import os
+if sys.platform == 'win32':
+    # Only set console to UTF-8, don't wrap stdout/stderr
+    os.system('chcp 65001 >nul 2>&1')
+    # Set environment variable for Python
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+
 from pyrogram import Client, idle
 from plugins.sqlite_db_wrapper import DB
 from plugins.job_queue import init_job_queue
 from logging import basicConfig, ERROR, INFO
-import os
-import sys
 import atexit
 import signal
 import asyncio
 from dotenv import load_dotenv
-import plugins.youtube_handler
-import plugins.youtube_callback
-import plugins.pornhub_handler  # 🔞 Adult content downloader
-import plugins.adult_content_admin  # 🔞 Adult content admin panel
-import plugins.sponsor_admin
-import plugins.radiojavan_handler  # 🎵 RadioJavan downloader
-import plugins.aparat_handler  # 🎬 Aparat downloader
-import plugins.aparat_callback  # 🎬 Aparat callback
-import plugins.admin_retry_callback  # 🔄 Admin retry callback handler
+# Handler imports moved after Client creation to ensure proper registration
 from plugins.cookie_validator import start_cookie_validator, stop_cookie_validator
 from plugins.health_monitor import start_health_monitor, stop_health_monitor, get_health_monitor
 
@@ -308,6 +310,7 @@ logger.info(f"🚀 Using {MAX_WORKERS} workers (optimized for {os.cpu_count() or
 logger.info(f"⚡ Workers: {MAX_WORKERS}")
 
 async def main():
+    global plugins  # Access global plugins variable
     background_tasks = []  # لیست برای مدیریت background tasks
     
     try:
@@ -358,6 +361,20 @@ async def main():
         
         # ساخت client
         client = Client(**client_config)
+        
+        # 🔥 CRITICAL: Import handlers AFTER Client creation
+        logger.info("📥 Importing handlers...")
+        import plugins.youtube_handler
+        import plugins.youtube_callback
+        import plugins.pornhub_handler  # 🔞 Adult content downloader
+        import plugins.adult_content_admin  # 🔞 Adult content admin panel
+        import plugins.sponsor_admin
+        import plugins.radiojavan_handler  # 🎵 RadioJavan downloader
+        import plugins.aparat_handler  # 🎬 Aparat downloader
+        import plugins.aparat_callback  # 🎬 Aparat callback
+        import plugins.admin_retry_callback  # 🔄 Admin retry callback handler
+        import plugins.universal_downloader  # 🌐 Universal downloader (Instagram, etc.)
+        logger.info("✅ All handlers imported and registered")
         
         # شروع client
         await client.start()

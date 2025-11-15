@@ -163,6 +163,25 @@ class DB:
                     ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
                     """
                 )
+                # Requests table for statistics
+                self.cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS requests (
+                        id INTEGER UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id BIGINT UNSIGNED NOT NULL,
+                        platform VARCHAR(64) NOT NULL,
+                        url TEXT,
+                        status VARCHAR(32) NOT NULL,
+                        created_at VARCHAR(32) NOT NULL,
+                        completed_at VARCHAR(32),
+                        processing_time DOUBLE,
+                        error_message TEXT,
+                        INDEX idx_requests_platform (platform),
+                        INDEX idx_requests_created_at (created_at),
+                        INDEX idx_requests_status (status)
+                    ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
+                    """
+                )
                 # Failed requests queue
                 self.cursor.execute(
                     """
@@ -209,6 +228,33 @@ class DB:
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
                     )"""
+                )
+                # Requests table for statistics
+                self.cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS requests (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_id INTEGER NOT NULL,
+                        platform TEXT NOT NULL,
+                        url TEXT,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        completed_at TEXT,
+                        processing_time REAL,
+                        error_message TEXT
+                    )"""
+                )
+                # Create index for better performance
+                self.cursor.execute(
+                    """CREATE INDEX IF NOT EXISTS idx_requests_platform 
+                    ON requests(platform)"""
+                )
+                self.cursor.execute(
+                    """CREATE INDEX IF NOT EXISTS idx_requests_created_at 
+                    ON requests(created_at)"""
+                )
+                self.cursor.execute(
+                    """CREATE INDEX IF NOT EXISTS idx_requests_status 
+                    ON requests(status)"""
                 )
                 # Cookies pool
                 self.cursor.execute(
@@ -1057,3 +1103,181 @@ class DB:
         except Exception as e:
             print(f"Failed to get average processing time: {e}")
             return 0.0
+
+
+    # ==================== Statistics Methods ====================
+    
+    def get_total_users(self) -> int:
+        """دریافت تعداد کل کاربران"""
+        try:
+            self.cursor.execute('SELECT COUNT(*) FROM users')
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting total users: {e}")
+            return 0
+    
+    def get_users_since(self, since_date: _dt) -> int:
+        """دریافت تعداد کاربران جدید از تاریخ مشخص"""
+        try:
+            date_str = since_date.isoformat()
+            if self.db_type == 'mysql':
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE joined_at >= %s', (date_str,))
+            else:
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE joined_at >= ?', (date_str,))
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting users since {since_date}: {e}")
+            return 0
+    
+    def get_active_users_since(self, since_date: _dt) -> int:
+        """دریافت تعداد کاربران فعال از تاریخ مشخص"""
+        try:
+            date_str = since_date.isoformat()
+            if self.db_type == 'mysql':
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE last_download >= %s', (date_str,))
+            else:
+                self.cursor.execute('SELECT COUNT(*) FROM users WHERE last_download >= ?', (date_str,))
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting active users since {since_date}: {e}")
+            return 0
+    
+    def get_total_requests(self) -> int:
+        """دریافت مجموع کل درخواست‌ها"""
+        try:
+            self.cursor.execute('SELECT SUM(total_requests) FROM users')
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row and row[0] is not None else 0
+        except Exception as e:
+            print(f"Error getting total requests: {e}")
+            return 0
+    
+    def get_requests_by_platform(self, platform: str) -> int:
+        """
+        دریافت تعداد درخواست‌ها به تفکیک پلتفرم از جدول requests
+        """
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute('SELECT COUNT(*) FROM requests WHERE platform = %s', (platform,))
+            else:
+                self.cursor.execute('SELECT COUNT(*) FROM requests WHERE platform = ?', (platform,))
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting requests by platform {platform}: {e}")
+            return 0
+    
+    def get_successful_requests(self) -> int:
+        """دریافت تعداد درخواست‌های موفق از جدول requests"""
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute("SELECT COUNT(*) FROM requests WHERE status = %s", ('success',))
+            else:
+                self.cursor.execute("SELECT COUNT(*) FROM requests WHERE status = ?", ('success',))
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting successful requests: {e}")
+            return 0
+    
+    def get_failed_requests(self) -> int:
+        """دریافت تعداد درخواست‌های ناموفق از جدول requests"""
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute("SELECT COUNT(*) FROM requests WHERE status = %s", ('failed',))
+            else:
+                self.cursor.execute("SELECT COUNT(*) FROM requests WHERE status = ?", ('failed',))
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting failed requests: {e}")
+            return 0
+    
+    def get_avg_processing_time(self) -> float:
+        """دریافت میانگین زمان پردازش از جدول requests"""
+        try:
+            query = """
+                SELECT AVG(processing_time) 
+                FROM requests 
+                WHERE status = ? AND processing_time IS NOT NULL
+            """ if self.db_type == 'sqlite' else """
+                SELECT AVG(processing_time) 
+                FROM requests 
+                WHERE status = %s AND processing_time IS NOT NULL
+            """
+            
+            if self.db_type == 'mysql':
+                self.cursor.execute(query, ('success',))
+            else:
+                self.cursor.execute(query, ('success',))
+            
+            row = self.cursor.fetchone()
+            return float(row[0] or 0) if row and row[0] is not None else 0.0
+        except Exception as e:
+            print(f"Error getting avg processing time: {e}")
+            return 0.0
+
+
+    def log_request(self, user_id: int, platform: str, url: str, status: str = 'pending'):
+        """
+        ثبت یک درخواست جدید در جدول requests
+        
+        Args:
+            user_id: شناسه کاربر
+            platform: نام پلتفرم (youtube, aparat, adult, universal)
+            url: آدرس درخواست
+            status: وضعیت (pending, success, failed)
+        
+        Returns:
+            int: شناسه درخواست ثبت شده
+        """
+        try:
+            created_at = _dt.now().isoformat()
+            
+            if self.db_type == 'mysql':
+                self.cursor.execute(
+                    'INSERT INTO requests (user_id, platform, url, status, created_at) VALUES (%s, %s, %s, %s, %s)',
+                    (user_id, platform, url, status, created_at)
+                )
+                self.mydb.commit()
+                return self.cursor.lastrowid
+            else:
+                self.cursor.execute(
+                    'INSERT INTO requests (user_id, platform, url, status, created_at) VALUES (?, ?, ?, ?, ?)',
+                    (user_id, platform, url, status, created_at)
+                )
+                self.mydb.commit()
+                return self.cursor.lastrowid
+        except Exception as e:
+            print(f"Error logging request: {e}")
+            return 0
+    
+    def update_request_status(self, request_id: int, status: str, processing_time: float = None, error_message: str = None):
+        """
+        به‌روزرسانی وضعیت یک درخواست
+        
+        Args:
+            request_id: شناسه درخواست
+            status: وضعیت جدید (success, failed)
+            processing_time: زمان پردازش (ثانیه)
+            error_message: پیام خطا (در صورت failed)
+        """
+        try:
+            completed_at = _dt.now().isoformat()
+            
+            if self.db_type == 'mysql':
+                self.cursor.execute(
+                    'UPDATE requests SET status = %s, completed_at = %s, processing_time = %s, error_message = %s WHERE id = %s',
+                    (status, completed_at, processing_time, error_message, request_id)
+                )
+            else:
+                self.cursor.execute(
+                    'UPDATE requests SET status = ?, completed_at = ?, processing_time = ?, error_message = ? WHERE id = ?',
+                    (status, completed_at, processing_time, error_message, request_id)
+                )
+            self.mydb.commit()
+        except Exception as e:
+            print(f"Error updating request status: {e}")

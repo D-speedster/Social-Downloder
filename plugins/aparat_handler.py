@@ -12,7 +12,7 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ParseMode
-from plugins.sqlite_db_wrapper import DB
+from plugins.db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 import yt_dlp
@@ -231,13 +231,13 @@ async def download_thumbnail(url: str) -> str:
         return None
 
 
-@Client.on_message(filters.private & filters.text & join, group=4)
+@Client.on_message(filters.private & filters.regex(APARAT_REGEX) & join)
 async def aparat_handler(client: Client, message: Message):
     """Handler اصلی برای لینک‌های آپارات"""
     try:
         text = message.text.strip()
         
-        # Check if it's an Aparat link
+        # Extract video ID from regex match
         match = APARAT_REGEX.match(text)
         if not match:
             return
@@ -246,6 +246,11 @@ async def aparat_handler(client: Client, message: Message):
         logger.info(f"Aparat request from user {user_id}: {text}")
         
         start_time = time.time()
+        
+        # ثبت درخواست در دیتابیس
+        db = DB()
+        request_id = db.log_request(user_id=user_id, platform='aparat', url=text, status='pending')
+        logger.info(f"Request logged with ID: {request_id}")
         
         # Send processing message
         status_msg = await message.reply_text(
@@ -257,6 +262,15 @@ async def aparat_handler(client: Client, message: Message):
         video_info = await extract_aparat_info(text)
         
         if not video_info or not video_info.get('qualities'):
+            # به‌روزرسانی وضعیت به failed
+            processing_time = time.time() - start_time
+            db.update_request_status(
+                request_id=request_id,
+                status='failed',
+                processing_time=processing_time,
+                error_message='امکان دریافت اطلاعات ویدیو وجود ندارد'
+            )
+            
             await status_msg.edit_text(
                 "❌ **خطا در پردازش ویدیو**\n\n"
                 "متأسفانه امکان دریافت اطلاعات ویدیو وجود ندارد.\n\n"
@@ -270,6 +284,8 @@ async def aparat_handler(client: Client, message: Message):
         
         # Store video info in cache
         video_cache[user_id] = video_info
+        # ذخیره request_id برای استفاده در callback
+        video_cache[user_id]['request_id'] = request_id
         
         # Create info text
         info_text = (
@@ -318,10 +334,27 @@ async def aparat_handler(client: Client, message: Message):
                 reply_markup=keyboard
             )
         
+        # به‌روزرسانی وضعیت به success (نمایش کیفیت‌ها موفق بود)
+        processing_time = time.time() - start_time
+        db.update_request_status(
+            request_id=request_id,
+            status='success',
+            processing_time=processing_time
+        )
+        
         elapsed = time.time() - start_time
         logger.info(f"Quality selection displayed in {elapsed:.2f}s")
         
     except Exception as e:
+        # به‌روزرسانی وضعیت به failed
+        processing_time = time.time() - start_time
+        db.update_request_status(
+            request_id=request_id,
+            status='failed',
+            processing_time=processing_time,
+            error_message=str(e)[:500]
+        )
+        
         logger.error(f"Error handling Aparat link: {e}")
         try:
             await message.reply_text(

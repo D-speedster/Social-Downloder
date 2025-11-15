@@ -14,7 +14,7 @@ def calculate_optimal_capacity():
 DEFAULT_CAPACITY = calculate_optimal_capacity()
 MAX_CONCURRENT_DOWNLOADS = int(os.getenv('MAX_CONCURRENT_DOWNLOADS', str(DEFAULT_CAPACITY)))
 
-print(f"🚀 Concurrency initialized: {MAX_CONCURRENT_DOWNLOADS} concurrent downloads")
+print(f"Concurrency initialized: {MAX_CONCURRENT_DOWNLOADS} concurrent downloads")
 
 _download_semaphore = asyncio.Semaphore(MAX_CONCURRENT_DOWNLOADS)
 

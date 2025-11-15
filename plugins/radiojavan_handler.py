@@ -11,7 +11,7 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.enums import ParseMode
-from plugins.sqlite_db_wrapper import DB
+from plugins.db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 from radiojavanapi import Client as RJClient
@@ -122,28 +122,15 @@ def format_number(num: int) -> str:
     return f"{num:,}"
 
 
-@Client.on_message(filters.private & filters.text, group=2)
+@Client.on_message(filters.private & filters.regex(RADIOJAVAN_REGEX) & join)
 async def radiojavan_handler(client: Client, message: Message):
     """Handler اصلی برای لینک‌های رادیو جوان"""
     try:
         text = message.text.strip()
         
-        # 🔥 Debug: لاگ کردن هر پیام
+        # 🔥 Debug: لاگ کردن
         logger.info(f"RadioJavan handler received text: {text[:50]}")
         print(f"[RADIOJAVAN] Handler triggered: {text[:50]}")
-        
-        # بررسی اینکه آیا لینک رادیو جوان است
-        if not RADIOJAVAN_REGEX.match(text):
-            logger.info(f"Text does not match RadioJavan pattern")
-            print(f"[RADIOJAVAN] Pattern not matched")
-            return
-        
-        # 🔥 Check join filter manually
-        from plugins.start import join_check
-        is_member = await join_check(None, client, message)
-        if not is_member:
-            logger.info(f"User not member, skipping")
-            return
         
         user_id = message.from_user.id
         logger.info(f"RadioJavan request from user {user_id}: {text}")

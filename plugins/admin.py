@@ -12,6 +12,13 @@ import sys, requests
 from datetime import datetime as _dt
 from plugins import constant
 from plugins.db_wrapper import DB
+from plugins.admin_statistics import (
+    StatisticsCalculator, 
+    StatisticsFormatter,
+    get_cached_stats,
+    set_cached_stats,
+    clear_stats_cache
+)
 
 import shutil, platform, asyncio, os as _os
 import psutil
@@ -220,20 +227,47 @@ async def admin_menu_root_msg(_: Client, message: Message):
 
 
 @Client.on_message(filters.user(ADMIN) & filters.regex(r'^📊 آمار کاربران$'))
-async def admin_menu_stats(_: Client, message: Message):
-    # Fix #5 & #9: Use logger instead of print
-    admin_logger.info(f"[ADMIN] stats via text by {message.from_user.id}")
-    stats = DB().get_system_stats()
-    text = (
-        "\u200F<b>📊 آمار سیستم</b>\n\n"
-        f"👥 مجموع کاربران: <b>{stats.get('total_users', 0)}</b>\n"
-        f"🆕 کاربران امروز: <b>{stats.get('users_today', 0)}</b>\n"
-        f"✅ کاربران فعال امروز: <b>{stats.get('active_today', 0)}</b>\n"
-        f"📈 مجموع درخواست‌ها: <b>{stats.get('total_requests_sum', 0)}</b>\n"
-        f"⛔️ کاربران در محدودیت: <b>{stats.get('blocked_count', 0)}</b>\n"
-    )
-    await message.reply_text(text, reply_markup=admin_reply_kb())
-    # Fix #10: Add return to prevent handler conflicts
+async def admin_menu_stats(client: Client, message: Message):
+    """نمایش صفحه Overview آمار"""
+    admin_logger.info(f"[ADMIN] stats overview via text by {message.from_user.id}")
+    
+    try:
+        # بررسی cache
+        cached = get_cached_stats('overview')
+        if cached:
+            stats = cached
+        else:
+            # محاسبه آمار
+            db = DB()
+            calculator = StatisticsCalculator(db)
+            stats = calculator.calculate_overview_stats()
+            set_cached_stats('overview', stats)
+        
+        # فرمت کردن
+        text = StatisticsFormatter.format_overview_stats(stats)
+        
+        # کیبورد با دسترسی به آمار تفصیلی
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("👥 جزئیات کاربران", callback_data='stats_users'),
+                InlineKeyboardButton("📈 جزئیات درخواست‌ها", callback_data='stats_requests')
+            ],
+            [
+                InlineKeyboardButton("⚡ جزئیات عملکرد", callback_data='stats_performance'),
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh_overview')
+            ],
+            [
+                InlineKeyboardButton("🔙 بازگشت", callback_data='back_to_admin')
+            ]
+        ])
+        
+        await message.reply_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Overview stats displayed to {message.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in admin_menu_stats: {e}")
+        await message.reply_text("❌ خطا در دریافت آمار")
+    
     return
 
 
@@ -939,11 +973,9 @@ async def refresh_status_callback(client: Client, callback_query: CallbackQuery)
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^back_to_admin$'))
 async def back_to_admin_callback(client: Client, callback_query: CallbackQuery):
     """Handle back to admin panel callback"""
-    await callback_query.message.edit_text(
-        "🛠 **پنل مدیریت**\n\nلطفاً یکی از گزینه‌های زیر را انتخاب کنید:",
-        reply_markup=InlineKeyboardMarkup(admin_inline_maker())
-    )
-    await callback_query.answer()
+    # حذف پیام و بازگشت به کیبورد ثابت
+    await callback_query.message.delete()
+    await callback_query.answer("🔙 بازگشت به پنل اصلی")
 
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^status_(header|info_)'))
@@ -3212,3 +3244,207 @@ async def handle_admin_photo(client: Client, message: Message):
         except Exception as e:
             admin_logger.error(f"Error handling admin photo: {e}")
             await message.reply_text(f"❌ خطا: {str(e)}")
+
+
+# ==================== Statistics System ====================
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^(st|stats_overview)$'))
+async def stats_overview_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش صفحه Overview"""
+    try:
+        await callback_query.answer("⏳ در حال محاسبه...")
+        
+        # بررسی cache
+        cached = get_cached_stats('overview')
+        if cached:
+            stats = cached
+        else:
+            # محاسبه آمار
+            db = DB()
+            calculator = StatisticsCalculator(db)
+            stats = calculator.calculate_overview_stats()
+            set_cached_stats('overview', stats)
+        
+        # فرمت کردن
+        text = StatisticsFormatter.format_overview_stats(stats)
+        
+        # کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("👥 جزئیات کاربران", callback_data='stats_users'),
+                InlineKeyboardButton("📈 جزئیات درخواست‌ها", callback_data='stats_requests')
+            ],
+            [
+                InlineKeyboardButton("⚡ جزئیات عملکرد", callback_data='stats_performance'),
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh_overview')
+            ],
+            [
+                InlineKeyboardButton("🔙 بازگشت", callback_data='back_to_admin')
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Overview stats viewed by {callback_query.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in stats_overview_callback: {e}")
+        await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_users$'))
+async def stats_users_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش آمار کاربران"""
+    try:
+        await callback_query.answer("⏳ در حال محاسبه...")
+        
+        # بررسی cache
+        cached = get_cached_stats('users')
+        if cached:
+            stats = cached
+        else:
+            # محاسبه آمار
+            db = DB()
+            calculator = StatisticsCalculator(db)
+            stats = calculator.calculate_users_stats()
+            set_cached_stats('users', stats)
+        
+        # فرمت کردن
+        text = StatisticsFormatter.format_users_stats(stats)
+        
+        # کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh_users'),
+                InlineKeyboardButton("🔙 بازگشت", callback_data='stats_overview')
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Users stats viewed by {callback_query.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in stats_users_callback: {e}")
+        await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_requests$'))
+async def stats_requests_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش آمار درخواست‌ها"""
+    try:
+        await callback_query.answer("⏳ در حال محاسبه...")
+        
+        # بررسی cache
+        cached = get_cached_stats('requests')
+        if cached:
+            stats = cached
+        else:
+            # محاسبه آمار
+            db = DB()
+            calculator = StatisticsCalculator(db)
+            stats = calculator.calculate_requests_stats()
+            set_cached_stats('requests', stats)
+        
+        # فرمت کردن
+        text = StatisticsFormatter.format_requests_stats(stats)
+        
+        # کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh_requests'),
+                InlineKeyboardButton("🔙 بازگشت", callback_data='stats_overview')
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Requests stats viewed by {callback_query.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in stats_requests_callback: {e}")
+        await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_performance$'))
+async def stats_performance_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش آمار عملکرد"""
+    try:
+        await callback_query.answer("⏳ در حال محاسبه...")
+        
+        # بررسی cache
+        cached = get_cached_stats('performance')
+        if cached:
+            stats = cached
+        else:
+            # محاسبه آمار
+            db = DB()
+            calculator = StatisticsCalculator(db)
+            stats = calculator.calculate_performance_stats()
+            set_cached_stats('performance', stats)
+        
+        # فرمت کردن
+        text = StatisticsFormatter.format_performance_stats(stats)
+        
+        # کیبورد
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh_performance'),
+                InlineKeyboardButton("🔙 بازگشت", callback_data='stats_overview')
+            ]
+        ])
+        
+        await callback_query.message.edit_text(text, reply_markup=keyboard)
+        admin_logger.info(f"[ADMIN] Performance stats viewed by {callback_query.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error in stats_performance_callback: {e}")
+        await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_menu$'))
+async def stats_menu_callback(client: Client, callback_query: CallbackQuery):
+    """بازگشت به منوی آمار"""
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👥 آمار کاربران", callback_data='stats_users'),
+            InlineKeyboardButton("📈 آمار درخواست‌ها", callback_data='stats_requests')
+        ],
+        [
+            InlineKeyboardButton("⚡ آمار عملکرد", callback_data='stats_performance'),
+            InlineKeyboardButton("🔄 بروزرسانی", callback_data='stats_refresh')
+        ],
+        [
+            InlineKeyboardButton("🔙 بازگشت", callback_data='back_to_admin')
+        ]
+    ])
+    
+    await callback_query.message.edit_text(
+        "📊 **آمار و گزارشات**\n\n"
+        "انتخاب کنید:",
+        reply_markup=keyboard
+    )
+    await callback_query.answer()
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_refresh'))
+async def stats_refresh_callback(client: Client, callback_query: CallbackQuery):
+    """به‌روزرسانی آمار"""
+    try:
+        # پاک کردن cache
+        clear_stats_cache()
+        
+        # تشخیص نوع آمار
+        data = callback_query.data
+        
+        if 'overview' in data:
+            await stats_overview_callback(client, callback_query)
+        elif 'users' in data:
+            await stats_users_callback(client, callback_query)
+        elif 'requests' in data:
+            await stats_requests_callback(client, callback_query)
+        elif 'performance' in data:
+            await stats_performance_callback(client, callback_query)
+        else:
+            await callback_query.answer("✅ Cache پاک شد", show_alert=True)
+    
+    except Exception as e:
+        admin_logger.error(f"Error in stats_refresh_callback: {e}")
+        await callback_query.answer("❌ خطا در بروزرسانی", show_alert=True)

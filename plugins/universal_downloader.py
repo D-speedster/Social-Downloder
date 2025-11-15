@@ -100,6 +100,56 @@ def _telegram_retry_delay(err: Exception, base: float = 1.0) -> float:
             delay = base * 1.5
     return _with_jitter(delay)
 
+def _check_api_error(api_result, platform):
+    """
+    بررسی خطای API و برگرداندن پیام مناسب برای کاربر
+    
+    Args:
+        api_result: نتیجه API که شامل خطا است
+        platform: نام پلتفرم (Instagram, etc.)
+    
+    Returns:
+        str: پیام خطای فارسی برای کاربر
+    """
+    try:
+        # اگر api_result یک dict است و شامل data و message است
+        if isinstance(api_result, dict):
+            data = api_result.get("data", {})
+            if isinstance(data, dict) and "message" in data:
+                message = data["message"]
+                
+                # چک کردن پیج خصوصی یا محدود شده
+                if "Private Url is not supported" in message or "Restricted personal page" in message:
+                    return (
+                        "🔒 **این صفحه خصوصی است**\n\n"
+                        "متأسفانه امکان دانلود از صفحات خصوصی وجود ندارد.\n\n"
+                        "💡 **راه‌حل:**\n"
+                        "• اگر صاحب صفحه هستید، آن را عمومی کنید\n"
+                        "• یا از صفحات عمومی لینک ارسال کنید"
+                    )
+                
+                if "follow the account" in message:
+                    return (
+                        "🔒 **برای دسترسی به این محتوا باید صفحه را فالو کنید**\n\n"
+                        "متأسفانه ربات نمی‌تواند از صفحات محدود شده دانلود کند.\n\n"
+                        "💡 **راه‌حل:**\n"
+                        "• صفحه را فالو کنید و از طریق اکانت خودتان دانلود کنید\n"
+                        "• یا از صفحات عمومی لینک ارسال کنید"
+                    )
+        
+        # پیام پیش‌فرض
+        return (
+            f"❌ **خطا در دریافت اطلاعات از {platform}**\n\n"
+            "محتوا در دسترس نیست یا محدودیت دارد.\n\n"
+            "🔄 لطفاً:\n"
+            "• لینک را بررسی کنید\n"
+            "• مطمئن شوید محتوا عمومی است\n"
+            "• چند دقیقه بعد دوباره تلاش کنید"
+        )
+    except Exception as e:
+        _log(f"[UNIV] Error in _check_api_error: {e}")
+        return f"❌ خطا در پردازش درخواست {platform}"
+
 def get_user_friendly_error_message(api_response, platform):
     """Convert API error responses to user-friendly Persian messages"""
     try:
@@ -572,6 +622,14 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
         platform = get_platform_name(url)
         _log(f"[UNIV] Platform detected: {platform}")
         
+        # ثبت درخواست در دیتابیس برای تمام پلتفرم‌ها
+        request_id = None
+        try:
+            request_id = db.log_request(user_id=user_id, platform='universal', url=url, status='pending')
+            _log(f"[UNIV] Request logged with ID: {request_id} for platform: {platform}")
+        except Exception as e:
+            _log(f"[UNIV] Failed to log request: {e}")
+        
         # Reserve user for per-user concurrency control
         user_reserved = False
         try:
@@ -744,6 +802,18 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     if res.get("private_error"):
                         private_error_data = res["private_error"]
                         error_message = _check_api_error(private_error_data, platform)
+                        
+                        # به‌روزرسانی وضعیت به failed (فقط برای Instagram)
+                        if request_id:
+                            processing_time = time.perf_counter() - t0
+                            db.update_request_status(
+                                request_id=request_id,
+                                status='failed',
+                                processing_time=processing_time,
+                                error_message="Private/Restricted content"
+                            )
+                            _log(f"[UNIV] Request {request_id} marked as failed: Private content")
+                        
                         await status_msg.edit_text(error_message)
                         # کنسل کردن بقیه تسک‌ها
                         for t in attempt_tasks:
@@ -776,6 +846,18 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
             _log(f"[UNIV] Last API error: {last_api_error_message}")
             print(f"❌ Both API and fallback failed for {platform}")
             print(f"   Last error: {last_api_error_message}")
+            
+            # به‌روزرسانی وضعیت به failed
+            if request_id:
+                processing_time = time.perf_counter() - t0
+                error_message_str = str(last_api_error_message)[:500] if last_api_error_message else "API and fallback failed"
+                db.update_request_status(
+                    request_id=request_id,
+                    status='failed',
+                    processing_time=processing_time,
+                    error_message=error_message_str
+                )
+                _log(f"[UNIV] Request {request_id} marked as failed: {error_message_str[:100]}")
             
             # پیام خطا به کاربر
             if last_api_error_message:
@@ -835,6 +917,18 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     _log(f"[UNIV] Fallback error for {platform}: {e}")
             
             if not fallback_media:
+                # به‌روزرسانی وضعیت به failed
+                if request_id:
+                    processing_time = time.perf_counter() - t0
+                    error_message_str = str(last_api_error_message)[:500] if last_api_error_message else "Fallback failed"
+                    db.update_request_status(
+                        request_id=request_id,
+                        status='failed',
+                        processing_time=processing_time,
+                        error_message=error_message_str
+                    )
+                    _log(f"[UNIV] Request {request_id} marked as failed: Fallback failed")
+                
                 # Use user-friendly error message for fallback failure
                 if last_api_error_message:
                     err_msg = get_user_friendly_error_message(last_api_error_message, platform)
@@ -881,6 +975,17 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 medias = [fallback_media]
                 _log(f"[UNIV] Using fallback media: {medias}")
             else:
+                # به‌روزرسانی وضعیت به failed
+                if request_id:
+                    processing_time = time.perf_counter() - t0
+                    db.update_request_status(
+                        request_id=request_id,
+                        status='failed',
+                        processing_time=processing_time,
+                        error_message="No downloadable media found"
+                    )
+                    _log(f"[UNIV] Request {request_id} marked as failed: No media found")
+                
                 _log(f"[UNIV] No fallback media available, returning error")
                 await status_msg.edit_text(f"❌ هیچ فایل قابل دانلودی از {platform} یافت نشد.")
                 try:
@@ -922,6 +1027,17 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                 duration_sec = 0
 
             if not download_url:
+                # به‌روزرسانی وضعیت به failed
+                if request_id:
+                    processing_time = time.perf_counter() - t0
+                    db.update_request_status(
+                        request_id=request_id,
+                        status='failed',
+                        processing_time=processing_time,
+                        error_message="No download URL found"
+                    )
+                    _log(f"[UNIV] Request {request_id} marked as failed: No download URL")
+                
                 await status_msg.edit_text(f"❌ لینک دانلود از {platform} یافت نشد.")
                 try:
                     if user_reserved:
@@ -1480,6 +1596,18 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                         
                 except Exception as video_fallback_error:
                     print(f"Video fallback error: {video_fallback_error}")
+                    
+                    # به‌روزرسانی وضعیت به failed
+                    if request_id:
+                        processing_time = time.perf_counter() - t0
+                        db.update_request_status(
+                            request_id=request_id,
+                            status='failed',
+                            processing_time=processing_time,
+                            error_message=f"File too large: {file_size_mb:.1f}MB"
+                        )
+                        _log(f"[UNIV] Request {request_id} marked as failed: File too large")
+                    
                     await message.reply_text(f"❌ فایل ویدیو بیش از حد بزرگ است ({file_size_mb:.1f}MB). لطفاً فایل کوچکتری انتخاب کنید.")
                     try:
                         if user_reserved:
@@ -1497,6 +1625,18 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     )
                 except Exception as fallback_error:
                     print(f"Fallback upload error: {fallback_error}")
+                    
+                    # به‌روزرسانی وضعیت به failed
+                    if request_id:
+                        processing_time = time.perf_counter() - t0
+                        db.update_request_status(
+                            request_id=request_id,
+                            status='failed',
+                            processing_time=processing_time,
+                            error_message=str(fallback_error)[:500]
+                        )
+                        _log(f"[UNIV] Request {request_id} marked as failed: Upload error")
+                    
                     await message.reply_text(f"❌ خطا در ارسال فایل از {platform}: {str(upload_error)}")
                     try:
                         if user_reserved:
@@ -1504,6 +1644,16 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
                     except Exception:
                         pass
                     return
+        
+        # به‌روزرسانی وضعیت به success
+        if request_id:
+            processing_time = time.perf_counter() - t0
+            db.update_request_status(
+                request_id=request_id,
+                status='success',
+                processing_time=processing_time
+            )
+            _log(f"[UNIV] Request {request_id} marked as success")
         
         # پیام نهایی به کاربر با تعداد تلاش‌ها
         try:
@@ -1581,6 +1731,17 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
     except Exception as e:
         error_msg = str(e)
         print(f"Universal download error: {error_msg}")
+        
+        # به‌روزرسانی وضعیت به failed
+        if request_id:
+            processing_time = time.perf_counter() - t0
+            db.update_request_status(
+                request_id=request_id,
+                status='failed',
+                processing_time=processing_time,
+                error_message=error_msg[:500]
+            )
+            _log(f"[UNIV] Request {request_id} marked as failed: {error_msg[:100]}")
         
         try:
             if "API Error" in error_msg:
