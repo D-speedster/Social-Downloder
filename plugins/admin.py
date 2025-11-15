@@ -3124,6 +3124,77 @@ async def clear_cache_command(_: Client, message: Message):
         await message.reply_text(f"❌ خطا: {str(e)[:200]}")
 
 
+@Client.on_message(filters.command('debugstats') & filters.user(ADMIN))
+async def debug_stats_command(_: Client, message: Message):
+    """دستور debug آمار درخواست‌ها"""
+    try:
+        await message.reply_text("⏳ در حال بررسی...")
+        
+        db = DB()
+        
+        # بررسی تعداد رکوردها
+        if db.db_type == 'mysql':
+            db.cursor.execute("SELECT COUNT(*) FROM requests")
+        else:
+            db.cursor.execute("SELECT COUNT(*) FROM requests")
+        total_records = db.cursor.fetchone()[0]
+        
+        # آمار پلتفرم‌ها
+        platforms_stats = {}
+        for platform in ['youtube', 'aparat', 'adult', 'universal']:
+            count = db.get_requests_by_platform(platform)
+            platforms_stats[platform] = count
+        
+        # آمار وضعیت‌ها
+        success = db.get_successful_requests()
+        failed = db.get_failed_requests()
+        
+        # آخرین درخواست
+        if db.db_type == 'mysql':
+            db.cursor.execute("SELECT platform, status, created_at FROM requests ORDER BY id DESC LIMIT 1")
+        else:
+            db.cursor.execute("SELECT platform, status, created_at FROM requests ORDER BY id DESC LIMIT 1")
+        last_request = db.cursor.fetchone()
+        
+        # ساخت متن
+        text = (
+            "🔍 **Debug آمار درخواست‌ها**\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📊 **دیتابیس:** `{db.db_type}`\n"
+            f"📋 **کل رکوردها:** `{total_records}`\n\n"
+            "**پلتفرم‌ها:**\n"
+            f"├ YouTube: `{platforms_stats['youtube']}`\n"
+            f"├ Aparat: `{platforms_stats['aparat']}`\n"
+            f"├ Adult: `{platforms_stats['adult']}`\n"
+            f"└ Universal: `{platforms_stats['universal']}`\n\n"
+            "**وضعیت:**\n"
+            f"├ موفق: `{success}`\n"
+            f"└ ناموفق: `{failed}`\n\n"
+        )
+        
+        if last_request:
+            text += (
+                "**آخرین درخواست:**\n"
+                f"├ پلتفرم: `{last_request[0]}`\n"
+                f"├ وضعیت: `{last_request[1]}`\n"
+                f"└ زمان: `{last_request[2]}`\n\n"
+            )
+        
+        # بررسی cache
+        from plugins.admin_statistics import STATS_CACHE
+        text += f"💾 **Cache:** `{len(STATS_CACHE)}` آیتم\n\n"
+        
+        text += "━━━━━━━━━━━━━━━━━━━━\n"
+        text += "💡 برای پاک کردن cache: `/clearcache`"
+        
+        await message.reply_text(text)
+        admin_logger.info(f"[ADMIN] Debug stats by {message.from_user.id}")
+        
+    except Exception as e:
+        admin_logger.error(f"Error in debug_stats command: {e}")
+        await message.reply_text(f"❌ خطا: {str(e)[:200]}")
+
+
 # ==================== Adult Content Thumbnail Management ====================
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^adult_thumb$'))
