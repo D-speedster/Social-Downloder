@@ -6,7 +6,12 @@
 """
 
 import sys
+import os
 import io
+
+# اضافه کردن root به path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
