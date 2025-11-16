@@ -1227,7 +1227,7 @@ class DB:
         
         Args:
             user_id: شناسه کاربر
-            platform: نام پلتفرم (youtube, aparat, adult, universal)
+            platform: نام پلتفرم (youtube, aparat, adult, instagram, universal)
             url: آدرس درخواست
             status: وضعیت (pending, success, failed)
         
@@ -1243,14 +1243,23 @@ class DB:
                     (user_id, platform, url, status, created_at)
                 )
                 self.mydb.commit()
-                return self.cursor.lastrowid
+                request_id = self.cursor.lastrowid
             else:
                 self.cursor.execute(
                     'INSERT INTO requests (user_id, platform, url, status, created_at) VALUES (?, ?, ?, ?, ?)',
                     (user_id, platform, url, status, created_at)
                 )
                 self.mydb.commit()
-                return self.cursor.lastrowid
+                request_id = self.cursor.lastrowid
+            
+            # پاک کردن cache آمار بعد از ثبت درخواست جدید
+            try:
+                from plugins.admin_statistics import clear_stats_cache
+                clear_stats_cache()
+            except:
+                pass  # اگر import نشد، مشکلی نیست
+            
+            return request_id
         except Exception as e:
             print(f"Error logging request: {e}")
             return 0
@@ -1279,5 +1288,13 @@ class DB:
                     (status, completed_at, processing_time, error_message, request_id)
                 )
             self.mydb.commit()
+            
+            # پاک کردن cache آمار بعد از بروزرسانی وضعیت
+            try:
+                from plugins.admin_statistics import clear_stats_cache
+                clear_stats_cache()
+            except:
+                pass  # اگر import نشد، مشکلی نیست
+                
         except Exception as e:
             print(f"Error updating request status: {e}")

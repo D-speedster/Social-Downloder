@@ -13,7 +13,7 @@ logger = logging.getLogger('admin_statistics')
 
 # Cache برای بهبود عملکرد
 STATS_CACHE = {}
-CACHE_DURATION = 300  # 5 minutes
+CACHE_DURATION = 60  # 1 minute (کاهش از 5 دقیقه برای بروزرسانی سریع‌تر)
 
 
 class StatisticsCalculator:
