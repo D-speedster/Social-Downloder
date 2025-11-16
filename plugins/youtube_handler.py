@@ -10,6 +10,8 @@ import html
 import aiohttp
 import tempfile
 import concurrent.futures
+import re
+from urllib.parse import urlparse, parse_qs
 
 from pyrogram import Client, filters
 from pyrogram.types import (
@@ -41,6 +43,57 @@ _global_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=6,
     thread_name_prefix="yt_api_worker"
 )
+
+# ------------------------------------------------------------------- #
+def normalize_youtube_url(url: str) -> str:
+    """
+    پاکسازی و normalize کردن URL های YouTube
+    
+    مثال:
+    - https://www.youtube.com/watch?v=VIDEO_ID&list=...&start_radio=1
+      -> https://www.youtube.com/watch?v=VIDEO_ID
+    
+    - https://youtu.be/VIDEO_ID?si=...
+      -> https://www.youtube.com/watch?v=VIDEO_ID
+    
+    - https://m.youtube.com/watch?v=VIDEO_ID
+      -> https://www.youtube.com/watch?v=VIDEO_ID
+    """
+    try:
+        url = url.strip()
+        
+        # الگوهای مختلف YouTube
+        patterns = [
+            # youtu.be/VIDEO_ID
+            r'(?:https?://)?(?:www\.)?youtu\.be/([a-zA-Z0-9_-]{11})',
+            # youtube.com/watch?v=VIDEO_ID
+            r'(?:https?://)?(?:www\.)?(?:m\.)?youtube\.com/watch\?v=([a-zA-Z0-9_-]{11})',
+            # youtube.com/embed/VIDEO_ID
+            r'(?:https?://)?(?:www\.)?youtube\.com/embed/([a-zA-Z0-9_-]{11})',
+            # youtube.com/v/VIDEO_ID
+            r'(?:https?://)?(?:www\.)?youtube\.com/v/([a-zA-Z0-9_-]{11})',
+        ]
+        
+        video_id = None
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                video_id = match.group(1)
+                break
+        
+        if video_id:
+            # URL ساده و تمیز
+            clean_url = f"https://www.youtube.com/watch?v={video_id}"
+            logger.info(f"Normalized URL: {url} -> {clean_url}")
+            return clean_url
+        
+        # اگر الگو match نشد، URL اصلی رو برگردون
+        logger.warning(f"Could not normalize URL: {url}")
+        return url
+        
+    except Exception as e:
+        logger.error(f"Error normalizing URL: {e}")
+        return url
 
 # ------------------------------------------------------------------- #
 async def extract_video_info(url: str) -> dict | None:
@@ -391,6 +444,10 @@ async def handle_youtube_link(client: Client, message: Message):
     url = message.text.strip()
 
     logger.info(f"User {user_id} sent YouTube link: {url}")
+    
+    # پاکسازی و normalize کردن URL
+    url = normalize_youtube_url(url)
+    logger.info(f"Normalized URL: {url}")
 
     # ------------------------------------------------------------------- #
     # بررسی ثبت‌نام کاربر
