@@ -3,6 +3,7 @@
 # ===================================================================
 import plugins.youtube_handler
 import plugins.youtube_callback
+import plugins.insta_fetch
 import os
 import sys
 

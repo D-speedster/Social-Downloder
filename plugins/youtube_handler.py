@@ -508,11 +508,16 @@ async def handle_youtube_link(client: Client, message: Message):
         video_cache[user_id]['request_id'] = request_id
 
         # متن توصیفی
+        title = video_info.get('title') or 'Unknown'
+        uploader = video_info.get('uploader') or 'Unknown'
+        duration = video_info.get('duration') or 0
+        view_count = video_info.get('view_count') or 0
+        
         info_text = (
-            f"🎬 <b>{html.escape(video_info['title'])}</b>\n\n"
-            f"👤 <b>کانال:</b> {html.escape(video_info['uploader'])}\n"
-            f"⏱ <b>مدت زمان:</b> {format_duration(video_info['duration'])}\n"
-            f"👁 <b>بازدید:</b> {format_number(video_info['view_count'])}\n\n"
+            f"🎬 <b>{html.escape(title)}</b>\n\n"
+            f"👤 <b>کانال:</b> {html.escape(uploader)}\n"
+            f"⏱ <b>مدت زمان:</b> {format_duration(duration)}\n"
+            f"👁 <b>بازدید:</b> {format_number(view_count)}\n\n"
             f"📋 <b>لطفاً کیفیت مورد نظر را انتخاب کنید:</b>"
         )
 

@@ -1,0 +1,518 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Instagram Fetcher - سیستم دانلود اختصاصی Instagram
+استراتژی 3 لایه برای حداکثر نرخ موفقیت
+"""
+
+import os
+import time
+import asyncio
+import http.client
+import json
+import logging
+from typing import Optional, Dict, Tuple
+from datetime import datetime
+
+from pyrogram import Client, filters
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ParseMode
+
+from plugins.db_wrapper import DB
+from plugins.logger_config import get_logger
+from plugins.start import join
+import yt_dlp
+
+# ------------------------------------------------------------------- #
+# Logger
+logger = get_logger('insta_fetch')
+
+# ------------------------------------------------------------------- #
+# Configuration
+RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY', 'd51a95d960mshb5f65a8e122bb7fp11b675jsn63ff66cbc6cf')
+RAPIDAPI_HOST = "social-download-all-in-one.p.rapidapi.com"
+COOKIE_FILE = 'instagram_cookies.txt'
+
+# Timeouts
+API_TIMEOUT = 10
+YTDLP_TIMEOUT = 15
+YTDLP_COOKIE_TIMEOUT = 20
+
+# ------------------------------------------------------------------- #
+class InstaFetcher:
+    """کلاس اصلی برای دانلود از Instagram"""
+    
+    def __init__(self):
+        self.api_key = RAPIDAPI_KEY
+        self.cookie_file = COOKIE_FILE
+        
+    async def fetch(self, url: str, user_id: int, message: Message) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """
+        دانلود از Instagram با استراتژی 3 لایه
+        
+        Returns:
+            (success, data, error_message)
+        """
+        logger.info(f"[INSTA] Starting fetch for user {user_id}: {url}")
+        
+        # Layer 1: API
+        logger.info("[INSTA] Layer 1: Trying API...")
+        success, data, error = await self._try_api(url, message)
+        if success:
+            logger.info("[INSTA] Layer 1 SUCCESS")
+            return True, data, None
+        
+        logger.warning(f"[INSTA] Layer 1 FAILED: {error}")
+        
+        # Layer 2: yt-dlp (بدون cookie)
+        logger.info("[INSTA] Layer 2: Trying yt-dlp...")
+        await message.edit_text(
+            "⏳ API موفق نبود، در حال تلاش با روش دیگر...\n"
+            "🔄 لطفاً صبر کنید..."
+        )
+        
+        success, data, error = await self._try_ytdlp(url, use_cookie=False)
+        if success:
+            logger.info("[INSTA] Layer 2 SUCCESS")
+            return True, data, None
+        
+        logger.warning(f"[INSTA] Layer 2 FAILED: {error}")
+        
+        # Layer 3: yt-dlp + cookie
+        if os.path.exists(self.cookie_file):
+            logger.info("[INSTA] Layer 3: Trying yt-dlp with cookie...")
+            await message.edit_text(
+                "⏳ در حال تلاش با authentication...\n"
+                "🔄 این ممکن است کمی طول بکشد..."
+            )
+            
+            success, data, error = await self._try_ytdlp(url, use_cookie=True)
+            if success:
+                logger.info("[INSTA] Layer 3 SUCCESS")
+                return True, data, None
+            
+            logger.warning(f"[INSTA] Layer 3 FAILED: {error}")
+        else:
+            logger.warning("[INSTA] Layer 3 SKIPPED: No cookie file")
+        
+        # همه layer ها fail شدند
+        logger.error("[INSTA] All layers FAILED")
+        return False, None, error or "تمام روش‌ها ناموفق بودند"
+    
+    async def _try_api(self, url: str, message: Message) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """Layer 1: تلاش با API"""
+        try:
+            await message.edit_text(
+                "📡 در حال دریافت اطلاعات از Instagram...\n"
+                "⏳ لطفاً صبر کنید..."
+            )
+            
+            # کمی delay برای نمایش پیام
+            await asyncio.sleep(0.5)
+            
+            # ساخت payload
+            payload = json.dumps({"url": url})
+            
+            # ارسال request
+            loop = asyncio.get_running_loop()
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, self._api_request_sync, payload),
+                timeout=API_TIMEOUT
+            )
+            
+            if not result:
+                return False, None, "API response empty"
+            
+            # Parse response
+            data = json.loads(result)
+            
+            # بررسی خطاها
+            if data.get('error'):
+                error_msg = self._parse_api_error(data)
+                return False, None, error_msg
+            
+            # بررسی medias
+            medias = data.get('medias', [])
+            if not medias:
+                return False, None, "No media found"
+            
+            # موفق!
+            return True, data, None
+            
+        except asyncio.TimeoutError:
+            logger.error("[INSTA] API timeout")
+            return False, None, "API timeout"
+        except Exception as e:
+            logger.error(f"[INSTA] API error: {e}")
+            return False, None, str(e)
+    
+    def _api_request_sync(self, payload: str) -> Optional[str]:
+        """ارسال request به API (sync)"""
+        try:
+            conn = http.client.HTTPSConnection(RAPIDAPI_HOST, timeout=API_TIMEOUT)
+            
+            headers = {
+                'x-rapidapi-key': self.api_key,
+                'x-rapidapi-host': RAPIDAPI_HOST,
+                'Content-Type': 'application/json'
+            }
+            
+            conn.request("POST", "/v1/social/autolink", payload, headers)
+            res = conn.getresponse()
+            data = res.read()
+            
+            return data.decode("utf-8")
+            
+        except Exception as e:
+            logger.error(f"[INSTA] API request error: {e}")
+            return None
+        finally:
+            try:
+                conn.close()
+            except:
+                pass
+    
+    def _parse_api_error(self, data: Dict) -> str:
+        """Parse کردن خطای API"""
+        try:
+            data_str = str(data).lower()
+            
+            # بررسی پیج خصوصی - چند حالت مختلف
+            private_keywords = [
+                'private',
+                'restricted personal page',
+                'please follow the account',
+                'consent is obtained',
+                'transfer your account cookies'
+            ]
+            
+            if any(keyword in data_str for keyword in private_keywords):
+                return "private_account"
+            
+            # بررسی not found
+            if 'not found' in data_str or 'no media' in data_str:
+                return "not_found"
+            
+            # خطای عمومی
+            return "api_error"
+            
+        except:
+            return "unknown_error"
+    
+    async def _try_ytdlp(self, url: str, use_cookie: bool = False) -> Tuple[bool, Optional[Dict], Optional[str]]:
+        """Layer 2/3: تلاش با yt-dlp"""
+        try:
+            timeout = YTDLP_COOKIE_TIMEOUT if use_cookie else YTDLP_TIMEOUT
+            
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+                'skip_download': True,
+            }
+            
+            if use_cookie and os.path.exists(self.cookie_file):
+                ydl_opts['cookiefile'] = self.cookie_file
+                logger.info(f"[INSTA] Using cookie file: {self.cookie_file}")
+            
+            # استخراج اطلاعات
+            loop = asyncio.get_running_loop()
+            
+            def _extract():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    return ydl.extract_info(url, download=False)
+            
+            info = await asyncio.wait_for(
+                loop.run_in_executor(None, _extract),
+                timeout=timeout
+            )
+            
+            if not info:
+                return False, None, "yt-dlp returned None"
+            
+            # تبدیل به فرمت مورد نیاز
+            data = self._convert_ytdlp_to_api_format(info, url)
+            
+            return True, data, None
+            
+        except asyncio.TimeoutError:
+            logger.error("[INSTA] yt-dlp timeout")
+            return False, None, "yt-dlp timeout"
+        except Exception as e:
+            error_str = str(e).lower()
+            
+            # بررسی خطاهای خاص
+            if 'private' in error_str or 'login' in error_str:
+                return False, None, "private_account"
+            elif 'not found' in error_str or '404' in error_str:
+                return False, None, "not_found"
+            else:
+                logger.error(f"[INSTA] yt-dlp error: {e}")
+                return False, None, str(e)
+    
+    def _convert_ytdlp_to_api_format(self, info: Dict, url: str) -> Dict:
+        """تبدیل خروجی yt-dlp به فرمت API"""
+        try:
+            # استخراج بهترین کیفیت
+            formats = info.get('formats', [])
+            
+            # فیلتر ویدیوها
+            video_formats = [
+                f for f in formats
+                if f.get('vcodec') != 'none' and f.get('height')
+            ]
+            
+            # مرتب‌سازی بر اساس کیفیت
+            video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+            
+            best_video = video_formats[0] if video_formats else None
+            
+            if not best_video:
+                raise Exception("No video format found")
+            
+            # ساخت data
+            data = {
+                'url': url,
+                'source': 'instagram',
+                'title': info.get('title', 'Instagram'),
+                'author': info.get('uploader', 'Unknown'),
+                'thumbnail': info.get('thumbnail', ''),
+                'medias': [{
+                    'url': best_video.get('url'),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'quality': f"{best_video.get('height', 0)}p",
+                    'resolution': f"{best_video.get('width', 0)}x{best_video.get('height', 0)}",
+                    'type': 'video',
+                    'extension': best_video.get('ext', 'mp4'),
+                    'is_audio': True
+                }],
+                'type': 'single',
+                'error': False
+            }
+            
+            return data
+            
+        except Exception as e:
+            logger.error(f"[INSTA] Convert error: {e}")
+            raise
+
+
+# ------------------------------------------------------------------- #
+# Global instance
+insta_fetcher = InstaFetcher()
+
+
+logger.info("Instagram Fetcher module loaded")
+
+
+
+# ------------------------------------------------------------------- #
+# Handler
+@Client.on_message(
+    filters.regex(
+        r'(https?://)?(www\.)?(instagram\.com|instagr\.am)/(p|reel|tv)/([a-zA-Z0-9_-]+)'
+    )
+    & filters.private
+    & join
+)
+async def handle_instagram_link(client: Client, message: Message):
+    """Handler اصلی برای لینک‌های Instagram"""
+    start_time = time.time()
+    user_id = message.from_user.id
+    url = message.text.strip()
+    
+    logger.info(f"[INSTA] User {user_id} sent Instagram link: {url}")
+    
+    # بررسی ثبت‌نام کاربر
+    db = DB()
+    if not db.check_user_register(user_id):
+        logger.info(f"[INSTA] User {user_id} not registered")
+        await message.reply_text(
+            "⚠️ ابتدا باید ربات را استارت کنید.\n\nلطفاً دستور /start را ارسال کنید.",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("🔄 شروع مجدد", callback_data="start")]]
+            )
+        )
+        return
+    
+    # ثبت درخواست در دیتابیس
+    request_id = db.log_request(
+        user_id=user_id,
+        platform='instagram',
+        url=url,
+        status='pending'
+    )
+    logger.info(f"[INSTA] Request logged with ID: {request_id}")
+    
+    # پیام اولیه
+    status_msg = await message.reply_text(
+        "📸 **Instagram Downloader**\n\n"
+        "🔄 در حال دریافت اطلاعات...\n"
+        "⏳ لطفاً صبر کنید..."
+    )
+    
+    try:
+        # تلاش برای دانلود
+        success, data, error = await insta_fetcher.fetch(url, user_id, status_msg)
+        
+        if not success:
+            # مدیریت خطاها
+            processing_time = time.time() - start_time
+            db.update_request_status(
+                request_id=request_id,
+                status='failed',
+                processing_time=processing_time,
+                error_message=error
+            )
+            
+            # پیام خطا به کاربر
+            error_text = _get_error_message(error)
+            await status_msg.edit_text(error_text, parse_mode=ParseMode.MARKDOWN)
+            return
+        
+        # موفق! آماده‌سازی برای ارسال
+        await status_msg.edit_text(
+            "✅ اطلاعات دریافت شد!\n"
+            "📥 در حال دانلود و ارسال...\n"
+            "⏳ لطفاً صبر کنید..."
+        )
+        
+        # دانلود و ارسال
+        await _download_and_send(client, message, status_msg, data, db, request_id, start_time)
+        
+    except Exception as e:
+        logger.error(f"[INSTA] Handler error: {e}")
+        
+        processing_time = time.time() - start_time
+        db.update_request_status(
+            request_id=request_id,
+            status='failed',
+            processing_time=processing_time,
+            error_message=str(e)[:500]
+        )
+        
+        await status_msg.edit_text(
+            "❌ **خطای غیرمنتظره**\n\n"
+            "متأسفانه مشکلی پیش آمد.\n"
+            "لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+
+def _get_error_message(error: str) -> str:
+    """تبدیل کد خطا به پیام فارسی"""
+    
+    if error == "private_account":
+        return (
+            "🔒 **پیج خصوصی**\n\n"
+            "این پیج خصوصی است و امکان دانلود وجود ندارد.\n\n"
+            "💡 **راه‌حل:**\n"
+            "• پیج را عمومی کنید\n"
+            "• یا از لینک پست عمومی استفاده کنید"
+        )
+    
+    elif error == "not_found":
+        return (
+            "❌ **پست پیدا نشد**\n\n"
+            "لینک اشتباه است یا پست حذف شده.\n\n"
+            "💡 **راه‌حل:**\n"
+            "• لینک را بررسی کنید\n"
+            "• مطمئن شوید پست هنوز موجود است\n"
+            "• لینک کامل را ارسال کنید"
+        )
+    
+    elif "timeout" in error.lower():
+        return (
+            "⏱️ **زمان انتظار تمام شد**\n\n"
+            "سرور Instagram پاسخ نداد.\n\n"
+            "💡 **راه‌حل:**\n"
+            "• چند لحظه صبر کنید\n"
+            "• دوباره تلاش کنید"
+        )
+    
+    else:
+        return (
+            "❌ **خطا در دانلود**\n\n"
+            "متأسفانه نتوانستیم این پست را دانلود کنیم.\n\n"
+            "💡 **راه‌حل:**\n"
+            "• لینک را بررسی کنید\n"
+            "• دوباره تلاش کنید\n"
+            "• از لینک دیگری استفاده کنید"
+        )
+
+
+async def _download_and_send(
+    client: Client,
+    message: Message,
+    status_msg: Message,
+    data: Dict,
+    db: DB,
+    request_id: int,
+    start_time: float
+):
+    """دانلود و ارسال فایل"""
+    try:
+        medias = data.get('medias', [])
+        if not medias:
+            raise Exception("No media in data")
+        
+        # انتخاب بهترین کیفیت
+        best_media = medias[0]
+        download_url = best_media.get('url')
+        
+        if not download_url:
+            raise Exception("No download URL")
+        
+        # دانلود فایل
+        import aiohttp
+        import tempfile
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(download_url) as resp:
+                if resp.status != 200:
+                    raise Exception(f"Download failed: {resp.status}")
+                
+                # ذخیره موقت
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                    tmp_file.write(await resp.read())
+                    file_path = tmp_file.name
+        
+        # ارسال به کاربر
+        caption = (
+            f"📸 **Instagram**\n\n"
+            f"👤 {data.get('author', 'Unknown')}\n"
+            f"📊 کیفیت: {best_media.get('quality', 'Unknown')}\n\n"
+            f"✅ دانلود شده توسط @YourBotUsername"
+        )
+        
+        await message.reply_video(
+            video=file_path,
+            caption=caption,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # حذف فایل موقت
+        try:
+            os.unlink(file_path)
+        except:
+            pass
+        
+        # حذف پیام وضعیت
+        try:
+            await status_msg.delete()
+        except:
+            pass
+        
+        # به‌روزرسانی دیتابیس
+        processing_time = time.time() - start_time
+        db.update_request_status(
+            request_id=request_id,
+            status='success',
+            processing_time=processing_time
+        )
+        
+        logger.info(f"[INSTA] Success in {processing_time:.2f}s")
+        
+    except Exception as e:
+        logger.error(f"[INSTA] Download/Send error: {e}")
+        raise

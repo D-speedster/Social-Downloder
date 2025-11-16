@@ -89,6 +89,7 @@ class StatisticsCalculator:
                 'youtube': int,
                 'aparat': int,
                 'adult': int,
+                'instagram': int,
                 'universal': int,
                 'percentages': {...}
             }
@@ -101,6 +102,7 @@ class StatisticsCalculator:
             youtube = self.db.get_requests_by_platform('youtube')
             aparat = self.db.get_requests_by_platform('aparat')
             adult = self.db.get_requests_by_platform('adult')
+            instagram = self.db.get_requests_by_platform('instagram')
             universal = self.db.get_requests_by_platform('universal')
             
             # محاسبه درصدها
@@ -109,15 +111,17 @@ class StatisticsCalculator:
                 percentages['youtube'] = (youtube / total) * 100
                 percentages['aparat'] = (aparat / total) * 100
                 percentages['adult'] = (adult / total) * 100
+                percentages['instagram'] = (instagram / total) * 100
                 percentages['universal'] = (universal / total) * 100
             else:
-                percentages = {'youtube': 0, 'aparat': 0, 'adult': 0, 'universal': 0}
+                percentages = {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0}
             
             return {
                 'total': total,
                 'youtube': youtube,
                 'aparat': aparat,
                 'adult': adult,
+                'instagram': instagram,
                 'universal': universal,
                 'percentages': percentages
             }
@@ -129,8 +133,9 @@ class StatisticsCalculator:
                 'youtube': 0,
                 'aparat': 0,
                 'adult': 0,
+                'instagram': 0,
                 'universal': 0,
-                'percentages': {'youtube': 0, 'aparat': 0, 'adult': 0, 'universal': 0}
+                'percentages': {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0}
             }
     
     def calculate_performance_stats(self) -> Dict:
@@ -309,6 +314,9 @@ class StatisticsFormatter:
             f"📺 **Aparat**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['aparat'], 15)}\n"
             f"   `{StatisticsFormatter.format_number(stats['aparat'])}` درخواست\n\n"
+            f"📸 **Instagram**\n"
+            f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['instagram'], 15)}\n"
+            f"   `{StatisticsFormatter.format_number(stats['instagram'])}` درخواست\n\n"
             f"🔞 **محتوای بزرگسال**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['adult'], 15)}\n"
             f"   `{StatisticsFormatter.format_number(stats['adult'])}` درخواست\n\n"
