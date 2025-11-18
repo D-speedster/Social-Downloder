@@ -1781,38 +1781,13 @@ async def handle_universal_link(client: Client, message: Message, is_retry: bool
 from pyrogram import filters
 from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانسری
 
-@Client.on_message(filters.private & filters.regex(INSTA_REGEX) & join)  # 🔒 فیلتر عضویت اضافه شد
-async def handle_instagram_link(client: Client, message: Message):
-    """Handler for Instagram links - delegates to universal downloader with smart retry"""
-    try:
-        universal_logger.info(f"Instagram link detected from user {message.from_user.id}: {message.text}")
-        
-        # استفاده از SmartRetryWrapper برای retry هوشمند
-        from plugins.smart_retry_wrapper import smart_retry_wrapper
-        
-        url = message.text.strip()
-        platform = "Instagram"
-        
-        # فراخوانی wrapper با handler اصلی
-        success, result_msg = await smart_retry_wrapper(
-            client=client,
-            message=message,
-            url=url,
-            platform=platform,
-            original_handler=handle_universal_link,
-            max_attempts=3,
-            retry_schedule=[0, 10, 40]  # 0s, 10s, 40s طبق requirement
-        )
-        
-        if not success:
-            universal_logger.warning(f"Instagram download failed after all retries for user {message.from_user.id}")
-    
-    except Exception as e:
-        universal_logger.error(f"Instagram handler error: {e}")
-        try:
-            await message.reply_text(
-                "❌ خطا در پردازش لینک اینستاگرام.\n\n"
-                "🔄 لطفاً دوباره تلاش کنید."
-            )
-        except:
-            pass
+# ================================================================
+# ⚠️ DEPRECATED: Instagram handler moved to plugins/insta_fetch.py
+# این handler غیرفعال شد - Instagram حالا handler اختصاصی داره
+# ================================================================
+# @Client.on_message(filters.private & filters.regex(INSTA_REGEX) & join)
+# async def handle_instagram_link(client: Client, message: Message):
+#     """Handler for Instagram links - delegates to universal downloader with smart retry"""
+#     # این handler دیگه استفاده نمیشه
+#     # Instagram به plugins/insta_fetch.py منتقل شد
+#     pass
