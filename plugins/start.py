@@ -692,26 +692,20 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
                             # Instagram handled by universal_downloader with SmartRetryWrapper
                             try:
                                 from plugins.smart_retry_wrapper import smart_retry_wrapper
-                                from plugins.universal_downloader import handle_universal_link
+                                from plugins.insta_fetch import handle_instagram_link
                                 
-                                url = text.strip()
+                                # Use dedicated Instagram handler
+                                await handle_instagram_link(client, orig_msg)
                                 
-                                # Use SmartRetryWrapper for automatic retry logic
-                                success, result_msg = await smart_retry_wrapper(
-                                    client=client,
-                                    message=orig_msg,
-                                    url=url,
-                                    platform="Instagram",
-                                    original_handler=handle_universal_link
-                                )
-                                
-                                start_logger.info(f"Instagram download via SmartRetryWrapper: success={success}")
+                                start_logger.info(f"Instagram download via dedicated handler")
                                 
                             except ImportError:
-                                # Fallback if SmartRetryWrapper not available
-                                start_logger.warning("SmartRetryWrapper not available, using direct handler")
-                                from plugins.universal_downloader import handle_universal_link
-                                await handle_universal_link(client, orig_msg)
+                                # Fallback if insta_fetch not available
+                                start_logger.error("insta_fetch not available!")
+                                await client.send_message(
+                                    chat_id=pending['chat_id'],
+                                    text="❌ خطا در پردازش Instagram. لطفاً دوباره تلاش کنید."
+                                )
                         elif (
                               SPOTIFY_REGEX.search(text) or TIKTOK_REGEX.search(text) or SOUNDCLOUD_REGEX.search(text) or 
                               PINTEREST_REGEX.search(text) or TWITTER_REGEX.search(text) or THREADS_REGEX.search(text) or 

@@ -385,11 +385,47 @@ def get_platform_name(url):
         return "Radio Javan"
     return "Unknown"
 
+async def expand_short_url(url: str) -> str:
+    """Expand shortened URLs (like on.soundcloud.com) to full URLs"""
+    try:
+        # Check if it's a short URL that needs expansion
+        if 'on.soundcloud.com' in url or 'vm.tiktok.com' in url:
+            universal_logger.info(f"Expanding short URL: {url}")
+            
+            import urllib.request
+            import urllib.error
+            
+            # Follow redirects to get final URL
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            
+            def _expand():
+                try:
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        return response.url
+                except Exception as e:
+                    universal_logger.error(f"Failed to expand URL {url}: {e}")
+                    return url
+            
+            loop = asyncio.get_event_loop()
+            expanded_url = await loop.run_in_executor(_global_executor, _expand)
+            
+            if expanded_url != url:
+                universal_logger.info(f"Expanded URL: {url} -> {expanded_url}")
+                return expanded_url
+        
+        return url
+    except Exception as e:
+        universal_logger.error(f"Error expanding URL {url}: {e}")
+        return url
+
 async def get_universal_data_from_api(url):
     """Get media data from the universal API for Spotify, TikTok, and SoundCloud with timeout"""
     try:
+        # Expand short URLs before sending to API
+        expanded_url = await expand_short_url(url)
+        
         # افزایش timeout برای Instagram (API کند است)
-        result = await asyncio.wait_for(_api_request_sync(url), timeout=15.0)
+        result = await asyncio.wait_for(_api_request_sync(expanded_url), timeout=15.0)
         return result
     except asyncio.TimeoutError:
         universal_logger.warning(f"API timeout for URL: {url}")

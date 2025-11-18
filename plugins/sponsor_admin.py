@@ -462,8 +462,8 @@ async def verify_multi_join_callback(client: Client, callback_query: CallbackQue
                         await show_video(client, orig_msg)
                     elif INSTA_REGEX.search(text):
                         logger.info(f"[VERIFY_JOIN] Processing Instagram link")
-                        from plugins.universal_downloader import handle_universal_link
-                        await handle_universal_link(client, orig_msg)
+                        from plugins.insta_fetch import handle_instagram_link
+                        await handle_instagram_link(client, orig_msg)
                     else:
                         # سایر پلتفرم‌ها
                         logger.info(f"[VERIFY_JOIN] Processing universal link")
