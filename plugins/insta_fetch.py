@@ -253,6 +253,8 @@ class InstaFetcher:
                 return False, None, "private_account"
             elif 'not found' in error_str or '404' in error_str:
                 return False, None, "not_found"
+            elif 'inappropriate' in error_str or 'unavailable' in error_str or 'certain audiences' in error_str:
+                return False, None, "age_restricted"
             else:
                 logger.error(f"[INSTA] yt-dlp error: {e}")
                 return False, None, str(e)
@@ -262,19 +264,46 @@ class InstaFetcher:
         try:
             # بررسی carousel (چند آیتمی)
             if 'entries' in info and info['entries']:
-                # Carousel: فقط اولین آیتم رو بگیر
-                first_entry = info['entries'][0]
-                return self._convert_single_item(first_entry, url, info)
+                # Carousel: همه آیتم‌ها رو بگیر
+                medias = []
+                for entry in info['entries']:
+                    media = self._extract_media_from_item(entry)
+                    if media:
+                        medias.append(media)
+                
+                return {
+                    'url': url,
+                    'source': 'instagram',
+                    'title': info.get('title', 'Instagram'),
+                    'author': info.get('uploader', 'Unknown'),
+                    'thumbnail': info['entries'][0].get('thumbnail', '') if info['entries'] else '',
+                    'medias': medias,
+                    'type': 'multiple',
+                    'error': False
+                }
             else:
                 # تک آیتم
-                return self._convert_single_item(info, url, info)
+                media = self._extract_media_from_item(info)
+                if not media:
+                    raise Exception("No media extracted")
+                
+                return {
+                    'url': url,
+                    'source': 'instagram',
+                    'title': info.get('title', 'Instagram'),
+                    'author': info.get('uploader', 'Unknown'),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'medias': [media],  # فقط یک آیتم
+                    'type': 'single',
+                    'error': False
+                }
             
         except Exception as e:
             logger.error(f"[INSTA] Convert error: {e}")
             raise
     
-    def _convert_single_item(self, item: Dict, url: str, parent_info: Dict) -> Dict:
-        """تبدیل یک آیتم به فرمت API"""
+    def _extract_media_from_item(self, item: Dict) -> Dict:
+        """استخراج اطلاعات media از یک آیتم"""
         try:
             formats = item.get('formats', [])
             
@@ -284,64 +313,38 @@ class InstaFetcher:
                 if f.get('vcodec') != 'none' and f.get('height')
             ]
             
-            # اگر ویدیو پیدا شد
             if video_formats:
-                # مرتب‌سازی بر اساس کیفیت
+                # ویدیو
                 video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
-                best_video = video_formats[0]
-                
-                data = {
-                    'url': url,
-                    'source': 'instagram',
-                    'title': parent_info.get('title', 'Instagram'),
-                    'author': parent_info.get('uploader', 'Unknown'),
+                best = video_formats[0]
+                return {
+                    'url': best.get('url'),
                     'thumbnail': item.get('thumbnail', ''),
-                    'medias': [{
-                        'url': best_video.get('url'),
-                        'thumbnail': item.get('thumbnail', ''),
-                        'quality': f"{best_video.get('height', 0)}p",
-                        'resolution': f"{best_video.get('width', 0)}x{best_video.get('height', 0)}",
-                        'type': 'video',
-                        'extension': best_video.get('ext', 'mp4'),
-                        'is_audio': True
-                    }],
-                    'type': 'single',
-                    'error': False
+                    'quality': f"{best.get('height', 0)}p",
+                    'resolution': f"{best.get('width', 0)}x{best.get('height', 0)}",
+                    'type': 'video',
+                    'extension': best.get('ext', 'mp4'),
+                    'is_audio': True
                 }
-                return data
-            
-            # اگر ویدیو نبود، عکس رو بگیر
             else:
-                # بررسی URL مستقیم (برای عکس)
+                # عکس
                 direct_url = item.get('url')
-                thumbnail = item.get('thumbnail', '')
-                
-                if not direct_url:
-                    raise Exception("No video or image URL found")
-                
-                data = {
-                    'url': url,
-                    'source': 'instagram',
-                    'title': parent_info.get('title', 'Instagram'),
-                    'author': parent_info.get('uploader', 'Unknown'),
-                    'thumbnail': thumbnail,
-                    'medias': [{
+                if direct_url:
+                    return {
                         'url': direct_url,
-                        'thumbnail': thumbnail,
+                        'thumbnail': item.get('thumbnail', ''),
                         'quality': 'original',
                         'resolution': f"{item.get('width', 0)}x{item.get('height', 0)}",
                         'type': 'image',
                         'extension': item.get('ext', 'jpg'),
                         'is_audio': False
-                    }],
-                    'type': 'single',
-                    'error': False
-                }
-                return data
-                
+                    }
+            return None
         except Exception as e:
-            logger.error(f"[INSTA] Convert single item error: {e}")
-            raise
+            logger.error(f"[INSTA] Extract media error: {e}")
+            return None
+    
+
 
 
 # ------------------------------------------------------------------- #
@@ -505,6 +508,15 @@ def _get_error_message(error: str) -> str:
             "• دوباره تلاش کنید"
         )
     
+    elif error == "age_restricted":
+        return (
+            "🔞 **محتوای محدود**\n\n"
+            "این پست محدود شده و برای همه قابل دسترسی نیست.\n\n"
+            "💡 **راه‌حل:**\n"
+            "• از لینک دیگری استفاده کنید\n"
+            "• یا با اکانت مناسب تلاش کنید"
+        )
+    
     else:
         return (
             "❌ **خطا در دانلود**\n\n"
@@ -531,9 +543,13 @@ async def _download_and_send(
         if not medias:
             raise Exception("No media in data")
         
-        # بررسی تعداد medias
-        total_medias = len(medias)
+        # بررسی تعداد medias واقعی (بدون audio)
+        # audio جزء ویدیو حساب میشه، نه media جداگانه
+        visual_medias = [m for m in medias if m.get('type') in ['image', 'video']]
+        total_medias = len(visual_medias)
         post_type = data.get('type', 'single')
+        
+        logger.info(f"[INSTA] Total visual medias: {total_medias}, Type: {post_type}")
         
         # اگه چند تایی هست، پیام بده
         if total_medias > 1:
@@ -543,36 +559,38 @@ async def _download_and_send(
                 f"⏳ در حال دانلود و ارسال...\n\n"
                 f"لطفاً صبر کنید..."
             )
+        else:
+            await status_msg.edit_text(
+                f"📸 **Instagram**\n\n"
+                f"⏳ در حال دانلود...\n\n"
+                f"لطفاً صبر کنید..."
+            )
         
-        # دانلود همه medias
-        import aiohttp
+        # دانلود همه medias با yt-dlp
         import tempfile
+        import aiohttp
         from pyrogram.types import InputMediaPhoto, InputMediaVideo
         
         downloaded_files = []
         
-        for idx, media in enumerate(medias, 1):
+        # دانلود هر media (فقط image و video، نه audio)
+        for idx, media in enumerate(visual_medias, 1):
             try:
                 download_url = media.get('url')
-                
                 if not download_url:
-                    logger.warning(f"[INSTA] No URL for media {idx}/{total_medias}")
+                    logger.warning(f"[INSTA] No URL for media {idx}")
                     continue
                 
                 media_type = media.get('type', 'video')
                 file_ext = media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
-        
-                # Headers برای جلوگیری از 403
+                
+                # Headers
                 headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Referer': 'https://www.instagram.com/',
-                    'Accept': '*/*',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
                 }
                 
-                # خواندن cookies از فایل
+                # Cookies
                 cookies = {}
                 if os.path.exists(COOKIE_FILE):
                     try:
@@ -583,68 +601,51 @@ async def _download_and_send(
                                 parts = line.strip().split('\t')
                                 if len(parts) >= 7:
                                     cookies[parts[5]] = parts[6]
-                    except Exception as e:
-                        logger.warning(f"[INSTA] Failed to read cookies: {e}")
+                    except:
+                        pass
                 
-                # Retry logic برای مقابله با مشکلات شبکه
-                max_retries = 2  # کاهش retry برای gallery
-                retry_delay = 1
-                
-                file_path = None
-                for attempt in range(max_retries):
-                    try:
-                        timeout = aiohttp.ClientTimeout(total=30)
-                        async with aiohttp.ClientSession(timeout=timeout) as session:
-                            async with session.get(download_url, headers=headers, cookies=cookies) as resp:
-                                if resp.status == 200:
-                                    # موفق!
-                                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
-                                        tmp_file.write(await resp.read())
-                                        file_path = tmp_file.name
-                                    break
-                                elif resp.status == 403 and attempt < max_retries - 1:
-                                    await asyncio.sleep(retry_delay)
-                                    continue
-                                else:
-                                    logger.warning(f"[INSTA] Download failed for media {idx}: {resp.status}")
-                                    break
-                                    
-                    except Exception as e:
-                        if attempt < max_retries - 1:
-                            await asyncio.sleep(retry_delay)
-                            continue
+                # دانلود
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(download_url, headers=headers, cookies=cookies) as resp:
+                        if resp.status == 200:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
+                                tmp_file.write(await resp.read())
+                                downloaded_files.append({
+                                    'path': tmp_file.name,
+                                    'type': media_type
+                                })
+                                logger.info(f"[INSTA] Downloaded media {idx}/{total_medias}")
                         else:
-                            logger.warning(f"[INSTA] Error downloading media {idx}: {e}")
-                            break
-                
-                if not file_path:
-                    logger.warning(f"[INSTA] Skipping media {idx}/{total_medias}")
-                    continue
-                
-                # اضافه کردن به لیست فایل‌های دانلود شده
-                downloaded_files.append({
-                    'path': file_path,
-                    'type': media_type,
-                    'idx': idx
-                })
-                
-                logger.info(f"[INSTA] Downloaded media {idx}/{total_medias}")
-                    
+                            logger.warning(f"[INSTA] Download failed {idx}: {resp.status}")
+                            
             except Exception as e:
-                logger.error(f"[INSTA] Error processing media {idx}: {e}")
+                logger.error(f"[INSTA] Error downloading media {idx}: {e}")
                 continue
+        
+        if not downloaded_files:
+            raise Exception("No files downloaded")
+        
+
         
         # ارسال به صورت Media Group (آلبوم)
         if not downloaded_files:
             raise Exception("No media downloaded")
         
-        # ساخت caption برای اولین عکس
-        caption = (
-            f"📸 **Instagram Gallery**\n\n"
-            f"👤 {data.get('author', 'Unknown')}\n"
-            f"🖼️ {len(downloaded_files)} عکس/ویدیو\n\n"
-            f"✅ دانلود شده توسط @DirectTubeBot"
-        )
+        # ساخت caption مناسب
+        if len(downloaded_files) > 1:
+            caption = (
+                f"📸 **Instagram Gallery**\n\n"
+                f"�e {data.get('author', 'Unknown')}\n"
+                f"🖼️ {len(downloaded_files)} عکس/ویدیو\n\n"
+                f"✅ دانلود شده توسط @DirectTubeBot"
+            )
+        else:
+            caption = (
+                f"📸 **Instagram**\n\n"
+                f"👤 {data.get('author', 'Unknown')}\n\n"
+                f"✅ دانلود شده توسط @DirectTubeBot"
+            )
         
         try:
             # اگه فقط یک فایل هست، معمولی بفرست
