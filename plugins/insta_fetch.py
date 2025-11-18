@@ -560,7 +560,7 @@ async def _download_and_send(
             f"📸 **Instagram**\n\n"
             f"👤 {data.get('author', 'Unknown')}\n"
             f"📊 کیفیت: {best_media.get('quality', 'Unknown')}\n\n"
-            f"✅ دانلود شده توسط @YourBotUsername"
+            f"✅ دانلود شده توسط @DirectTubeBot"
         )
         
         # ارسال بر اساس نوع
