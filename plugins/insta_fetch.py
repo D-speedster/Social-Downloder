@@ -545,15 +545,81 @@ async def _download_and_send(
         media_type = best_media.get('type', 'video')
         file_ext = best_media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
         
-        async with aiohttp.ClientSession() as session:
-            async with session.get(download_url) as resp:
-                if resp.status != 200:
-                    raise Exception(f"Download failed: {resp.status}")
-                
-                # ذخیره موقت
-                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
-                    tmp_file.write(await resp.read())
-                    file_path = tmp_file.name
+        # Headers برای جلوگیری از 403
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Referer': 'https://www.instagram.com/',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+        }
+        
+        # خواندن cookies از فایل
+        cookies = {}
+        if os.path.exists(COOKIE_FILE):
+            try:
+                with open(COOKIE_FILE, 'r') as f:
+                    for line in f:
+                        if line.startswith('#') or not line.strip():
+                            continue
+                        parts = line.strip().split('\t')
+                        if len(parts) >= 7:
+                            cookies[parts[5]] = parts[6]
+            except Exception as e:
+                logger.warning(f"[INSTA] Failed to read cookies: {e}")
+        
+        # Retry logic برای مقابله با مشکلات شبکه (مثل Cloudflare outage)
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                timeout = aiohttp.ClientTimeout(total=30)
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(download_url, headers=headers, cookies=cookies) as resp:
+                        if resp.status == 200:
+                            # موفق!
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
+                                tmp_file.write(await resp.read())
+                                file_path = tmp_file.name
+                            break
+                        elif resp.status == 403:
+                            # Forbidden - ممکنه cookies یا rate-limit باشه
+                            if attempt < max_retries - 1:
+                                logger.warning(f"[INSTA] 403 error, retry {attempt + 1}/{max_retries}")
+                                await asyncio.sleep(retry_delay)
+                                continue
+                            else:
+                                raise Exception(f"Download failed: 403 (Forbidden - check cookies or rate-limit)")
+                        elif resp.status == 503 or resp.status == 502:
+                            # Service unavailable - ممکنه Cloudflare outage باشه
+                            if attempt < max_retries - 1:
+                                logger.warning(f"[INSTA] {resp.status} error (possible Cloudflare issue), retry {attempt + 1}/{max_retries}")
+                                await asyncio.sleep(retry_delay * 2)  # صبر بیشتر
+                                continue
+                            else:
+                                raise Exception(f"Download failed: {resp.status} (Service temporarily unavailable)")
+                        else:
+                            raise Exception(f"Download failed: {resp.status}")
+                            
+            except asyncio.TimeoutError:
+                if attempt < max_retries - 1:
+                    logger.warning(f"[INSTA] Timeout, retry {attempt + 1}/{max_retries}")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    raise Exception("Download timeout after 3 attempts")
+            except aiohttp.ClientError as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"[INSTA] Network error: {e}, retry {attempt + 1}/{max_retries}")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    raise Exception(f"Network error: {str(e)}")
+        else:
+            # اگه همه retry ها fail شدن
+            raise Exception("Download failed after 3 attempts")
         
         # ارسال به کاربر
         caption = (
