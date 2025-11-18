@@ -531,123 +531,180 @@ async def _download_and_send(
         if not medias:
             raise Exception("No media in data")
         
-        # انتخاب بهترین کیفیت
-        best_media = medias[0]
-        download_url = best_media.get('url')
+        # بررسی تعداد medias
+        total_medias = len(medias)
+        post_type = data.get('type', 'single')
         
-        if not download_url:
-            raise Exception("No download URL")
+        # اگه چند تایی هست، پیام بده
+        if total_medias > 1:
+            await status_msg.edit_text(
+                f"📸 **Instagram Gallery**\n\n"
+                f"🖼️ {total_medias} عکس/ویدیو پیدا شد\n"
+                f"⏳ در حال دانلود و ارسال...\n\n"
+                f"لطفاً صبر کنید..."
+            )
         
-        # دانلود فایل
+        # دانلود همه medias
         import aiohttp
         import tempfile
+        from pyrogram.types import InputMediaPhoto, InputMediaVideo
         
-        media_type = best_media.get('type', 'video')
-        file_ext = best_media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
+        downloaded_files = []
         
-        # Headers برای جلوگیری از 403
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://www.instagram.com/',
-            'Accept': '*/*',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        }
-        
-        # خواندن cookies از فایل
-        cookies = {}
-        if os.path.exists(COOKIE_FILE):
+        for idx, media in enumerate(medias, 1):
             try:
-                with open(COOKIE_FILE, 'r') as f:
-                    for line in f:
-                        if line.startswith('#') or not line.strip():
+                download_url = media.get('url')
+                
+                if not download_url:
+                    logger.warning(f"[INSTA] No URL for media {idx}/{total_medias}")
+                    continue
+                
+                media_type = media.get('type', 'video')
+                file_ext = media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
+        
+                # Headers برای جلوگیری از 403
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.instagram.com/',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                }
+                
+                # خواندن cookies از فایل
+                cookies = {}
+                if os.path.exists(COOKIE_FILE):
+                    try:
+                        with open(COOKIE_FILE, 'r') as f:
+                            for line in f:
+                                if line.startswith('#') or not line.strip():
+                                    continue
+                                parts = line.strip().split('\t')
+                                if len(parts) >= 7:
+                                    cookies[parts[5]] = parts[6]
+                    except Exception as e:
+                        logger.warning(f"[INSTA] Failed to read cookies: {e}")
+                
+                # Retry logic برای مقابله با مشکلات شبکه
+                max_retries = 2  # کاهش retry برای gallery
+                retry_delay = 1
+                
+                file_path = None
+                for attempt in range(max_retries):
+                    try:
+                        timeout = aiohttp.ClientTimeout(total=30)
+                        async with aiohttp.ClientSession(timeout=timeout) as session:
+                            async with session.get(download_url, headers=headers, cookies=cookies) as resp:
+                                if resp.status == 200:
+                                    # موفق!
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
+                                        tmp_file.write(await resp.read())
+                                        file_path = tmp_file.name
+                                    break
+                                elif resp.status == 403 and attempt < max_retries - 1:
+                                    await asyncio.sleep(retry_delay)
+                                    continue
+                                else:
+                                    logger.warning(f"[INSTA] Download failed for media {idx}: {resp.status}")
+                                    break
+                                    
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(retry_delay)
                             continue
-                        parts = line.strip().split('\t')
-                        if len(parts) >= 7:
-                            cookies[parts[5]] = parts[6]
-            except Exception as e:
-                logger.warning(f"[INSTA] Failed to read cookies: {e}")
-        
-        # Retry logic برای مقابله با مشکلات شبکه (مثل Cloudflare outage)
-        max_retries = 3
-        retry_delay = 2
-        
-        for attempt in range(max_retries):
-            try:
-                timeout = aiohttp.ClientTimeout(total=30)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(download_url, headers=headers, cookies=cookies) as resp:
-                        if resp.status == 200:
-                            # موفق!
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
-                                tmp_file.write(await resp.read())
-                                file_path = tmp_file.name
-                            break
-                        elif resp.status == 403:
-                            # Forbidden - ممکنه cookies یا rate-limit باشه
-                            if attempt < max_retries - 1:
-                                logger.warning(f"[INSTA] 403 error, retry {attempt + 1}/{max_retries}")
-                                await asyncio.sleep(retry_delay)
-                                continue
-                            else:
-                                raise Exception(f"Download failed: 403 (Forbidden - check cookies or rate-limit)")
-                        elif resp.status == 503 or resp.status == 502:
-                            # Service unavailable - ممکنه Cloudflare outage باشه
-                            if attempt < max_retries - 1:
-                                logger.warning(f"[INSTA] {resp.status} error (possible Cloudflare issue), retry {attempt + 1}/{max_retries}")
-                                await asyncio.sleep(retry_delay * 2)  # صبر بیشتر
-                                continue
-                            else:
-                                raise Exception(f"Download failed: {resp.status} (Service temporarily unavailable)")
                         else:
-                            raise Exception(f"Download failed: {resp.status}")
-                            
-            except asyncio.TimeoutError:
-                if attempt < max_retries - 1:
-                    logger.warning(f"[INSTA] Timeout, retry {attempt + 1}/{max_retries}")
-                    await asyncio.sleep(retry_delay)
+                            logger.warning(f"[INSTA] Error downloading media {idx}: {e}")
+                            break
+                
+                if not file_path:
+                    logger.warning(f"[INSTA] Skipping media {idx}/{total_medias}")
                     continue
-                else:
-                    raise Exception("Download timeout after 3 attempts")
-            except aiohttp.ClientError as e:
-                if attempt < max_retries - 1:
-                    logger.warning(f"[INSTA] Network error: {e}, retry {attempt + 1}/{max_retries}")
-                    await asyncio.sleep(retry_delay)
-                    continue
-                else:
-                    raise Exception(f"Network error: {str(e)}")
-        else:
-            # اگه همه retry ها fail شدن
-            raise Exception("Download failed after 3 attempts")
+                
+                # اضافه کردن به لیست فایل‌های دانلود شده
+                downloaded_files.append({
+                    'path': file_path,
+                    'type': media_type,
+                    'idx': idx
+                })
+                
+                logger.info(f"[INSTA] Downloaded media {idx}/{total_medias}")
+                    
+            except Exception as e:
+                logger.error(f"[INSTA] Error processing media {idx}: {e}")
+                continue
         
-        # ارسال به کاربر
+        # ارسال به صورت Media Group (آلبوم)
+        if not downloaded_files:
+            raise Exception("No media downloaded")
+        
+        # ساخت caption برای اولین عکس
         caption = (
-            f"📸 **Instagram**\n\n"
+            f"📸 **Instagram Gallery**\n\n"
             f"👤 {data.get('author', 'Unknown')}\n"
-            f"📊 کیفیت: {best_media.get('quality', 'Unknown')}\n\n"
+            f"🖼️ {len(downloaded_files)} عکس/ویدیو\n\n"
             f"✅ دانلود شده توسط @DirectTubeBot"
         )
         
-        # ارسال بر اساس نوع
-        if media_type == 'video':
-            await message.reply_video(
-                video=file_path,
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:  # image
-            await message.reply_photo(
-                photo=file_path,
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        
-        # حذف فایل موقت
         try:
-            os.unlink(file_path)
-        except:
-            pass
+            # اگه فقط یک فایل هست، معمولی بفرست
+            if len(downloaded_files) == 1:
+                file_info = downloaded_files[0]
+                if file_info['type'] == 'video':
+                    await message.reply_video(
+                        video=file_info['path'],
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                else:
+                    await message.reply_photo(
+                        photo=file_info['path'],
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                sent_count = 1
+            
+            # اگه چند تا هست، به صورت Media Group بفرست
+            else:
+                media_group = []
+                for idx, file_info in enumerate(downloaded_files):
+                    # فقط اولین عکس caption داره
+                    file_caption = caption if idx == 0 else ""
+                    
+                    if file_info['type'] == 'video':
+                        media_group.append(
+                            InputMediaVideo(
+                                media=file_info['path'],
+                                caption=file_caption,
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                        )
+                    else:
+                        media_group.append(
+                            InputMediaPhoto(
+                                media=file_info['path'],
+                                caption=file_caption,
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                        )
+                
+                # ارسال Media Group (حداکثر 10 تا)
+                await message.reply_media_group(media=media_group[:10])
+                sent_count = len(media_group[:10])
+            
+            logger.info(f"[INSTA] Sent {sent_count} medias as group")
+            
+        except Exception as e:
+            logger.error(f"[INSTA] Failed to send media group: {e}")
+            raise
+        
+        finally:
+            # حذف فایل‌های موقت
+            for file_info in downloaded_files:
+                try:
+                    os.unlink(file_info['path'])
+                except:
+                    pass
         
         # حذف پیام وضعیت
         try:
@@ -662,8 +719,7 @@ async def _download_and_send(
             status='success',
             processing_time=processing_time
         )
-        
-        logger.info(f"[INSTA] Success in {processing_time:.2f}s")
+        logger.info(f"[INSTA] Success! Sent {sent_count}/{len(downloaded_files)} medias in {processing_time:.2f}s")
         
     except Exception as e:
         logger.error(f"[INSTA] Download/Send error: {e}")
