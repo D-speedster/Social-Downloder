@@ -97,3 +97,14 @@ RAPIDAPI_KEY = os.environ.get("RAPIDAPI_KEY")
 
 if not RAPIDAPI_KEY:
     print("WARNING: RAPIDAPI_KEY environment variable is not set. Universal downloader might not function correctly.")
+
+# Admin notification settings
+ADMIN_ID = os.environ.get("ADMIN_ID")  # Telegram user ID of admin
+NOTIFY_ADMIN_ON_ERROR = str(os.environ.get("NOTIFY_ADMIN_ON_ERROR", "false")).strip().lower() in ("1", "true", "yes")
+
+if ADMIN_ID:
+    try:
+        ADMIN_ID = int(ADMIN_ID)
+    except (ValueError, TypeError):
+        print("WARNING: ADMIN_ID must be a valid integer, admin notifications disabled")
+        ADMIN_ID = None

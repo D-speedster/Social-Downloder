@@ -161,8 +161,6 @@ class RetryQueue:
         
         # تلاش مجدد برای دانلود
         try:
-            from plugins.universal_downloader import handle_universal_link
-            
             # ساخت یک message object ساده
             class FakeMessage:
                 def __init__(self, text, user_id, chat_id, message_id):
@@ -177,8 +175,17 @@ class RetryQueue:
             
             fake_msg = FakeMessage(req.url, req.user_id, req.chat_id, req.message_id)
             
-            # تلاش مجدد (با flag is_retry=True تا از infinite loop جلوگیری کنیم)
-            await handle_universal_link(client, fake_msg, is_retry=True)
+            # تلاش مجدد بر اساس platform
+            if req.platform == "instagram":
+                from plugins.insta_fetch import handle_instagram_link
+                await handle_instagram_link(client, fake_msg)
+            elif req.platform == "youtube":
+                from plugins.youtube_handler import show_video
+                await show_video(client, fake_msg)
+            else:
+                # سایر پلتفرم‌ها به Universal
+                from plugins.universal_downloader import handle_universal_link
+                await handle_universal_link(client, fake_msg, is_retry=True)
             
             # اگر موفق بود، حذف از صف
             self.remove(req)

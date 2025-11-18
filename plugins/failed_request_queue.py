@@ -124,12 +124,18 @@ class FailedRequestQueue:
             
             fake_msg = FakeMessage(user_id, url, original_message_id)
             
-            # تلاش برای دانلود
+            # تلاش برای دانلود بر اساس platform
             try:
-                from plugins.universal_downloader import handle_universal_link
-                
-                # فراخوانی handler با is_retry=True
-                await handle_universal_link(client, fake_msg, is_retry=True)
+                if platform == "instagram":
+                    from plugins.insta_fetch import handle_instagram_link
+                    await handle_instagram_link(client, fake_msg)
+                elif platform == "youtube":
+                    from plugins.youtube_handler import show_video
+                    await show_video(client, fake_msg)
+                else:
+                    # سایر پلتفرم‌ها به Universal
+                    from plugins.universal_downloader import handle_universal_link
+                    await handle_universal_link(client, fake_msg, is_retry=True)
                 
                 # اگر به اینجا رسیدیم، موفق بوده
                 self.db.mark_failed_request_as_processed(request_id)

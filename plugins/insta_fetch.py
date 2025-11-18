@@ -23,6 +23,13 @@ from plugins.logger_config import get_logger
 from plugins.start import join
 import yt_dlp
 
+# Import config for admin notifications
+try:
+    from config import ADMIN_ID, NOTIFY_ADMIN_ON_ERROR
+except ImportError:
+    ADMIN_ID = None
+    NOTIFY_ADMIN_ON_ERROR = False
+
 # ------------------------------------------------------------------- #
 # Logger
 logger = get_logger('insta_fetch')
@@ -253,8 +260,23 @@ class InstaFetcher:
     def _convert_ytdlp_to_api_format(self, info: Dict, url: str) -> Dict:
         """تبدیل خروجی yt-dlp به فرمت API"""
         try:
-            # استخراج بهترین کیفیت
-            formats = info.get('formats', [])
+            # بررسی carousel (چند آیتمی)
+            if 'entries' in info and info['entries']:
+                # Carousel: فقط اولین آیتم رو بگیر
+                first_entry = info['entries'][0]
+                return self._convert_single_item(first_entry, url, info)
+            else:
+                # تک آیتم
+                return self._convert_single_item(info, url, info)
+            
+        except Exception as e:
+            logger.error(f"[INSTA] Convert error: {e}")
+            raise
+    
+    def _convert_single_item(self, item: Dict, url: str, parent_info: Dict) -> Dict:
+        """تبدیل یک آیتم به فرمت API"""
+        try:
+            formats = item.get('formats', [])
             
             # فیلتر ویدیوها
             video_formats = [
@@ -262,38 +284,63 @@ class InstaFetcher:
                 if f.get('vcodec') != 'none' and f.get('height')
             ]
             
-            # مرتب‌سازی بر اساس کیفیت
-            video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+            # اگر ویدیو پیدا شد
+            if video_formats:
+                # مرتب‌سازی بر اساس کیفیت
+                video_formats.sort(key=lambda x: x.get('height', 0), reverse=True)
+                best_video = video_formats[0]
+                
+                data = {
+                    'url': url,
+                    'source': 'instagram',
+                    'title': parent_info.get('title', 'Instagram'),
+                    'author': parent_info.get('uploader', 'Unknown'),
+                    'thumbnail': item.get('thumbnail', ''),
+                    'medias': [{
+                        'url': best_video.get('url'),
+                        'thumbnail': item.get('thumbnail', ''),
+                        'quality': f"{best_video.get('height', 0)}p",
+                        'resolution': f"{best_video.get('width', 0)}x{best_video.get('height', 0)}",
+                        'type': 'video',
+                        'extension': best_video.get('ext', 'mp4'),
+                        'is_audio': True
+                    }],
+                    'type': 'single',
+                    'error': False
+                }
+                return data
             
-            best_video = video_formats[0] if video_formats else None
-            
-            if not best_video:
-                raise Exception("No video format found")
-            
-            # ساخت data
-            data = {
-                'url': url,
-                'source': 'instagram',
-                'title': info.get('title', 'Instagram'),
-                'author': info.get('uploader', 'Unknown'),
-                'thumbnail': info.get('thumbnail', ''),
-                'medias': [{
-                    'url': best_video.get('url'),
-                    'thumbnail': info.get('thumbnail', ''),
-                    'quality': f"{best_video.get('height', 0)}p",
-                    'resolution': f"{best_video.get('width', 0)}x{best_video.get('height', 0)}",
-                    'type': 'video',
-                    'extension': best_video.get('ext', 'mp4'),
-                    'is_audio': True
-                }],
-                'type': 'single',
-                'error': False
-            }
-            
-            return data
-            
+            # اگر ویدیو نبود، عکس رو بگیر
+            else:
+                # بررسی URL مستقیم (برای عکس)
+                direct_url = item.get('url')
+                thumbnail = item.get('thumbnail', '')
+                
+                if not direct_url:
+                    raise Exception("No video or image URL found")
+                
+                data = {
+                    'url': url,
+                    'source': 'instagram',
+                    'title': parent_info.get('title', 'Instagram'),
+                    'author': parent_info.get('uploader', 'Unknown'),
+                    'thumbnail': thumbnail,
+                    'medias': [{
+                        'url': direct_url,
+                        'thumbnail': thumbnail,
+                        'quality': 'original',
+                        'resolution': f"{item.get('width', 0)}x{item.get('height', 0)}",
+                        'type': 'image',
+                        'extension': item.get('ext', 'jpg'),
+                        'is_audio': False
+                    }],
+                    'type': 'single',
+                    'error': False
+                }
+                return data
+                
         except Exception as e:
-            logger.error(f"[INSTA] Convert error: {e}")
+            logger.error(f"[INSTA] Convert single item error: {e}")
             raise
 
 
@@ -365,6 +412,9 @@ async def handle_instagram_link(client: Client, message: Message):
                 error_message=error
             )
             
+            # ارسال notification به ادمین
+            await _notify_admin_on_error(client, user_id, url, error)
+            
             # پیام خطا به کاربر
             error_text = _get_error_message(error)
             await status_msg.edit_text(error_text, parse_mode=ParseMode.MARKDOWN)
@@ -397,6 +447,31 @@ async def handle_instagram_link(client: Client, message: Message):
             "لطفاً دوباره تلاش کنید یا با پشتیبانی تماس بگیرید.",
             parse_mode=ParseMode.MARKDOWN
         )
+
+
+async def _notify_admin_on_error(client: Client, user_id: int, url: str, error: str):
+    """ارسال notification به ادمین در صورت خطا"""
+    if not ADMIN_ID or not NOTIFY_ADMIN_ON_ERROR:
+        return
+    
+    try:
+        # ساخت پیام برای ادمین
+        admin_message = (
+            "🚨 **خطای Instagram**\n\n"
+            f"👤 **کاربر:** `{user_id}`\n"
+            f"🔗 **URL:** `{url[:50]}...`\n"
+            f"⚠️ **خطا:** `{error[:100]}`\n\n"
+            f"🕐 **زمان:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        
+        await client.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_message,
+            parse_mode=ParseMode.MARKDOWN
+        )
+        logger.info(f"[INSTA] Admin notified about error for user {user_id}")
+    except Exception as e:
+        logger.error(f"[INSTA] Failed to notify admin: {e}")
 
 
 def _get_error_message(error: str) -> str:
@@ -467,13 +542,16 @@ async def _download_and_send(
         import aiohttp
         import tempfile
         
+        media_type = best_media.get('type', 'video')
+        file_ext = best_media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
+        
         async with aiohttp.ClientSession() as session:
             async with session.get(download_url) as resp:
                 if resp.status != 200:
                     raise Exception(f"Download failed: {resp.status}")
                 
                 # ذخیره موقت
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as tmp_file:
                     tmp_file.write(await resp.read())
                     file_path = tmp_file.name
         
@@ -485,11 +563,19 @@ async def _download_and_send(
             f"✅ دانلود شده توسط @YourBotUsername"
         )
         
-        await message.reply_video(
-            video=file_path,
-            caption=caption,
-            parse_mode=ParseMode.MARKDOWN
-        )
+        # ارسال بر اساس نوع
+        if media_type == 'video':
+            await message.reply_video(
+                video=file_path,
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:  # image
+            await message.reply_photo(
+                photo=file_path,
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN
+            )
         
         # حذف فایل موقت
         try:
