@@ -44,7 +44,7 @@ data = constant.DATA
 
 # New: patterns for supported links and pending link storage
 YOUTUBE_REGEX = re.compile(r"^(?:https?://)?(?:www\.)?(?:m\.)?(?:youtube\.com|youtu\.be)/", re.IGNORECASE)
-INSTA_REGEX = re.compile(r"^((?:https?:)?//)?(?:(?:www|m)\.)?((?:instagram\.com))(\/(?:p\/|reel\/|tv\/|stories\/))([\w\-]+)(\S+)?$", re.IGNORECASE)
+INSTA_REGEX = re.compile(r"^(?:https?://)?(?:www\.|m\.)?(?:dd)?instagram\.com/(?:p|reel|tv|stories|igtv)/[\w\-]+(?:\?[^\s]*)?", re.IGNORECASE)
 SPOTIFY_REGEX = re.compile(r"^(?:https?://)?(?:open\.)?spotify\.com/", re.IGNORECASE)
 TIKTOK_REGEX = re.compile(r"^(?:https?://)?(?:www\.|vm\.|m\.)?tiktok\.com/", re.IGNORECASE)
 SOUNDCLOUD_REGEX = re.compile(r"^(?:https?://)?(?:www\.|m\.|on\.)?soundcloud\.com/", re.IGNORECASE)
