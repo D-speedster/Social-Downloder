@@ -203,6 +203,16 @@ class DB:
                     ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
                     """
                 )
+                # Bot settings table
+                self.cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS bot_settings (
+                        `key` VARCHAR(255) PRIMARY KEY,
+                        value TEXT,
+                        updated_at VARCHAR(32) NOT NULL
+                    ) CHARACTER SET `utf8` COLLATE `utf8_general_ci`
+                    """
+                )
             else:  # SQLite
                 self.cursor.execute(
                     """CREATE TABLE IF NOT EXISTS insta_acc (
@@ -291,6 +301,15 @@ class DB:
                 self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_status ON failed_requests(status)")
                 self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_user ON failed_requests(user_id)")
                 self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_failed_requests_created ON failed_requests(created_at)")
+                
+                # Bot settings table for help message and other configurations
+                self.cursor.execute(
+                    """CREATE TABLE IF NOT EXISTS bot_settings (
+                        key TEXT PRIMARY KEY,
+                        value TEXT,
+                        updated_at TEXT NOT NULL
+                    )"""
+                )
             self.mydb.commit()
         except Exception as e:
             print(f"Database setup failed: {e}")
@@ -1349,3 +1368,83 @@ class DB:
                 
         except Exception as e:
             print(f"Error updating request status: {e}")
+
+    # ==================== Bot Settings Methods ====================
+    
+    def get_bot_setting(self, key: str) -> str:
+        """
+        دریافت یک تنظیم ربات
+        
+        Args:
+            key: کلید تنظیم (مثلاً 'help_message')
+        
+        Returns:
+            str: مقدار تنظیم یا None
+        """
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute('SELECT value FROM bot_settings WHERE `key` = %s', (key,))
+            else:
+                self.cursor.execute('SELECT value FROM bot_settings WHERE key = ?', (key,))
+            
+            row = self.cursor.fetchone()
+            return row[0] if row else None
+        except Exception as e:
+            print(f"Error getting bot setting {key}: {e}")
+            return None
+    
+    def set_bot_setting(self, key: str, value: str) -> bool:
+        """
+        ذخیره یک تنظیم ربات
+        
+        Args:
+            key: کلید تنظیم
+            value: مقدار تنظیم (JSON string)
+        
+        Returns:
+            bool: موفقیت عملیات
+        """
+        try:
+            updated_at = _dt.now().isoformat()
+            
+            if self.db_type == 'mysql':
+                self.cursor.execute(
+                    '''INSERT INTO bot_settings (`key`, value, updated_at) 
+                       VALUES (%s, %s, %s)
+                       ON DUPLICATE KEY UPDATE value = %s, updated_at = %s''',
+                    (key, value, updated_at, value, updated_at)
+                )
+            else:
+                self.cursor.execute(
+                    '''INSERT OR REPLACE INTO bot_settings (key, value, updated_at) 
+                       VALUES (?, ?, ?)''',
+                    (key, value, updated_at)
+                )
+            
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Error setting bot setting {key}: {e}")
+            return False
+    
+    def delete_bot_setting(self, key: str) -> bool:
+        """
+        حذف یک تنظیم ربات
+        
+        Args:
+            key: کلید تنظیم
+        
+        Returns:
+            bool: موفقیت عملیات
+        """
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute('DELETE FROM bot_settings WHERE `key` = %s', (key,))
+            else:
+                self.cursor.execute('DELETE FROM bot_settings WHERE key = ?', (key,))
+            
+            self.mydb.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting bot setting {key}: {e}")
+            return False

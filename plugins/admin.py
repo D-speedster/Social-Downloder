@@ -214,7 +214,8 @@ def admin_reply_kb() -> ReplyKeyboardMarkup:
             ["💬 پیام انتظار", "🍪 مدیریت کوکی"],
             ["📺 تنظیم تبلیغات", "✅ وضعیت ربات"],
             ["📨 پیام‌های آفلاین", "📋 صف درخواست‌ها"],
-            ["🔞 تنظیم Thumbnail", "⬅️ بازگشت"],
+            ["🔞 تنظیم Thumbnail", "📘 تنظیم راهنما"],
+            ["⬅️ بازگشت"],
         ],
         resize_keyboard=True
     )
@@ -374,7 +375,8 @@ def recovery_filter_func(_, __, m):
         '⬅️ بازگشت', '❌ لغو', '📨 پیام‌های آفلاین', '🛠 مدیریت',
         '📊 آمار کاربران', '🖥 وضعیت سرور', '📢 ارسال همگانی',
         '📢 تنظیم اسپانسر', '💬 پیام انتظار', '🍪 مدیریت کوکی',
-        '📺 تنظیم تبلیغات', '✅ وضعیت ربات', '📋 صف درخواست‌ها'
+        '📺 تنظیم تبلیغات', '✅ وضعیت ربات', '📋 صف درخواست‌ها',
+        '📘 تنظیم راهنما', '🔞 تنظیم Thumbnail'
     }
     if text in admin_buttons:
         return False
@@ -1172,7 +1174,7 @@ def sponsor_input_filter(_, __, message: Message):
             "🛠 مدیریت", "📊 آمار کاربران", "🖥 وضعیت سرور",
             "📢 ارسال همگانی", "📢 تنظیم اسپانسر", "💬 پیام انتظار",
             "🍪 مدیریت کوکی", "📺 تنظیم تبلیغات", "✅ وضعیت ربات",
-            "⬅️ بازگشت", "❌ لغو"
+            "📘 تنظیم راهنما", "🔞 تنظیم Thumbnail", "⬅️ بازگشت", "❌ لغو"
         }
         if text in admin_buttons:
             admin_logger.debug("[ADMIN] Filter failed: admin button")
@@ -1578,6 +1580,11 @@ async def cancel_all_operations(_, message: Message):
         admin_step['waiting_msg_platform'] = ''
         cancelled_operations.append("تنظیم پیام انتظار")
     
+    # Cancel help message setup
+    if admin_step.get('help_setup', 0) == 1:
+        admin_step['help_setup'] = 0
+        cancelled_operations.append("تنظیم پیام راهنما")
+    
     # Cancel cookie operations
     if 'add_cookie' in admin_step:
         del admin_step['add_cookie']
@@ -1667,7 +1674,7 @@ async def set_sp(client: Client, message: Message):
         "🛠 مدیریت", "📊 آمار کاربران", "🖥 وضعیت سرور",
         "📢 ارسال همگانی", "📢 تنظیم اسپانسر", "💬 پیام انتظار",
         "🍪 مدیریت کوکی", "📺 تنظیم تبلیغات", "✅ وضعیت ربات",
-        "⬅️ بازگشت", "❌ لغو"
+        "📘 تنظیم راهنما", "🔞 تنظیم Thumbnail", "⬅️ بازگشت", "❌ لغو"
     }
     if message.text.strip() in admin_buttons:
         return
@@ -2130,8 +2137,8 @@ async def handle_advertisement_content(client: Client, message: Message):
         if message.text and message.text.strip() in {
             "🛠 مدیریت","📊 آمار کاربران","🖥 وضعیت سرور",
             "📢 ارسال همگانی","📢 تنظیم اسپانسر","💬 پیام انتظار","🍪 مدیریت کوکی",
-            "📺 تنظیم تبلیغات","✅ وضعیت ربات","⬅️ بازگشت","❌ لغو",
-            "🔝 بالای محتوا","🔻 پایین محتوا"
+            "📺 تنظیم تبلیغات","✅ وضعیت ربات","📘 تنظیم راهنما","🔞 تنظیم Thumbnail",
+            "⬅️ بازگشت","❌ لغو","🔝 بالای محتوا","🔻 پایین محتوا"
         }:
             return
         
@@ -3535,3 +3542,218 @@ async def stats_refresh_callback(client: Client, callback_query: CallbackQuery):
     except Exception as e:
         admin_logger.error(f"Error in stats_refresh_callback: {e}")
         await callback_query.answer("❌ خطا در بروزرسانی", show_alert=True)
+
+
+# ==================== تنظیم پیام راهنما ====================
+
+@Client.on_message(filters.user(ADMIN) & filters.regex(r'^📘 تنظیم راهنما$'), group=2)
+async def admin_menu_help_message(_: Client, message: Message):
+    """ورود به پنل تنظیم پیام راهنما"""
+    user_id = message.from_user.id
+    print(f"[DEBUG] Help message handler triggered by user {user_id}")
+    admin_logger.info(f"[ADMIN] Help message setup started by {user_id}")
+    
+    # دریافت پیام راهنمای فعلی
+    import json
+    db = DB()
+    help_data = db.get_bot_setting('help_message')
+    
+    if help_data:
+        try:
+            help_config = json.loads(help_data)
+            content_type = help_config.get('type', 'text')
+            status_text = "✅ فعال (سفارشی)"
+        except:
+            content_type = 'text'
+            status_text = "⚠️ پیش‌فرض"
+    else:
+        content_type = 'text'
+        status_text = "⚠️ پیش‌فرض"
+    
+    text = (
+        "📘 <b>تنظیم پیام راهنما</b>\n\n"
+        f"وضعیت فعلی: {status_text}\n"
+        f"نوع محتوا: {content_type.upper()}\n\n"
+        "💡 <b>راهنما:</b>\n"
+        "• می‌توانید متن، عکس، ویدیو، گیف یا استیکر ارسال کنید\n"
+        "• پیام شما به عنوان پاسخ /help نمایش داده می‌شود\n"
+        "• برای بازگشت به پیام پیش‌فرض، از دکمه حذف استفاده کنید\n\n"
+        "📤 <b>لطفاً پیام راهنمای جدید را ارسال کنید:</b>"
+    )
+    
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("👁 مشاهده فعلی", callback_data="view_help_message"),
+            InlineKeyboardButton("🗑 حذف سفارشی", callback_data="delete_help_message")
+        ],
+        [InlineKeyboardButton("❌ لغو", callback_data="cancel_help_setup")]
+    ])
+    
+    # تنظیم state برای دریافت پیام
+    admin_step['help_setup'] = 1
+    
+    await message.reply_text(text, reply_markup=keyboard)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^view_help_message$'))
+async def view_help_message_callback(client: Client, callback_query: CallbackQuery):
+    """نمایش پیام راهنمای فعلی"""
+    try:
+        import json
+        db = DB()
+        help_data = db.get_bot_setting('help_message')
+        
+        if not help_data:
+            await callback_query.answer("⚠️ پیام سفارشی تنظیم نشده است", show_alert=True)
+            return
+        
+        help_config = json.loads(help_data)
+        content_type = help_config.get('type', 'text')
+        
+        await callback_query.answer("در حال ارسال...")
+        
+        if content_type == 'text':
+            await callback_query.message.reply_text(
+                f"📘 <b>پیام راهنمای فعلی:</b>\n\n{help_config.get('text', '')}"
+            )
+        elif content_type == 'photo':
+            await callback_query.message.reply_photo(
+                photo=help_config.get('file_id'),
+                caption=help_config.get('caption', '')
+            )
+        elif content_type == 'video':
+            await callback_query.message.reply_video(
+                video=help_config.get('file_id'),
+                caption=help_config.get('caption', '')
+            )
+        elif content_type == 'animation':
+            await callback_query.message.reply_animation(
+                animation=help_config.get('file_id'),
+                caption=help_config.get('caption', '')
+            )
+        elif content_type == 'sticker':
+            await callback_query.message.reply_sticker(
+                sticker=help_config.get('file_id')
+            )
+        elif content_type == 'document':
+            await callback_query.message.reply_document(
+                document=help_config.get('file_id'),
+                caption=help_config.get('caption', '')
+            )
+    
+    except Exception as e:
+        admin_logger.error(f"Error viewing help message: {e}")
+        await callback_query.answer("❌ خطا در نمایش پیام", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^delete_help_message$'))
+async def delete_help_message_callback(client: Client, callback_query: CallbackQuery):
+    """حذف پیام راهنمای سفارشی"""
+    try:
+        db = DB()
+        db.delete_bot_setting('help_message')
+        admin_step['help_setup'] = 0
+        
+        await callback_query.edit_message_text(
+            "✅ <b>پیام راهنمای سفارشی حذف شد</b>\n\n"
+            "از این پس پیام پیش‌فرض نمایش داده می‌شود.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🏠 پنل ادمین", callback_data="back_to_admin")
+            ]])
+        )
+        admin_logger.info(f"[ADMIN] Help message deleted by {callback_query.from_user.id}")
+    
+    except Exception as e:
+        admin_logger.error(f"Error deleting help message: {e}")
+        await callback_query.answer("❌ خطا در حذف پیام", show_alert=True)
+
+
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cancel_help_setup$'))
+async def cancel_help_setup_callback(client: Client, callback_query: CallbackQuery):
+    """لغو تنظیم پیام راهنما"""
+    admin_step['help_setup'] = 0
+    await callback_query.edit_message_text(
+        "❌ <b>تنظیم پیام راهنما لغو شد</b>\n\n"
+        "می‌توانید از پنل ادمین دوباره شروع کنید.",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🏠 پنل ادمین", callback_data="back_to_admin")
+        ]])
+    )
+
+
+# Handler برای دریافت پیام راهنمای جدید
+@Client.on_message(filters.user(ADMIN) & filters.private, group=6)
+async def handle_help_message_input(client: Client, message: Message):
+    """دریافت پیام راهنمای جدید از ادمین"""
+    
+    # بررسی state
+    if admin_step.get('help_setup') != 1:
+        return
+    
+    # بررسی دکمه‌های ادمین
+    admin_buttons = {
+        "🛠 مدیریت", "📊 آمار کاربران", "🖥 وضعیت سرور",
+        "📢 ارسال همگانی", "📢 تنظیم اسپانسر", "💬 پیام انتظار",
+        "🍪 مدیریت کوکی", "📺 تنظیم تبلیغات", "✅ وضعیت ربات",
+        "📘 تنظیم راهنما", "⬅️ بازگشت", "❌ لغو"
+    }
+    
+    if message.text and message.text.strip() in admin_buttons:
+        return
+    
+    try:
+        import json
+        db = DB()
+        help_config = {}
+        
+        if message.text:
+            help_config['type'] = 'text'
+            help_config['text'] = message.text
+        elif message.photo:
+            help_config['type'] = 'photo'
+            help_config['file_id'] = message.photo.file_id
+            help_config['caption'] = message.caption or ''
+        elif message.video:
+            help_config['type'] = 'video'
+            help_config['file_id'] = message.video.file_id
+            help_config['caption'] = message.caption or ''
+        elif message.animation:
+            help_config['type'] = 'animation'
+            help_config['file_id'] = message.animation.file_id
+            help_config['caption'] = message.caption or ''
+        elif message.sticker:
+            help_config['type'] = 'sticker'
+            help_config['file_id'] = message.sticker.file_id
+        elif message.document:
+            help_config['type'] = 'document'
+            help_config['file_id'] = message.document.file_id
+            help_config['caption'] = message.caption or ''
+        else:
+            await message.reply_text("❌ نوع پیام پشتیبانی نمی‌شود. لطفاً متن، عکس، ویدیو، گیف یا استیکر ارسال کنید.")
+            return
+        
+        # ذخیره در دیتابیس
+        success = db.set_bot_setting('help_message', json.dumps(help_config, ensure_ascii=False))
+        
+        if success:
+            admin_step['help_setup'] = 0
+            
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("👁 مشاهده", callback_data="view_help_message"),
+                    InlineKeyboardButton("🏠 پنل ادمین", callback_data="back_to_admin")
+                ]
+            ])
+            
+            await message.reply_text(
+                "✅ <b>پیام راهنما با موفقیت تنظیم شد!</b>\n\n"
+                "از این پس کاربران با دستور /help این پیام را دریافت می‌کنند.",
+                reply_markup=keyboard
+            )
+            admin_logger.info(f"[ADMIN] Help message updated by {message.from_user.id}, type: {help_config['type']}")
+        else:
+            await message.reply_text("❌ خطا در ذخیره پیام. لطفاً دوباره تلاش کنید.")
+    
+    except Exception as e:
+        admin_logger.error(f"Error handling help message input: {e}")
+        await message.reply_text("❌ خطای غیرمنتظره. لطفاً دوباره تلاش کنید.")

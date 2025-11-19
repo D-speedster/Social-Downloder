@@ -1,0 +1,34 @@
+feat: Add custom help message system and platform success rate stats
+
+✨ New Features:
+- Custom help message system with admin panel (📘 تنظیم راهنما)
+  * Support for text, photo, video, GIF, sticker, document
+  * Persistent storage in bot_settings table
+  * View, edit, delete custom messages
+  
+- Platform success rate statistics (📊 درصد موفقیت)
+  * Show download success percentage per platform
+  * Display format: "246 درخواست | ✅ موفقیت: 92.5%"
+
+🔧 Technical Changes:
+- Added bot_settings table (MySQL & SQLite)
+- New DB methods: get/set/delete_bot_setting()
+- Enhanced admin_statistics with success rate calculations
+- Updated /help command to use custom messages
+
+📂 New Files:
+- migrate_bot_settings.py (migration script)
+- docs/CUSTOM_HELP_MESSAGE.md
+- docs/SUCCESS_RATE_FEATURE.md
+- HELP_MESSAGE_SETUP.md
+- Test scripts: test_help_*.py, test_success_rate_display.py
+
+⚠️ Migration Required:
+Run `python migrate_bot_settings.py` before use
+
+🐛 Bug Fixes:
+- Fixed import issues in start.py and admin.py
+- Added proper error handling and debug logs
+- Updated admin button filters (5 locations)
+
+✅ All features tested and working

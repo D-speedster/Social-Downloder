@@ -456,6 +456,68 @@ async def start(client: Client, message: Message):
 # === Slash command handlers ===
 @Client.on_message(filters.private & filters.command(["help"]))
 async def help_command_handler(client: Client, message: Message):
+    print(f"[DEBUG] /help command received from user {message.from_user.id}")
+    
+    # بررسی پیام راهنمای سفارشی
+    import json
+    from plugins.db_wrapper import DB
+    
+    try:
+        db = DB()
+        help_data = db.get_bot_setting('help_message')
+        print(f"[DEBUG] Help data from DB: {help_data[:100] if help_data else 'None'}")
+    except Exception as e:
+        print(f"[ERROR] Error accessing database for help message: {e}")
+        import traceback
+        traceback.print_exc()
+        help_data = None
+    
+    if help_data:
+        try:
+            help_config = json.loads(help_data)
+            content_type = help_config.get('type', 'text')
+            
+            if content_type == 'text':
+                await message.reply_text(
+                    help_config.get('text', ''),
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            elif content_type == 'photo':
+                await message.reply_photo(
+                    photo=help_config.get('file_id'),
+                    caption=help_config.get('caption', ''),
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            elif content_type == 'video':
+                await message.reply_video(
+                    video=help_config.get('file_id'),
+                    caption=help_config.get('caption', ''),
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            elif content_type == 'animation':
+                await message.reply_animation(
+                    animation=help_config.get('file_id'),
+                    caption=help_config.get('caption', ''),
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            elif content_type == 'sticker':
+                await message.reply_sticker(
+                    sticker=help_config.get('file_id')
+                )
+                # ارسال منو بعد از استیکر
+                await message.reply_text("📱 منوی اصلی:", reply_markup=build_main_menu(message.from_user.id))
+            elif content_type == 'document':
+                await message.reply_document(
+                    document=help_config.get('file_id'),
+                    caption=help_config.get('caption', ''),
+                    reply_markup=build_main_menu(message.from_user.id)
+                )
+            return
+        except Exception as e:
+            print(f"Error loading custom help message: {e}")
+            # در صورت خطا، از پیام پیش‌فرض استفاده می‌شود
+    
+    # پیام پیش‌فرض
     text = (
         "📘 راهنما\n\n"
         "🔗 **پلتفرم‌های پشتیبانی شده:**\n"
@@ -745,7 +807,7 @@ async def verify_join_callback(client: Client, callback_query: CallbackQuery):
 
 
 # === General Message Handler for Universal URLs (Spotify, TikTok, SoundCloud) ===
-@Client.on_message(filters.private & filters.text & join & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]) & ~filters.regex(r'^(🛠 مدیریت|📊 آمار کاربران|🖥 وضعیت سرور|📢 ارسال همگانی|📢 تنظیم اسپانسر|🔌 خاموش/روشن|🔐 خاموش/روشن اسپانسری|📺 خاموش/روشن تبلیغات|🍪 مدیریت کوکی|📺 تنظیم تبلیغات|📺 کوکی یوتیوب|⬅️ بازگشت|➕ افزودن کوکی یوتیوب|📋 مشاهده کوکی‌های یوتیوب|🗑 حذف همه کوکی‌های یوتیوب|✅ بله، حذف کن یوتیوب|❌ لغو|💬 پیام انتظار|🔝 بالای محتوا|🔻 پایین محتوا|🔌 بررسی پروکسی|✅ وضعیت ربات)$'), group=10)
+@Client.on_message(filters.private & filters.text & join & ~filters.command(["start", "help", "settings", "language", "upgrade", "dash", "dashboard"]) & ~filters.regex(r'^(🛠 مدیریت|📊 آمار کاربران|🖥 وضعیت سرور|📢 ارسال همگانی|📢 تنظیم اسپانسر|🔌 خاموش/روشن|🔐 خاموش/روشن اسپانسری|📺 خاموش/روشن تبلیغات|🍪 مدیریت کوکی|📺 تنظیم تبلیغات|📺 کوکی یوتیوب|⬅️ بازگشت|➕ افزودن کوکی یوتیوب|📋 مشاهده کوکی‌های یوتیوب|🗑 حذف همه کوکی‌های یوتیوب|✅ بله، حذف کن یوتیوب|❌ لغو|💬 پیام انتظار|🔝 بالای محتوا|🔻 پایین محتوا|🔌 بررسی پروکسی|✅ وضعیت ربات|📘 تنظیم راهنما|🔞 تنظیم Thumbnail)$'), group=10)
 async def handle_text_messages(client: Client, message: Message):
     """Handle universal URLs (Spotify, TikTok, SoundCloud) - YouTube and Instagram have dedicated handlers"""
     try:
