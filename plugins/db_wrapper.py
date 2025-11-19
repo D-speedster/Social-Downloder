@@ -1196,6 +1196,57 @@ class DB:
             print(f"Error getting failed requests: {e}")
             return 0
     
+    def get_successful_requests_by_platform(self, platform: str) -> int:
+        """دریافت تعداد درخواست‌های موفق به تفکیک پلتفرم"""
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute(
+                    "SELECT COUNT(*) FROM requests WHERE platform = %s AND status = %s",
+                    (platform, 'success')
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT COUNT(*) FROM requests WHERE platform = ? AND status = ?",
+                    (platform, 'success')
+                )
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting successful requests for {platform}: {e}")
+            return 0
+    
+    def get_failed_requests_by_platform_count(self, platform: str) -> int:
+        """دریافت تعداد درخواست‌های ناموفق به تفکیک پلتفرم"""
+        try:
+            if self.db_type == 'mysql':
+                self.cursor.execute(
+                    "SELECT COUNT(*) FROM requests WHERE platform = %s AND status = %s",
+                    (platform, 'failed')
+                )
+            else:
+                self.cursor.execute(
+                    "SELECT COUNT(*) FROM requests WHERE platform = ? AND status = ?",
+                    (platform, 'failed')
+                )
+            row = self.cursor.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception as e:
+            print(f"Error getting failed requests for {platform}: {e}")
+            return 0
+    
+    def get_success_rate_by_platform(self, platform: str) -> float:
+        """محاسبه درصد موفقیت برای یک پلتفرم"""
+        try:
+            total = self.get_requests_by_platform(platform)
+            if total == 0:
+                return 0.0
+            
+            successful = self.get_successful_requests_by_platform(platform)
+            return (successful / total) * 100
+        except Exception as e:
+            print(f"Error calculating success rate for {platform}: {e}")
+            return 0.0
+    
     def get_avg_processing_time(self) -> float:
         """دریافت میانگین زمان پردازش از جدول requests"""
         try:

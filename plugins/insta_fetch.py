@@ -21,6 +21,7 @@ from pyrogram.enums import ParseMode
 from plugins.db_wrapper import DB
 from plugins.logger_config import get_logger
 from plugins.start import join
+from plugins.insta_stats import insta_stats
 import yt_dlp
 
 # Import config for admin notifications
@@ -56,6 +57,8 @@ class InstaFetcher:
         self.cookie_file = COOKIE_FILE
         self.last_api_call = 0  # برای rate limiting
         self.min_api_interval = 1.0  # حداقل 1 ثانیه بین هر request
+        self.api_cache = {}  # Cache برای API responses
+        self.cache_ttl = 300  # 5 دقیقه TTL
         
     async def fetch(self, url: str, user_id: int, message: Message) -> Tuple[bool, Optional[Dict], Optional[str]]:
         """
@@ -142,7 +145,23 @@ class InstaFetcher:
         return False, None, error or "تمام روش‌ها ناموفق بودند"
     
     async def _try_api(self, url: str, message: Message) -> Tuple[bool, Optional[Dict], Optional[str]]:
-        """Layer 1: تلاش با API با retry mechanism"""
+        """Layer 1: تلاش با API با retry mechanism و cache"""
+        
+        # بررسی cache
+        cache_key = url.split('?')[0]  # بدون query params
+        now = time.time()
+        
+        if cache_key in self.api_cache:
+            cached_data, cached_time = self.api_cache[cache_key]
+            if now - cached_time < self.cache_ttl:
+                logger.info(f"[INSTA] Using cached API response (age: {int(now - cached_time)}s)")
+                insta_stats.log_cache_hit()
+                return True, cached_data, None
+            else:
+                # Cache منقضی شده
+                del self.api_cache[cache_key]
+                logger.debug("[INSTA] Cache expired, fetching fresh data")
+                insta_stats.log_cache_miss()
         
         # تنظیمات retry
         max_retries = 2  # تعداد کل تلاش‌ها (اولی + 1 retry)
@@ -153,7 +172,6 @@ class InstaFetcher:
         for attempt in range(max_retries):
             try:
                 # Rate limiting: حداقل 1 ثانیه بین هر API call
-                now = time.time()
                 time_since_last = now - self.last_api_call
                 if time_since_last < self.min_api_interval:
                     wait_time = self.min_api_interval - time_since_last
@@ -235,8 +253,10 @@ class InstaFetcher:
                     else:
                         return False, None, last_error
                 
-                # موفق!
+                # موفق! ذخیره در cache
                 logger.info(f"[INSTA] API attempt {attempt + 1}/{max_retries} SUCCESS")
+                self.api_cache[cache_key] = (data, time.time())
+                logger.debug(f"[INSTA] Cached API response for {cache_key}")
                 return True, data, None
                 
             except asyncio.TimeoutError:
@@ -523,6 +543,9 @@ async def handle_instagram_link(client: Client, message: Message):
     user_id = message.from_user.id
     url = message.text.strip()
     
+    # ثبت آمار
+    insta_stats.log_request(url)
+    
     # Log فقط domain و post ID، نه query parameters
     safe_url = url.split('?')[0] if '?' in url else url
     logger.info(f"[INSTA] User {user_id} sent Instagram link: {safe_url}")
@@ -778,6 +801,18 @@ async def _download_and_send(
                 
                 media_type = media.get('type', 'video')
                 file_ext = media.get('extension', 'mp4' if media_type == 'video' else 'jpg')
+                
+                # نمایش progress برای کاربر (فقط برای آلبوم‌ها)
+                if total_medias > 1:
+                    try:
+                        await status_msg.edit_text(
+                            f"📸 **Instagram Gallery**\n\n"
+                            f"📥 در حال دانلود {idx}/{total_medias}\n"
+                            f"{'▓' * idx}{'░' * (total_medias - idx)}\n\n"
+                            f"⏳ لطفاً صبر کنید..."
+                        )
+                    except:
+                        pass
                 
                 # Logging دقیق برای هر media
                 logger.info(f"[INSTA] Downloading {idx}/{total_medias}: type={media_type}, ext={file_ext}, url_len={len(download_url)}")

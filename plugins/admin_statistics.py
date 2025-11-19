@@ -91,7 +91,8 @@ class StatisticsCalculator:
                 'adult': int,
                 'instagram': int,
                 'universal': int,
-                'percentages': {...}
+                'percentages': {...},
+                'success_rates': {...}
             }
         """
         try:
@@ -116,6 +117,15 @@ class StatisticsCalculator:
             else:
                 percentages = {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0}
             
+            # محاسبه درصد موفقیت برای هر پلتفرم
+            success_rates = {
+                'youtube': self.db.get_success_rate_by_platform('youtube'),
+                'aparat': self.db.get_success_rate_by_platform('aparat'),
+                'adult': self.db.get_success_rate_by_platform('adult'),
+                'instagram': self.db.get_success_rate_by_platform('instagram'),
+                'universal': self.db.get_success_rate_by_platform('universal')
+            }
+            
             return {
                 'total': total,
                 'youtube': youtube,
@@ -123,7 +133,8 @@ class StatisticsCalculator:
                 'adult': adult,
                 'instagram': instagram,
                 'universal': universal,
-                'percentages': percentages
+                'percentages': percentages,
+                'success_rates': success_rates
             }
         
         except Exception as e:
@@ -135,7 +146,8 @@ class StatisticsCalculator:
                 'adult': 0,
                 'instagram': 0,
                 'universal': 0,
-                'percentages': {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0}
+                'percentages': {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0},
+                'success_rates': {'youtube': 0, 'aparat': 0, 'adult': 0, 'instagram': 0, 'universal': 0}
             }
     
     def calculate_performance_stats(self) -> Dict:
@@ -302,6 +314,7 @@ class StatisticsFormatter:
             str: متن فرمت شده
         """
         total = stats['total']
+        success_rates = stats.get('success_rates', {})
         
         text = (
             "📈 **آمار درخواست‌ها**\n"
@@ -310,20 +323,48 @@ class StatisticsFormatter:
             "**توزیع پلتفرم‌ها:**\n\n"
             f"🎬 **YouTube**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['youtube'], 15)}\n"
-            f"   `{StatisticsFormatter.format_number(stats['youtube'])}` درخواست\n\n"
+            f"   `{StatisticsFormatter.format_number(stats['youtube'])}` درخواست"
+        )
+        
+        # اضافه کردن درصد موفقیت اگر موجود باشد
+        if success_rates.get('youtube', 0) > 0:
+            text += f" | ✅ موفقیت: `{success_rates['youtube']:.1f}%`"
+        text += "\n\n"
+        
+        text += (
             f"📺 **Aparat**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['aparat'], 15)}\n"
-            f"   `{StatisticsFormatter.format_number(stats['aparat'])}` درخواست\n\n"
+            f"   `{StatisticsFormatter.format_number(stats['aparat'])}` درخواست"
+        )
+        if success_rates.get('aparat', 0) > 0:
+            text += f" | ✅ موفقیت: `{success_rates['aparat']:.1f}%`"
+        text += "\n\n"
+        
+        text += (
             f"📸 **Instagram**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['instagram'], 15)}\n"
-            f"   `{StatisticsFormatter.format_number(stats['instagram'])}` درخواست\n\n"
+            f"   `{StatisticsFormatter.format_number(stats['instagram'])}` درخواست"
+        )
+        if success_rates.get('instagram', 0) > 0:
+            text += f" | ✅ موفقیت: `{success_rates['instagram']:.1f}%`"
+        text += "\n\n"
+        
+        text += (
             f"🔞 **محتوای بزرگسال**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['adult'], 15)}\n"
-            f"   `{StatisticsFormatter.format_number(stats['adult'])}` درخواست\n\n"
+            f"   `{StatisticsFormatter.format_number(stats['adult'])}` درخواست"
+        )
+        if success_rates.get('adult', 0) > 0:
+            text += f" | ✅ موفقیت: `{success_rates['adult']:.1f}%`"
+        text += "\n\n"
+        
+        text += (
             f"🌐 **Universal**\n"
             f"   {StatisticsFormatter.create_progress_bar(stats['percentages']['universal'], 15)}\n"
             f"   `{StatisticsFormatter.format_number(stats['universal'])}` درخواست"
         )
+        if success_rates.get('universal', 0) > 0:
+            text += f" | ✅ موفقیت: `{success_rates['universal']:.1f}%`"
         
         return text
     
