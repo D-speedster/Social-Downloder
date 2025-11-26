@@ -58,7 +58,7 @@ class InstaFetcher:
         self.last_api_call = 0  # برای rate limiting
         self.min_api_interval = 1.0  # حداقل 1 ثانیه بین هر request
         self.api_cache = {}  # Cache برای API responses
-        self.cache_ttl = 300  # 5 دقیقه TTL
+        self.cache_ttl = 60  # 1 دقیقه TTL (کاهش از 5 دقیقه برای URL های تازه‌تر)
         
     async def fetch(self, url: str, user_id: int, message: Message) -> Tuple[bool, Optional[Dict], Optional[str]]:
         """
@@ -532,7 +532,7 @@ logger.info("Instagram Fetcher module loaded")
 # Handler
 @Client.on_message(
     filters.regex(
-        r'(https?://)?(www\.|m\.)?(?:dd)?(instagram\.com|instagr\.am)/(p|reel|tv|stories|igtv)/([a-zA-Z0-9_-]+)(\?[^\s]*)?'
+        r'(?:https?://)?(?:www\.|m\.)?(?:dd)?(?:instagram\.com|instagr\.am)/(?:p|reel|tv|stories|igtv)/[a-zA-Z0-9_-]+(?:\?[^\s]*)?'
     )
     & filters.private
     & join
@@ -913,7 +913,10 @@ async def _download_and_send(
                             await asyncio.sleep(1.0 * (retry + 1))
                 
                 if not download_success:
-                    logger.warning(f"[INSTA] Failed to download media {idx} after {max_retries} retries")
+                    logger.error(
+                        f"[INSTA] Failed to download media {idx} after {max_retries} retries - "
+                        f"has_cookies={bool(cookies)}, url_length={len(download_url)}"
+                    )
                             
             except Exception as e:
                 logger.error(f"[INSTA] Error downloading media {idx}: {e}")

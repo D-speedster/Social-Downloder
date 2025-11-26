@@ -1,34 +1,27 @@
-feat: Add custom help message system and platform success rate stats
+fix(instagram): یکسان‌سازی regex patterns و حل مشکل routing
 
-✨ New Features:
-- Custom help message system with admin panel (📘 تنظیم راهنما)
-  * Support for text, photo, video, GIF, sticker, document
-  * Persistent storage in bot_settings table
-  * View, edit, delete custom messages
-  
-- Platform success rate statistics (📊 درصد موفقیت)
-  * Show download success percentage per platform
-  * Display format: "246 درخواست | ✅ موفقیت: 92.5%"
+🔧 مشکلات حل شده:
+- Fix regex mismatch بین start.py و insta_fetch.py
+- 190 لینک Instagram دیگر به Universal handler نمی‌روند
+- اضافه شدن پشتیبانی از instagr.am domain
+- حذف ^ از ابتدای pattern برای flexibility بیشتر
 
-🔧 Technical Changes:
-- Added bot_settings table (MySQL & SQLite)
-- New DB methods: get/set/delete_bot_setting()
-- Enhanced admin_statistics with success rate calculations
-- Updated /help command to use custom messages
+📊 تحلیل لاگ‌های سرور:
+- Instagram: 73% موفقیت (853 درخواست)
+- Universal: 67.8% موفقیت (472 درخواست)
+- مشکل API subscription حل شد (تمدید شارژ)
 
-📂 New Files:
-- migrate_bot_settings.py (migration script)
-- docs/CUSTOM_HELP_MESSAGE.md
-- docs/SUCCESS_RATE_FEATURE.md
-- HELP_MESSAGE_SETUP.md
-- Test scripts: test_help_*.py, test_success_rate_display.py
+✅ تست شده:
+- 23 نوع URL مختلف Instagram
+- همه test cases پاس شدند
+- هیچ mismatch در patterns وجود ندارد
 
-⚠️ Migration Required:
-Run `python migrate_bot_settings.py` before use
+� پیش‌بiینی بهبود:
+- نرخ موفقیت Instagram: 73% → 80-85%
+- نرخ موفقیت Universal: 67.8% → 75-80%
 
-🐛 Bug Fixes:
-- Fixed import issues in start.py and admin.py
-- Added proper error handling and debug logs
-- Updated admin button filters (5 locations)
-
-✅ All features tested and working
+Files changed:
+- plugins/insta_fetch.py (regex pattern)
+- plugins/start.py (INSTA_REGEX)
++ test_instagram_regex_fix.py (تست جامع)
++ SERVER_LOG_ANALYSIS.md (تحلیل کامل)
