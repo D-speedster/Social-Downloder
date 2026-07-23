@@ -63,33 +63,163 @@ except ImportError:
 # Track bot start time for uptime
 START_TIME = _dt.now()
 
-# Fix #1: Per-user state management instead of global admin_step
-# Global admin_step is deprecated - use get_admin_user_state() instead
-admin_step = {
-    'sp': 2,  # Legacy - to be migrated
-    'broadcast': 0,
-    'broadcast_type': '',
-    'manual_recovery': 0,
-    'broadcast_content': None,
-    'waiting_msg': 0,
-    'waiting_msg_type': '',
-    'waiting_msg_platform': '',
-    'advertisement': 0,
-    'ad_content_type': '',
-    'ad_file_id': '',
-    'ad_caption': '',
-}
+# ============================================================
+# PHASE 2 FIX: admin_step REMOVED - Use AdminUserState instead
+# ============================================================
+# Global admin_step dictionary has been completely removed to prevent
+# conflicts between multiple admins. Use get_admin_user_state(user_id)
+# to get per-user state instead.
+#
+# TEMPORARY COMPATIBILITY LAYER: To allow existing code to work while
+# migration is in progress, we provide a compatibility wrapper below.
+# This will be removed once full migration is complete.
+# ============================================================
+
+class AdminStepCompatibility:
+    """
+    ⚠️ TEMPORARY: Compatibility layer for admin_step migration
+    
+    This allows existing admin_step[...] code to work by mapping to
+    the first admin's AdminUserState. This is temporary and should be
+    replaced with proper per-user state management.
+    
+    Limitations:
+    - Only works for single admin (uses ADMIN[0])
+    - Does not solve conflicts between multiple admins
+    - Should be removed after complete migration
+    """
+    def __init__(self):
+        self._default_admin_id = None
+    
+    def _get_state(self):
+        """Get state for default admin (first in ADMIN list)"""
+        if not ADMIN:
+            # No admin configured, return mock state
+            return type('MockState', (), {
+                'manual_recovery': {'step': 0},
+                'broadcast': {'step': 0, 'type': '', 'content': None},
+                'sp': 0,
+                'advertisement': {'step': 0},
+                'waiting_msg': {'step': 0, 'type': '', 'platform': ''},
+                'add_cookie': None,
+                'pending_update': 0,
+                'help_setup': 0,
+            })()
+        
+        if not self._default_admin_id:
+            self._default_admin_id = ADMIN[0]
+        
+        return get_admin_user_state(self._default_admin_id)
+    
+    def __getitem__(self, key):
+        """Get value from state"""
+        state = self._get_state()
+        
+        # Map keys to state attributes
+        mapping = {
+            'manual_recovery': lambda: state.manual_recovery['step'],
+            'broadcast': lambda: state.broadcast['step'],
+            'broadcast_type': lambda: state.broadcast['type'],
+            'broadcast_content': lambda: state.broadcast['content'],
+            'sp': lambda: state.sp,
+            'advertisement': lambda: state.advertisement['step'],
+            'waiting_msg': lambda: state.waiting_msg['step'],
+            'waiting_msg_type': lambda: state.waiting_msg.get('type', ''),
+            'waiting_msg_platform': lambda: state.waiting_msg.get('platform', ''),
+            'add_cookie': lambda: state.add_cookie,
+            'pending_update': lambda: state.pending_update,
+            'help_setup': lambda: state.help_setup,
+            'ad_content_type': lambda: state.ad_content_type,
+            'ad_file_id': lambda: state.ad_file_id,
+            'ad_caption': lambda: state.ad_caption,
+            'ad_text': lambda: state.ad_text,
+        }
+        
+        if key in mapping:
+            return mapping[key]()
+        
+        # Default fallback
+        return 0
+    
+    def __setitem__(self, key, value):
+        """Set value in state"""
+        state = self._get_state()
+        
+        # Map keys to state attributes
+        if key == 'manual_recovery':
+            state.manual_recovery['step'] = value
+        elif key == 'broadcast':
+            state.broadcast['step'] = value
+        elif key == 'broadcast_type':
+            state.broadcast['type'] = value
+        elif key == 'broadcast_content':
+            state.broadcast['content'] = value
+        elif key == 'sp':
+            state.sp = value
+        elif key == 'advertisement':
+            state.advertisement['step'] = value
+        elif key == 'waiting_msg':
+            state.waiting_msg['step'] = value
+        elif key == 'waiting_msg_type':
+            state.waiting_msg['type'] = value
+        elif key == 'waiting_msg_platform':
+            state.waiting_msg['platform'] = value
+        elif key == 'add_cookie':
+            state.add_cookie = value
+        elif key == 'pending_update':
+            state.pending_update = value
+        elif key == 'help_setup':
+            state.help_setup = value
+        elif key == 'ad_content_type':
+            state.ad_content_type = value
+        elif key == 'ad_file_id':
+            state.ad_file_id = value
+        elif key == 'ad_caption':
+            state.ad_caption = value
+        elif key == 'ad_text':
+            state.ad_text = value
+    
+    def get(self, key, default=None):
+        """Get with default value"""
+        try:
+            return self[key]
+        except:
+            return default
+    
+    def pop(self, key, default=None):
+        """Pop value (get and reset)"""
+        try:
+            val = self[key]
+            # Reset to appropriate default
+            if key == 'add_cookie':
+                self[key] = None
+            else:
+                self[key] = 0 if key not in ['broadcast_type', 'waiting_msg_type', 'waiting_msg_platform', 'ad_content_type', 'ad_caption', 'ad_text'] else ''
+            return val
+        except:
+            return default
+    
+    def __contains__(self, key):
+        """Check if key exists and has non-zero/non-None value"""
+        val = self.get(key)
+        return val is not None and val != 0 and val != ''
+
+# Create compatibility instance (TEMPORARY - remove after full migration)
+admin_step = AdminStepCompatibility()
 
 # ✅ Per-user state management برای جلوگیری از conflict
-admin_user_states = {}  # {user_id: {'advertisement': {...}, 'created_at': ...}}
+admin_user_states = {}  # {user_id: AdminUserState instance}
 
 class AdminUserState:
     """
-    Fix #1: Per-user state management for all admin operations
+    PHASE 2 FIX: Per-user state management for all admin operations
     Prevents conflicts when multiple admins use the bot simultaneously
+    
+    ✅ Completely replaces global admin_step dictionary
     """
     def __init__(self, user_id):
         self.user_id = user_id
+        
         # Advertisement state
         self.advertisement = {
             'step': 0,
@@ -98,29 +228,48 @@ class AdminUserState:
             'caption': '',
             'text': ''
         }
+        
         # Manual recovery state
         self.manual_recovery = {
             'step': 0,  # 0: idle, 1: waiting for minutes
             'minutes': 0
         }
+        
         # Broadcast state
         self.broadcast = {
             'step': 0,  # 0: idle, 1: choosing type, 2: waiting for content, 3: waiting for confirmation
             'type': '',  # 'normal' or 'forward'
             'content': None
         }
+        
         # Waiting message state
         self.waiting_msg = {
             'step': 0,
             'type': '',
             'platform': ''
         }
+        
         # Adult content thumbnail state
         self.waiting_adult_thumb = False
-        # Sponsor setup state
-        self.sponsor = {
-            'step': 0  # 0: idle, 1: waiting for input
-        }
+        
+        # Sponsor setup state (sp)
+        self.sp = 0  # 0: idle, 1: waiting for input, 2: other states
+        
+        # Cookie management state
+        self.add_cookie = None  # None or 'text' or 'file'
+        
+        # Pending update state
+        self.pending_update = 0
+        
+        # Help setup state
+        self.help_setup = 0
+        
+        # Ad-related legacy fields (mapped from admin_step)
+        self.ad_content_type = ''
+        self.ad_file_id = ''
+        self.ad_caption = ''
+        self.ad_text = ''
+        
         self.created_at = time.time()
         self.timeout = 300  # 5 minutes
     
@@ -128,6 +277,7 @@ class AdminUserState:
         return time.time() - self.created_at > self.timeout
     
     def reset_advertisement(self):
+        """Reset advertisement state"""
         self.advertisement = {
             'step': 0,
             'content_type': '',
@@ -135,10 +285,14 @@ class AdminUserState:
             'caption': '',
             'text': ''
         }
+        self.ad_content_type = ''
+        self.ad_file_id = ''
+        self.ad_caption = ''
+        self.ad_text = ''
         self.created_at = time.time()
     
     def reset_manual_recovery(self):
-        """Fix #2: Reset manual recovery state"""
+        """Reset manual recovery state"""
         self.manual_recovery = {
             'step': 0,
             'minutes': 0
@@ -154,13 +308,36 @@ class AdminUserState:
         }
         self.created_at = time.time()
     
+    def reset_waiting_msg(self):
+        """Reset waiting message state"""
+        self.waiting_msg = {
+            'step': 0,
+            'type': '',
+            'platform': ''
+        }
+        self.created_at = time.time()
+    
+    def reset_sponsor(self):
+        """Reset sponsor setup state"""
+        self.sp = 0
+        self.created_at = time.time()
+    
+    def reset_cookie(self):
+        """Reset cookie management state"""
+        self.add_cookie = None
+        self.created_at = time.time()
+    
     def reset_all(self):
         """Reset all states"""
         self.reset_advertisement()
         self.reset_manual_recovery()
         self.reset_broadcast()
-        self.waiting_msg = {'step': 0, 'type': '', 'platform': ''}
-        self.sponsor = {'step': 0}
+        self.reset_waiting_msg()
+        self.reset_sponsor()
+        self.reset_cookie()
+        self.pending_update = 0
+        self.help_setup = 0
+        self.waiting_adult_thumb = False
 
 def get_admin_user_state(user_id) -> AdminUserState:
     """Get or create admin state for user"""
