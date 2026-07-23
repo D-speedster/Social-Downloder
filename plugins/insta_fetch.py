@@ -3,6 +3,7 @@
 """
 Instagram Fetcher - سیستم دانلود اختصاصی Instagram
 استراتژی 3 لایه برای حداکثر نرخ موفقیت
+Phase 1 Fix: Use secure cookie path from config
 """
 
 import os
@@ -24,16 +25,21 @@ from plugins.start import join
 from plugins.insta_stats import insta_stats
 import yt_dlp
 
-# Import config for admin notifications
+# ============================================================
+# PHASE 1 SECURITY FIX: Import secure cookie path from config
+# ============================================================
 try:
-    from config import ADMIN_ID, NOTIFY_ADMIN_ON_ERROR
-except ImportError:
+    from config import ADMIN_ID, NOTIFY_ADMIN_ON_ERROR, INSTAGRAM_COOKIE_PATH
+    COOKIE_FILE = INSTAGRAM_COOKIE_PATH  # ✅ از config import می‌شود
+    logger = get_logger('insta_fetch')
+    logger.info(f"✅ Using secure cookie path: {COOKIE_FILE}")
+except ImportError as e:
+    logger = get_logger('insta_fetch')
+    logger.error(f"❌ Failed to import config: {e}")
     ADMIN_ID = None
     NOTIFY_ADMIN_ON_ERROR = False
-
-# ------------------------------------------------------------------- #
-# Logger
-logger = get_logger('insta_fetch')
+    COOKIE_FILE = './data/cookies/instagram_cookies.txt'  # Fallback
+    logger.warning(f"⚠️ Using fallback cookie path: {COOKIE_FILE}")
 
 # ------------------------------------------------------------------- #
 # Configuration
@@ -41,7 +47,6 @@ RAPIDAPI_KEY = os.getenv('RAPIDAPI_KEY')
 if not RAPIDAPI_KEY:
     logger.warning("[INSTA] RAPIDAPI_KEY not set in environment! Instagram API will not work.")
 RAPIDAPI_HOST = "social-download-all-in-one.p.rapidapi.com"
-COOKIE_FILE = 'instagram_cookies.txt'
 
 # Timeouts
 API_TIMEOUT = 10

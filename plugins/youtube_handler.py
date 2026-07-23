@@ -26,12 +26,108 @@ from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانس
 import yt_dlp
 
 # ------------------------------------------------------------------- #
-# Logger
-logger = get_logger('youtube_handler')
+# PHASE 2 FIX: TTL Cache with background cleanup to prevent memory leaks
+# کش موقت با TTL (Time To Live) و پاکسازی خودکار
+import asyncio
 
-# ------------------------------------------------------------------- #
-# کش موقت (در production می‌توانید از Redis استفاده کنید)
-video_cache: dict[int, dict] = {}
+class TTLCache:
+    """
+    Simple Time-To-Live cache with automatic cleanup.
+    Prevents memory leaks by removing expired entries.
+    """
+    def __init__(self, ttl_seconds: int = 600):
+        self.cache: dict[int, dict] = {}
+        self.ttl = ttl_seconds
+        self._cleanup_task = None
+        logger.info(f"✅ TTL Cache initialized (TTL: {ttl_seconds}s)")
+    
+    def set(self, key: int, value: dict):
+        """Set a cache entry with expiration timestamp"""
+        self.cache[key] = {
+            'data': value,
+            'expires_at': time.time() + self.ttl
+        }
+    
+    def get(self, key: int):
+        """Get a cache entry if not expired"""
+        if key not in self.cache:
+            return None
+        
+        entry = self.cache[key]
+        if time.time() > entry['expires_at']:
+            # Expired - remove it
+            del self.cache[key]
+            return None
+        
+        return entry['data']
+    
+    def remove(self, key: int):
+        """Remove a specific cache entry"""
+        self.cache.pop(key, None)
+    
+    def cleanup_expired(self):
+        """Remove all expired entries"""
+        now = time.time()
+        expired_keys = [
+            k for k, v in self.cache.items()
+            if now > v['expires_at']
+        ]
+        for k in expired_keys:
+            del self.cache[k]
+        
+        if expired_keys:
+            logger.info(f"🧹 Cleaned up {len(expired_keys)} expired cache entries")
+        
+        return len(expired_keys)
+    
+    async def start_cleanup_task(self, interval_seconds: int = 300):
+        """Start background cleanup task"""
+        async def _cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(interval_seconds)
+                    count = self.cleanup_expired()
+                    logger.debug(f"Background cleanup: removed {count} expired entries")
+                except asyncio.CancelledError:
+                    logger.info("TTL Cache cleanup task cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Error in cache cleanup: {e}")
+        
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(_cleanup_loop())
+            logger.info(f"✅ Started background cache cleanup (interval: {interval_seconds}s)")
+    
+    def stats(self) -> dict:
+        """Get cache statistics"""
+        now = time.time()
+        active = sum(1 for v in self.cache.values() if now <= v['expires_at'])
+        expired = len(self.cache) - active
+        return {
+            'total': len(self.cache),
+            'active': active,
+            'expired': expired
+        }
+
+# Global TTL cache instance
+video_cache = TTLCache(ttl_seconds=600)  # 10 minutes TTL
+
+# Start cleanup task when module is imported
+# (will be called when bot starts)
+def init_cache_cleanup():
+    """Initialize cache cleanup background task"""
+    try:
+        loop = asyncio.get_event_loop()
+        loop.create_task(video_cache.start_cleanup_task(interval_seconds=300))
+    except RuntimeError:
+        # Event loop not running yet - will be started later
+        pass
+
+# Call init when module loads (if event loop exists)
+try:
+    init_cache_cleanup()
+except Exception:
+    pass
 
 # ------------------------------------------------------------------- #
 # کیفیت‌های پشتیبانی‌شده (به‌درخواست شما محدود به 4 بود)
@@ -503,9 +599,8 @@ async def handle_youtube_link(client: Client, message: Message):
             return
 
         # ذخیره‌سازی موقت برای مرحلهٔ انتخاب کیفیت
-        video_cache[user_id] = video_info
-        # ذخیره request_id برای استفاده در callback
-        video_cache[user_id]['request_id'] = request_id
+        video_info['request_id'] = request_id
+        video_cache.set(user_id, video_info)
 
         # متن توصیفی
         title = video_info.get('title') or 'Unknown'
@@ -597,13 +692,13 @@ async def quality_callback(client: Client, callback_query):
     data = callback_query.data  # مثال: yt_dl_720 یا yt_dl_audio
     user_id = callback_query.from_user.id
 
-    if user_id not in video_cache:
+    video_info = video_cache.get(user_id)
+    if not video_info:
         await callback_query.answer(
             "⏳ اطلاعات منقضی شده. لطفاً دوباره لینک بفرستید.", show_alert=True
         )
         return
 
-    video_info = video_cache[user_id]
     selected = data.split('_')[-1]  # 720 یا audio
 
     await callback_query.answer("📥 در حال آماده‌سازی دانلود…", show_alert=False)
@@ -615,8 +710,8 @@ async def quality_callback(client: Client, callback_query):
         caption=f"✅ دانلود {selected}p (یا فقط صدا) شروع شد…\n\n⏳ لطفاً صبر کنید.",
         reply_markup=None
     )
-    # پاک‌سازی کش (در واقع بعد از اتمام دانلود باید حذف شود)
-    video_cache.pop(user_id, None)
+    # پاک‌سازی کش (اکنون با TTL cache مدیریت می‌شود)
+    video_cache.remove(user_id)
 
 
 # ------------------------------------------------------------------- #
@@ -626,5 +721,5 @@ async def cancel_callback(client: Client, callback_query):
     user_id = callback_query.from_user.id
     await callback_query.answer("🔴 عملیات لغو شد", show_alert=True)
     await callback_query.message.delete()
-    video_cache.pop(user_id, None)
+    video_cache.remove(user_id)
 

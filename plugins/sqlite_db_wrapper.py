@@ -1,27 +1,43 @@
 import sqlite3
 import os
 import threading
+import contextvars
+import asyncio
 from datetime import datetime, date
 from datetime import datetime as _dt, timedelta as _td
 from .db_path_manager import db_path_manager
 
 
-# 🔥 Thread-safe connection pool
-_thread_local = threading.local()
+# ============================================================
+# PHASE 2 FIX: Replace threading.local() with contextvars
+# ============================================================
+# Problem: threading.local() doesn't work properly with asyncio
+# because async tasks can switch threads during execution.
+# Solution: Use contextvars which properly tracks async context.
+
+# Context variable for database connection (async-safe)
+_db_connection = contextvars.ContextVar('db_connection', default=None)
+_db_cursor = contextvars.ContextVar('db_cursor', default=None)
 _db_path = None
-_lock = threading.Lock()
+_lock = asyncio.Lock()  # Async lock instead of threading.Lock()
 
 
-def _get_connection():
-    """Get thread-local database connection"""
+async def _get_connection():
+    """
+    Get context-aware database connection (async-safe).
+    Phase 2: Fixed race condition by using contextvars instead of threading.local()
+    """
     global _db_path
     
-    if not hasattr(_thread_local, 'connection') or _thread_local.connection is None:
+    conn = _db_connection.get()
+    cursor = _db_cursor.get()
+    
+    if conn is None or cursor is None:
         if _db_path is None:
             raise RuntimeError("Database not initialized. Call DB() first.")
         
-        # Create new connection for this thread
-        conn = sqlite3.connect(_db_path, timeout=30, check_same_thread=True)
+        # Create new connection for this context
+        conn = sqlite3.connect(_db_path, timeout=30, check_same_thread=False)  # Allow multi-thread
         
         # Apply optimizations
         cursor = conn.cursor()
@@ -33,10 +49,45 @@ def _get_connection():
         cursor.execute('PRAGMA page_size=4096')
         cursor.execute('PRAGMA mmap_size=268435456')
         
-        _thread_local.connection = conn
-        _thread_local.cursor = cursor
+        # Store in context
+        _db_connection.set(conn)
+        _db_cursor.set(cursor)
     
-    return _thread_local.connection, _thread_local.cursor
+    return conn, cursor
+
+
+def _get_connection_sync():
+    """
+    Synchronous version for backward compatibility.
+    Used when called from non-async code.
+    """
+    global _db_path
+    
+    conn = _db_connection.get()
+    cursor = _db_cursor.get()
+    
+    if conn is None or cursor is None:
+        if _db_path is None:
+            raise RuntimeError("Database not initialized. Call DB() first.")
+        
+        # Create new connection
+        conn = sqlite3.connect(_db_path, timeout=30, check_same_thread=False)
+        
+        # Apply optimizations
+        cursor = conn.cursor()
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA synchronous=NORMAL')
+        cursor.execute('PRAGMA busy_timeout=30000')
+        cursor.execute('PRAGMA cache_size=-10000')
+        cursor.execute('PRAGMA temp_store=MEMORY')
+        cursor.execute('PRAGMA page_size=4096')
+        cursor.execute('PRAGMA mmap_size=268435456')
+        
+        # Store in context
+        _db_connection.set(conn)
+        _db_cursor.set(cursor)
+    
+    return conn, cursor
 
 
 class DB:
@@ -47,13 +98,12 @@ class DB:
         db_path_manager.ensure_database_directory()
         db_path_manager.migrate_existing_database()
         
-        with _lock:
-            _db_path = db_path_manager.get_sqlite_db_path()
+        _db_path = db_path_manager.get_sqlite_db_path()
         
-        # Get thread-local connection
-        self.mydb, self.cursor = _get_connection()
+        # Get context-aware connection
+        self.mydb, self.cursor = _get_connection_sync()
         
-        print(f"✅ SQLite thread-safe connection ready (thread: {threading.current_thread().name})")
+        print(f"✅ SQLite context-aware connection ready (Phase 2: Fixed race condition)")
 
     def setup(self) -> None:
         try:

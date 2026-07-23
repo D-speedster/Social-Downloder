@@ -555,7 +555,7 @@ def _api_request_sync(url):
     loop = asyncio.get_event_loop()
     return loop.run_in_executor(_global_executor, _make_request)
 
-def _extract_video_metadata(video_path: str):
+async def _extract_video_metadata(video_path: str):
     """Extract basic metadata and a small thumbnail for Telegram.
     Uses ffprobe/ffmpeg when available; keeps lightweight and skips for large files."""
     try:
@@ -594,12 +594,19 @@ def _extract_video_metadata(video_path: str):
         duration = 0
         thumb_path = None
         
-        # Probe streams and format
+        # Probe streams and format (PHASE 2 FIX: async subprocess)
         try:
             cmd = [ffprobe_path, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', video_path]
-            res = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='ignore')
-            if res.returncode == 0 and res.stdout:
-                data = json.loads(res.stdout)
+            # Use async subprocess instead of blocking subprocess.run
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            
+            if proc.returncode == 0 and stdout:
+                data = json.loads(stdout.decode('utf-8', errors='ignore'))
                 # Duration from format
                 fmt = data.get('format') or {}
                 try:
@@ -625,13 +632,23 @@ def _extract_video_metadata(video_path: str):
                 if os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 0:
                     pass  # از thumbnail موجود استفاده کن
                 else:
-                    # ساخت thumbnail با timeout کوتاه
+                    # PHASE 2 FIX: Use async subprocess instead of blocking subprocess.run
                     cmd = [ffmpeg_exe, '-y', '-ss', '1', '-i', video_path, '-vframes', '1', 
                           '-vf', 'scale=320:-2', '-q:v', '5', '-f', 'image2', thumb_path]
                     try:
-                        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, 
-                                     encoding='utf-8', errors='ignore', timeout=6)
-                    except subprocess.TimeoutExpired:
+                        # Run ffmpeg as async subprocess to avoid blocking
+                        proc = await asyncio.create_subprocess_exec(
+                            *cmd,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL
+                        )
+                        try:
+                            await asyncio.wait_for(proc.wait(), timeout=6)
+                        except asyncio.TimeoutError:
+                            proc.kill()
+                            await proc.wait()
+                            thumb_path = None
+                    except Exception:
                         thumb_path = None
                     
                     if not os.path.exists(thumb_path) or os.path.getsize(thumb_path) == 0:
