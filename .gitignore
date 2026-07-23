@@ -119,9 +119,10 @@ startup.log
 loader.log
 youtube_performance.log
 
-# Cookies
+# Cookies (SECURITY: Never commit actual cookie files)
 cookie_youtube.txt
 youtube_cookies.txt
+instagram_cookies.txt
 cookies/
 
 # Database
