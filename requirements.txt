@@ -1,0 +1,12 @@
+mysql-connector-python
+Pyrogram
+python-telegram-bot>=20.0  # 🤖 For bot2.py (Delivery Bot)
+instaloader
+aiohttp
+python-dateutil
+yt-dlp
+psutil
+python-dotenv
+requests>=2.28.2
+Pillow>=9.0.0
+radiojavanapi  # 🎵 RadioJavan downloader

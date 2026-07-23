@@ -1,0 +1,94 @@
+# ============================================================
+# .dockerignore — Social-Downloader
+# هیچ‌کدام از این فایل‌ها نباید داخل Docker image بیک شوند
+# ============================================================
+
+# --- اعتبارنامه‌ها و رازها ---
+.env
+.env.*
+!.env.example
+*.session
+*.session-journal
+.token_cache
+
+# --- کوکی‌ها (باید volume باشند) ---
+cookie_youtube.txt
+instagram_cookies.txt
+cookies/
+data/cookies_tmp/
+
+# --- داده‌های runtime (باید volume باشند) ---
+logs/
+downloads/
+data/
+
+# --- Git ---
+.git/
+.gitignore
+.gitattributes
+
+# --- Python cache ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+.tox/
+.coverage
+htmlcov/
+
+# --- فایل‌های موقت دانلود ---
+*.mp4
+*.mp3
+*.webm
+*.mkv
+*.part
+*.ytdl
+*.tmp
+*.temp
+*.bak
+
+# --- فایل‌های پشتیبان و توسعه ---
+backup/
+scripts/
+tools/
+!tools/migrate_requests_table.py
+*.sh
+!entrypoint.sh
+check_*.py
+show_*.py
+start_bot*.py
+clear_sessions.py
+connect.py
+migrate_*.py
+radio-javan.py
+
+# --- IDE و سیستم‌عامل ---
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- مستندات (در image نیازی نیست) ---
+*.md
+!README.md
+
+# --- لاگ‌های ابزارها ---
+*.log
+auto_cookie_manager.log
+startup.log
+
+# --- فایل‌های JSON داده‌ای ---
+res.json
+data/pornhub_files.json
+plugins/database.json

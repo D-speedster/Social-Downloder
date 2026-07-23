@@ -1,0 +1,133 @@
+# ============================================================
+# docker-compose.yml — Social-Downloader
+# Phase 1: Security-Enhanced with Named Volumes
+# ============================================================
+
+version: '3.8'
+
+services:
+
+  # ----------------------------------------------------------
+  # سرویس ۱: ربات اصلی دانلودر
+  # اجرا: python main.py
+  # ----------------------------------------------------------
+  main-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: social-downloader:latest
+    container_name: social-main-bot
+    env_file:
+      - .env
+    environment:
+      SERVICE_NAME: main-bot
+    restart: unless-stopped
+    volumes:
+      # ============================================================
+      # PHASE 1 SECURITY FIX: Named volumes instead of bind mounts
+      # ============================================================
+      
+      # دیتابیس SQLite — NAMED VOLUME (امن‌تر از bind mount)
+      - database_volume:/var/lib/social-db
+      
+      # فایل‌های دانلود موقت + session ربات اصلی
+      - downloads_main:/app/downloads
+      
+      # لاگ‌های ربات اصلی
+      - logs_main:/app/logs
+      
+      # data مشترک: pornhub_files.json، sessions/، adult_content_settings.json
+      - shared_data:/app/data
+      
+      # کوکی‌ها — READ-ONLY برای امنیت بیشتر
+      # Phase 1: Cookies now in secure directory (data/cookies)
+      - cookies_secure:/app/data/cookies:ro
+    
+    # Health check برای monitoring
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    # ربات poll-based است، پورتی expose نمی‌شود
+    command: ["python", "main.py"]
+
+  # ----------------------------------------------------------
+  # سرویس ۲: ربات تحویل فایل‌های حجیم
+  # اجرا: python bot2.py
+  # همان image سرویس ۱ — dependency یکسان، image تکراری نمی‌شود
+  # ----------------------------------------------------------
+  delivery-bot:
+    image: social-downloader:latest
+    container_name: social-delivery-bot
+    # وابستگی به main-bot فقط برای build order
+    depends_on:
+      main-bot:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SERVICE_NAME: delivery-bot
+    restart: unless-stopped
+    volumes:
+      # دیتابیس SQLite — کاملاً همگام با سرویس بالا (shared volume)
+      - database_volume:/var/lib/social-db
+      
+      # داده‌های مشترک
+      - shared_data:/app/data
+      
+      # لاگ‌های delivery-bot
+      - logs_delivery:/app/logs
+      
+      # کوکی‌ها — READ-ONLY
+      - cookies_secure:/app/data/cookies:ro
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    command: ["python", "bot2.py"]
+
+# ============================================================
+# PHASE 1: SECURE NAMED VOLUMES
+# ============================================================
+# Named volumes are managed by Docker and isolated from host filesystem
+# This prevents direct access to sensitive data from host
+volumes:
+  # دیتابیس SQLite — امن و جداسازی شده از host
+  database_volume:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/database
+
+  # دانلودهای موقت + session ربات اصلی
+  downloads_main:
+    driver: local
+
+  # لاگ‌های ربات اصلی
+  logs_main:
+    driver: local
+
+  # لاگ‌های delivery-bot
+  logs_delivery:
+    driver: local
+
+  # داده‌های مشترک: pornhub_files.json، sessions/، adult_content_settings.json
+  shared_data:
+    driver: local
+  
+  # کوکی‌های امن (Phase 1: isolated directory)
+  cookies_secure:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/cookies

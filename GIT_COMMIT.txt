@@ -1,0 +1,27 @@
+fix(instagram): یکسان‌سازی regex patterns و حل مشکل routing
+
+🔧 مشکلات حل شده:
+- Fix regex mismatch بین start.py و insta_fetch.py
+- 190 لینک Instagram دیگر به Universal handler نمی‌روند
+- اضافه شدن پشتیبانی از instagr.am domain
+- حذف ^ از ابتدای pattern برای flexibility بیشتر
+
+📊 تحلیل لاگ‌های سرور:
+- Instagram: 73% موفقیت (853 درخواست)
+- Universal: 67.8% موفقیت (472 درخواست)
+- مشکل API subscription حل شد (تمدید شارژ)
+
+✅ تست شده:
+- 23 نوع URL مختلف Instagram
+- همه test cases پاس شدند
+- هیچ mismatch در patterns وجود ندارد
+
+� پیش‌بiینی بهبود:
+- نرخ موفقیت Instagram: 73% → 80-85%
+- نرخ موفقیت Universal: 67.8% → 75-80%
+
+Files changed:
+- plugins/insta_fetch.py (regex pattern)
+- plugins/start.py (INSTA_REGEX)
++ test_instagram_regex_fix.py (تست جامع)
++ SERVER_LOG_ANALYSIS.md (تحلیل کامل)
