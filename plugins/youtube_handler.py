@@ -199,9 +199,9 @@ def normalize_youtube_url(url: str) -> str:
 async def extract_video_info(url: str) -> dict | None:
     """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async)"""
     try:
-        # استفاده از کوکی از دیتابیس (موقتاً غیرفعال برای تست)
+        # استفاده از کوکی از دیتابیس
         from plugins.youtube_cookie_helper import get_cookie_file
-        cookie_file = None  # get_cookie_file()  # TEMPORARILY DISABLED FOR TESTING
+        cookie_file = get_cookie_file()
 
         ydl_opts = {
             'quiet': True,
@@ -210,7 +210,7 @@ async def extract_video_info(url: str) -> dict | None:
             'skip_download': True,
             # اضافه کردن User-Agent برای جلوگیری از bot detection
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            # غیرفعال کردن age gate برای تست
+            # غیرفعال کردن age gate
             'age_limit': None,
         }
 
@@ -228,7 +228,22 @@ async def extract_video_info(url: str) -> dict | None:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
-        info = await loop.run_in_executor(_global_executor, _extract)
+        try:
+            info = await loop.run_in_executor(_global_executor, _extract)
+        except Exception as e:
+            error_msg = str(e).lower()
+            
+            # بررسی خطاهای احراز هویت
+            if 'sign in to confirm' in error_msg or 'bot' in error_msg:
+                logger.warning(f"Video requires authentication: {url}")
+                # برگرداندن خطای واضح
+                raise Exception(
+                    "⚠️ این ویدیو نیاز به احراز هویت دارد.\n\n"
+                    "💡 لطفاً از لینک‌های عمومی استفاده کنید یا منتظر به‌روزرسانی سیستم احراز هویت باشید."
+                )
+            else:
+                # خطاهای دیگر
+                raise
 
         if not info:
             return None
