@@ -157,6 +157,9 @@ class YouTubeDownloader:
                 # ✅ لیست fallback برای format (در صورت نیاز)
                 format_fallbacks = ['bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best', 'bestvideo+bestaudio/best', 'best']
                 
+                # 🔥 Track if we need to use bot detection bypass
+                use_bot_bypass = False
+                
                 for attempt in range(max_attempts):
                     try:
                         logger.info(f"Download attempt {attempt + 1}/{max_attempts}")
@@ -171,8 +174,18 @@ class YouTubeDownloader:
                         # استفاده از format fallback در صورت خطا
                         current_opts = ydl_opts.copy()
                         
+                        # 🔥 اگر bot detection تشخیص داده شد، از player_client محدود استفاده کن
+                        if use_bot_bypass:
+                            logger.warning(f"🤖 Using bot detection bypass with restricted player_client")
+                            current_opts['extractor_args'] = {
+                                'youtube': {
+                                    'player_client': ['android', 'web', 'mweb']
+                                }
+                            }
+                            current_opts['remote_components'] = ['ejs:github']
+                        
                         # اگر تلاش قبلی با format خاص شکست خورد، از fallback استفاده کن
-                        if attempt > 0:
+                        if attempt > 0 and not use_bot_bypass:
                             fallback_format = format_fallbacks[min(attempt - 1, len(format_fallbacks) - 1)]
                             logger.warning(f"Attempt {attempt + 1}: Using fallback format: {fallback_format}")
                             current_opts['format'] = fallback_format
@@ -194,6 +207,15 @@ class YouTubeDownloader:
                     except Exception as e:
                         error_msg = str(e).lower()
                         logger.warning(f"Download attempt {attempt + 1} failed: {e}")
+                        
+                        # 🔥 بررسی خطای bot detection - استفاده از player_client محدود
+                        if 'sign in' in error_msg or 'bot' in error_msg or 'confirm' in error_msg:
+                            logger.error(f"🤖 Bot detection error detected!")
+                            if attempt < max_attempts - 1:
+                                logger.info("Will use bot detection bypass (player_client) in next attempt")
+                                use_bot_bypass = True
+                                time.sleep(2)
+                                continue
                         
                         # بررسی خطای format unavailable - استفاده فوری از fallback
                         if 'requested format is not available' in error_msg or 'format' in error_msg:
