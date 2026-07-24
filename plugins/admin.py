@@ -928,16 +928,20 @@ async def cookie_delete_confirm_cb(_: Client, callback_query: CallbackQuery):
     try:
         db = DB()
         
-        # حذف کوکی
-        db.conn.execute("DELETE FROM cookies WHERE id = ?", (cookie_id,))
-        db.conn.commit()
+        # حذف کوکی با استفاده از متد صحیح
+        success = db.delete_cookie(cookie_id)
         
-        await callback_query.message.edit_text(
-            f"✅ کوکی #{cookie_id} با موفقیت حذف شد"
-        )
-        
-        admin_logger.info(f"[ADMIN] Cookie #{cookie_id} deleted by {callback_query.from_user.id}")
-        await callback_query.answer("✅ حذف شد")
+        if success:
+            await callback_query.message.edit_text(
+                f"✅ کوکی #{cookie_id} با موفقیت حذف شد"
+            )
+            admin_logger.info(f"[ADMIN] Cookie #{cookie_id} deleted by {callback_query.from_user.id}")
+            await callback_query.answer("✅ حذف شد")
+        else:
+            await callback_query.message.edit_text(
+                f"❌ خطا در حذف کوکی #{cookie_id}"
+            )
+            await callback_query.answer("❌ خطا در حذف", show_alert=True)
         
     except Exception as e:
         admin_logger.error(f"Error deleting cookie #{cookie_id}: {e}")
