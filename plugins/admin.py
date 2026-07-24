@@ -1019,15 +1019,29 @@ async def handle_cookie_input(client: Client, message: Message):
             # دانلود فایل موقت
             tmp_path = await message.download()
             
-            # تلاش برای خواندن با encoding‌های مختلف
-            text = None
-            for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']:
-                try:
-                    with open(tmp_path, 'r', encoding=encoding) as f:
-                        text = f.read()
-                    break
-                except (UnicodeDecodeError, Exception):
-                    continue
+            # خواندن فایل به صورت binary برای حذف BOM
+            try:
+                with open(tmp_path, 'rb') as f:
+                    content = f.read()
+                
+                # حذف BOM اگر وجود داشته باشه
+                if content.startswith(b'\xff\xfe'):  # UTF-16 LE BOM
+                    content = content[2:].decode('utf-16-le').encode('utf-8')
+                elif content.startswith(b'\xfe\xff'):  # UTF-16 BE BOM
+                    content = content[2:].decode('utf-16-be').encode('utf-8')
+                elif content.startswith(b'\xef\xbb\xbf'):  # UTF-8 BOM
+                    content = content[3:]
+                
+                # اکنون تلاش برای decode با encoding‌های مختلف
+                text = None
+                for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']:
+                    try:
+                        text = content.decode(encoding)
+                        break
+                    except (UnicodeDecodeError, Exception):
+                        continue
+            except Exception:
+                text = None
             
             if text is None:
                 await message.reply_text("❌ خطا در خواندن فایل. لطفاً فرمت فایل را بررسی کنید.")

@@ -18,7 +18,7 @@ _cookie_cache = {
     'last_update': 0
 }
 
-def get_cookie_file(force_refresh: bool = False) -> Optional[str]:
+def get_cookie_file(force_refresh: bool = False, allow_fallback_to_none: bool = True) -> Optional[str]:
     """
     دریافت مسیر فایل کوکی برای استفاده در yt-dlp
     
@@ -29,6 +29,7 @@ def get_cookie_file(force_refresh: bool = False) -> Optional[str]:
     
     Args:
         force_refresh: اگر True باشد، کوکی را از دیتابیس مجدداً می‌گیرد
+        allow_fallback_to_none: اگر True باشد، در صورت نبود کوکی معتبر، None برمی‌گرداند (برای download بدون کوکی)
     
     Returns:
         مسیر فایل کوکی یا None اگر کوکی موجود نباشد
@@ -54,6 +55,9 @@ def get_cookie_file(force_refresh: bool = False) -> Optional[str]:
             if os.path.exists(fallback_path):
                 logger.info(f"Using fallback cookie file: {fallback_path}")
                 return fallback_path
+            # اگر allow_fallback_to_none=True، None برگردان (برای download بدون کوکی)
+            if allow_fallback_to_none:
+                logger.info("No cookie available - will attempt download without cookies")
             return None
         
         cookie_id = cookie['id']
