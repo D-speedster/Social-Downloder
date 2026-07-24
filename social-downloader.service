@@ -1,0 +1,43 @@
+[Unit]
+Description=Social-Downloader Telegram Bot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+Group=YOUR_USERNAME
+WorkingDirectory=/path/to/Social-Downloder-main
+
+# Use virtual environment Python
+ExecStart=/path/to/Social-Downloder-main/venv/bin/python3 bot.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=200
+StartLimitBurst=5
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONIOENCODING=utf-8"
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/path/to/Social-Downloder-main/logs
+ReadWritePaths=/path/to/Social-Downloder-main/downloads
+ReadWritePaths=/path/to/Social-Downloder-main/data
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=2G
+
+# Logging
+StandardOutput=append:/path/to/Social-Downloder-main/logs/systemd.log
+StandardError=append:/path/to/Social-Downloder-main/logs/systemd-error.log
+
+[Install]
+WantedBy=multi-user.target
