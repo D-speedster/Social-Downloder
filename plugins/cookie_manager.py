@@ -162,7 +162,21 @@ def _write_temp_cookie_file(netscape_text: str) -> str:
 
 
 def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
-    """Validate cookie by simulating yt-dlp extraction with cookiefile."""
+    """Validate cookie by simulating yt-dlp extraction with cookiefile.
+    
+    Tests multiple videos to ensure reliability:
+    1. YouTube Shorts (usually more reliable)
+    2. Popular video
+    3. Fallback video
+    """
+    # لیست ویدیوهای تست - از محبوب به کم‌تر محبوب
+    test_videos = [
+        'https://www.youtube.com/watch?v=jNQXAC9IVRw',  # "Me at the zoo" - اولین ویدیوی یوتیوب
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',  # Rick Astley - Never Gonna Give You Up
+        'https://www.youtube.com/watch?v=9bZkp7q19f0',  # PSY - Gangnam Style
+    ]
+    
+    path = None
     try:
         path = _write_temp_cookie_file(netscape_text)
         opts = {
@@ -174,23 +188,32 @@ def validate_cookie(netscape_text: str, timeout: int = 10) -> bool:
             'connect_timeout': timeout,
             'no_warnings': True,
             'no_check_certificate': True,
-            # استفاده از کلاینت پیش‌فرض web که از کوکی پشتیبانی می‌کند
         }
-        def _do_extract():
-            with YoutubeDL(opts) as ydl:
-                return ydl.extract_info('https://www.youtube.com/watch?v=BaW_jenozKc', download=False)
-        info = _do_extract()
-        try:
-            os.unlink(path)
-        except Exception:
-            pass
-        return bool(info and info.get('id'))
-    except Exception:
-        try:
-            os.unlink(path)
-        except Exception:
-            pass
+        
+        # امتحان هر ویدیو تا یکی موفق شود
+        for video_url in test_videos:
+            try:
+                with YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+                    if info and info.get('id'):
+                        # موفق شد - کوکی معتبر است
+                        return True
+            except Exception:
+                # این ویدیو کار نکرد، بعدی را امتحان کن
+                continue
+        
+        # هیچ ویدیویی کار نکرد
         return False
+        
+    except Exception:
+        return False
+    finally:
+        # پاکسازی فایل موقت
+        if path:
+            try:
+                os.unlink(path)
+            except Exception:
+                pass
 
 
 def get_rotated_cookie_file(prev_cookie_id: Optional[int] = None) -> Tuple[Optional[str], Optional[int]]:
@@ -247,6 +270,13 @@ def _sanity_check_youtube_cookie(netscape_text: str) -> bool:
 
 
 def validate_and_update_cookie_status(cookie_id: int) -> bool:
+    """اعتبارسنجی کوکی و به‌روزرسانی وضعیت آن.
+    
+    سطح اول: بررسی ساختاری (سریع)
+    سطح دوم: تست واقعی با yt-dlp (کامل ولی کندتر)
+    
+    اگر یوتیوب captcha بخواهد، بررسی ساختاری کافی است.
+    """
     db = DB()
     try:
         recs = db.get_cookie_by_id(cookie_id) if hasattr(db, 'get_cookie_by_id') else []
@@ -254,12 +284,34 @@ def validate_and_update_cookie_status(cookie_id: int) -> bool:
         if not rec:
             return False
         text = rec.get('cookie_text', '')
-        # Combine yt-dlp extraction check with structural sanity check
-        ok_extract = validate_cookie(text)
+        
+        # سطح اول: بررسی ساختاری (همیشه انجام می‌شود)
         ok_sanity = _sanity_check_youtube_cookie(text)
+        
+        # سطح دوم: تست واقعی با yt-dlp (فقط اگر ساختار صحیح بود)
+        ok_extract = False
+        if ok_sanity:
+            try:
+                ok_extract = validate_cookie(text, timeout=15)
+            except Exception:
+                # اگر خطا داد (مثلاً captcha)، بررسی ساختاری کافی است
+                ok_extract = False
+        
+        # اگر یکی از دو موفق بود، کوکی معتبر است
+        # اولویت با تست واقعی، ولی اگر captcha بود ساختار کافی است
         final_ok = bool(ok_extract or ok_sanity)
+        
+        # تعیین وضعیت دقیق‌تر
+        if ok_extract:
+            status = 'valid'  # کوکی کاملاً معتبر - تست شد
+        elif ok_sanity:
+            status = 'valid'  # کوکی معتبر - ساختار صحیح است
+        else:
+            status = 'invalid'  # کوکی نامعتبر
+        
         if hasattr(db, 'update_cookie_status'):
-            db.update_cookie_status(cookie_id, 'valid' if final_ok else 'unknown')
+            db.update_cookie_status(cookie_id, status)
+        
         return final_ok
     except Exception:
         return False
