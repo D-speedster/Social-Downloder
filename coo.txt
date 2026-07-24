@@ -1,0 +1,80 @@
+[
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1784885551.602184,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "GPS",
+        "path": "/",
+        "sameSite": null,
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "1"
+    },
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1816419754.396223,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "__Secure-1PSIDTS",
+        "path": "/",
+        "sameSite": null,
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "sidts-CjQBPWEu2YNrPsVpuZPNOzQvASPvwZMyhtZoG7RbRR00KsI0INUFHqWb69SIBXDfmQXsBmmrEAA"
+    },
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1784884380,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "CONSISTENCY",
+        "path": "/",
+        "sameSite": null,
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "AFeheW0bSt0Zv3sndYYFLSNg9VG0D7hfJbfWPcQM563zDSAI9lTHRMacT3jDpm6LzcTM9UUgvQIZTILazavSDtpN8tIXnOW7oKVgdAzaRgs5lKdtxNLaAsJQvQPgA7gKffLJ7D40Ld38tsDmhqu4iA"
+    },
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1816419754.396525,
+        "hostOnly": false,
+        "httpOnly": true,
+        "name": "__Secure-3PSIDTS",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "sidts-CjQBPWEu2YNrPsVpuZPNOzQvASPvwZMyhtZoG7RbRR00KsI0INUFHqWb69SIBXDfmQXsBmmrEAA"
+    },
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1819443763.728825,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "PREF",
+        "path": "/",
+        "sameSite": null,
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "f6=40000000&tz=Asia.Tehran&f7=100"
+    },
+    {
+        "domain": ".youtube.com",
+        "expirationDate": 1819011751.327827,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "SOCS",
+        "path": "/",
+        "sameSite": "lax",
+        "secure": true,
+        "session": false,
+        "storeId": null,
+        "value": "CAISFggDEgk5NTI1MDUxNDYaBWVuLUdCIAEaBgiA1orTBg"
+    }
+]

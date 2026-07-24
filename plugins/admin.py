@@ -3563,12 +3563,23 @@ async def stats_overview_callback(client: Client, callback_query: CallbackQuery)
             ]
         ])
         
-        await callback_query.message.edit_text(text, reply_markup=keyboard)
-        admin_logger.info(f"[ADMIN] Overview stats viewed by {callback_query.from_user.id}")
+        # بررسی تغییر محتوا قبل از ویرایش
+        if callback_query.message.text != text or callback_query.message.reply_markup != keyboard:
+            await callback_query.message.edit_text(text, reply_markup=keyboard)
+            admin_logger.info(f"[ADMIN] Overview stats viewed by {callback_query.from_user.id}")
+        else:
+            # اگر تغییری نکرده، فقط یک پیام نمایش می‌دهیم
+            await callback_query.answer("✅ آمار به‌روز است", show_alert=False)
+            admin_logger.info(f"[ADMIN] Overview stats unchanged for {callback_query.from_user.id}")
     
     except Exception as e:
-        admin_logger.error(f"Error in stats_overview_callback: {e}")
-        await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
+        # بررسی خطای MESSAGE_NOT_MODIFIED
+        if "MESSAGE_NOT_MODIFIED" in str(e):
+            await callback_query.answer("✅ آمار به‌روز است", show_alert=False)
+            admin_logger.info(f"[ADMIN] Stats already up-to-date for {callback_query.from_user.id}")
+        else:
+            admin_logger.error(f"Error in stats_overview_callback: {e}")
+            await callback_query.answer("❌ خطا در دریافت آمار", show_alert=True)
 
 
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^stats_users$'))
