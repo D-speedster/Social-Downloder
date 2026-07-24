@@ -179,7 +179,7 @@ class YouTubeDownloader:
                             logger.warning(f"🤖 Using bot detection bypass with restricted player_client")
                             current_opts['extractor_args'] = {
                                 'youtube': {
-                                    'player_client': ['android', 'web', 'mweb']
+                                    'player_client': ['mweb', 'ios']
                                 }
                             }
                             current_opts['remote_components'] = ['ejs:github']

@@ -221,9 +221,10 @@ async def extract_video_info(url: str) -> dict | None:
             'skip_download': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'web', 'mweb']
+                    'player_client': ['mweb', 'ios']
                 }
             },
+            'remote_components': ['ejs:github'],
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
             'age_limit': None,
         }
