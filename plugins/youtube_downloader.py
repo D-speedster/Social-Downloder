@@ -72,21 +72,13 @@ class YouTubeDownloader:
             
             cookie_file = get_cookie_file()
             
-            # yt-dlp options - BALANCED: Speed + Stability + YouTube 2024 Bypass
+            # yt-dlp options - BALANCED: Speed + Stability
             ydl_opts = {
                 'format': format_string,
                 'outtmpl': output_path,
                 'quiet': True,
                 'no_warnings': True,
                 'progress_hooks': [progress_hook] if progress_callback else [],
-                
-                # 🚀 NEW: حل چالش‌های جدید یوتیوب و bypass کردن خطای PO Token
-                'remote_components': ['ejs:github'],  # استفاده از کامپوننت‌های remote برای bypass
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['web', 'mweb']  # استفاده از کلاینت‌های web و mobile web
-                    }
-                },
                 
                 # 🔥 PERFORMANCE: Speed optimizations
                 'concurrent_fragment_downloads': 4,  # 4 fragments همزمان (متعادل)
