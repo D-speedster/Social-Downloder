@@ -539,12 +539,20 @@ async def main():
             except Exception as e:
                 logger.warning(f"⚠️ Cookie Validator غیرفعال شد: {e}")
             
-            # 🍪 Cleanup old temporary cookie files
+            # 🍪 Cleanup old temporary cookie files (initial + start periodic task)
             logger.info("🍪 پاکسازی فایل‌های کوکی قدیمی...")
             try:
-                from plugins.youtube_cookie_helper import cleanup_temp_cookies
+                from plugins.youtube_cookie_helper import cleanup_temp_cookies, periodic_cleanup_task
+                
+                # پاکسازی اولیه
                 cleanup_temp_cookies()
-                logger.info("✅ Cookie cleanup completed")
+                logger.info("✅ Initial cookie cleanup completed")
+                
+                # راه‌اندازی تسک پس‌زمینه برای پاکسازی دوره‌ای
+                cleanup_task = asyncio.create_task(periodic_cleanup_task(interval_seconds=1800))  # هر 30 دقیقه
+                background_tasks.append(cleanup_task)
+                logger.info("✅ Periodic cookie cleanup task started (every 30 minutes)")
+                
             except Exception as e:
                 logger.warning(f"⚠️ Cookie cleanup warning: {e}")
             

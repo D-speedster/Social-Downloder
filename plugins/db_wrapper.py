@@ -1,5 +1,7 @@
 import os
 import sqlite3
+import time
+from functools import wraps
 from config import db_config, USE_MYSQL
 from datetime import datetime, date
 from datetime import datetime as _dt, timedelta as _td
@@ -12,6 +14,49 @@ if USE_MYSQL:
         mysql = None
 else:
     mysql = None
+
+
+def retry_on_db_lock(max_retries=3, initial_delay=0.1, backoff_factor=2):
+    """
+    Decorator برای retry کردن عملیات دیتابیس در صورت lock شدن
+    
+    Args:
+        max_retries: حداکثر تعداد تلاش‌ها
+        initial_delay: تاخیر اولیه (ثانیه)
+        backoff_factor: ضریب افزایش تاخیر (exponential backoff)
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+            last_exception = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except sqlite3.OperationalError as e:
+                    last_exception = e
+                    error_msg = str(e).lower()
+                    
+                    # فقط برای خطای database locked retry کن
+                    if 'database is locked' in error_msg or 'locked' in error_msg:
+                        if attempt < max_retries - 1:
+                            print(f"⚠️ Database locked, retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})...")
+                            time.sleep(delay)
+                            delay *= backoff_factor  # exponential backoff
+                            continue
+                    # خطاهای دیگر را فوراً raise کن
+                    raise
+                except Exception as e:
+                    # خطاهای غیر از SQLite را فوراً raise کن
+                    raise
+            
+            # اگر تمام تلاش‌ها شکست خورد
+            print(f"❌ Database operation failed after {max_retries} retries")
+            raise last_exception
+        
+        return wrapper
+    return decorator
 
 
 class DB:
@@ -59,13 +104,20 @@ class DB:
         
         # Better concurrency and durability for SQLite
         try:
-            self.mydb.execute('PRAGMA journal_mode=WAL;')
-            self.mydb.execute('PRAGMA synchronous=NORMAL;')
-            self.mydb.execute('PRAGMA temp_store=MEMORY;')
-            self.mydb.execute('PRAGMA mmap_size=134217728;')  # 128MB
-            self.mydb.execute('PRAGMA busy_timeout=5000;')
+            # 🔥 بهینه‌سازی برای محیط Concurrent
+            self.mydb.execute('PRAGMA journal_mode=WAL;')  # Write-Ahead Logging برای concurrency بهتر
+            self.mydb.execute('PRAGMA synchronous=NORMAL;')  # تعادل بین سرعت و ایمنی
+            self.mydb.execute('PRAGMA temp_store=MEMORY;')  # استفاده از RAM برای temp
+            self.mydb.execute('PRAGMA mmap_size=134217728;')  # 128MB memory-mapped I/O
+            self.mydb.execute('PRAGMA busy_timeout=30000;')  # 🔴 افزایش از 5s به 30s
+            self.mydb.execute('PRAGMA cache_size=-10000;')  # 10MB cache
             self.mydb.execute('PRAGMA foreign_keys=ON;')  # Enable foreign key constraints
             self.mydb.execute('PRAGMA secure_delete=ON;')  # Secure delete for sensitive data
+            
+            # 🔥 تنظیمات اضافی برای کاهش lock contention
+            self.mydb.execute('PRAGMA wal_autocheckpoint=1000;')  # checkpoint هر 1000 صفحه
+            self.mydb.execute('PRAGMA journal_size_limit=67108864;')  # محدود کردن اندازه journal به 64MB
+            
         except Exception as e:
             print(f"Warning: Failed to set SQLite pragmas: {e}")
             
@@ -740,7 +792,18 @@ class DB:
             pass
 
     # --- Cookie pool operations ---
+    @retry_on_db_lock(max_retries=3, initial_delay=0.1, backoff_factor=2)
     def add_cookie(self, name: str, source_type: str, cookie_text: str, fmt: str = 'netscape', status: str = 'unknown') -> bool:
+        """
+        افزودن کوکی جدید به دیتابیس (با retry در صورت lock)
+        
+        Args:
+            name: نام کوکی
+            source_type: نوع منبع (manual, file, api, ...)
+            cookie_text: متن کوکی
+            fmt: فرمت (netscape, json, ...)
+            status: وضعیت (unknown, valid, invalid, ...)
+        """
         try:
             now = _dt.now().isoformat(timespec='seconds')
             if self.db_type == 'mysql':
@@ -755,7 +818,7 @@ class DB:
             return True
         except Exception as e:
             print(f"Failed to add cookie: {e}")
-            return False
+            raise  # re-raise برای retry mechanism
 
     def list_cookies(self, limit: int = 50) -> list[dict]:
         try:
@@ -822,7 +885,15 @@ class DB:
         except Exception as e:
             print(f"Failed to update cookie status: {e}")
 
+    @retry_on_db_lock(max_retries=3, initial_delay=0.1, backoff_factor=2)
     def mark_cookie_used(self, cookie_id: int, success: bool) -> None:
+        """
+        ثبت استفاده از کوکی (با retry در صورت lock شدن دیتابیس)
+        
+        Args:
+            cookie_id: شناسه کوکی
+            success: آیا استفاده موفق بود؟
+        """
         try:
             now = _dt.now().isoformat(timespec='seconds')
             # Get current counters
@@ -844,6 +915,7 @@ class DB:
             self.mydb.commit()
         except Exception as e:
             print(f"Failed to mark cookie used: {e}")
+            raise  # re-raise برای retry mechanism
 
     def get_next_cookie(self, prev_cookie_id: int | None) -> dict | None:
         """Pick the least recently used cookie, avoiding immediate reuse of prev_cookie_id."""

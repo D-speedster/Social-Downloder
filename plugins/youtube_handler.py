@@ -208,8 +208,18 @@ async def extract_video_info(url: str) -> dict | None:
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
-            # اضافه کردن User-Agent برای جلوگیری از bot detection
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            
+            # 🚀 NEW: حل چالش‌های جدید یوتیوب و bypass کردن خطای PO Token
+            'remote_components': ['ejs:github'],  # استفاده از کامپوننت‌های remote برای bypass
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web', 'mweb']  # استفاده از کلاینت‌های web و mobile web
+                }
+            },
+            
+            # 🤖 Bot Detection Prevention (Updated to Chrome 124)
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            
             # غیرفعال کردن age gate
             'age_limit': None,
         }

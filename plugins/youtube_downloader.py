@@ -72,13 +72,21 @@ class YouTubeDownloader:
             
             cookie_file = get_cookie_file()
             
-            # yt-dlp options - BALANCED: Speed + Stability
+            # yt-dlp options - BALANCED: Speed + Stability + YouTube 2024 Bypass
             ydl_opts = {
                 'format': format_string,
                 'outtmpl': output_path,
                 'quiet': True,
                 'no_warnings': True,
                 'progress_hooks': [progress_hook] if progress_callback else [],
+                
+                # 🚀 NEW: حل چالش‌های جدید یوتیوب و bypass کردن خطای PO Token
+                'remote_components': ['ejs:github'],  # استفاده از کامپوننت‌های remote برای bypass
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['web', 'mweb']  # استفاده از کلاینت‌های web و mobile web
+                    }
+                },
                 
                 # 🔥 PERFORMANCE: Speed optimizations
                 'concurrent_fragment_downloads': 4,  # 4 fragments همزمان (متعادل)
@@ -96,11 +104,10 @@ class YouTubeDownloader:
                 'read_timeout': 45,
                 
                 # 🔒 SECURITY: SSL/Certificate
-                # ✅ فقط یک کلید صحیح برای certificate
                 'no_check_certificate': True,  # غیرفعال کردن بررسی SSL برای سرعت بیشتر
                 
-                # 🤖 Bot Detection Prevention
-                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                # 🤖 Bot Detection Prevention (Updated to Chrome 124)
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                 
                 # 🧹 CLEANUP: File management
                 'keepvideo': False,
