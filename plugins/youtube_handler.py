@@ -199,9 +199,9 @@ def normalize_youtube_url(url: str) -> str:
 async def extract_video_info(url: str) -> dict | None:
     """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async)"""
     try:
-        # استفاده از کوکی از دیتابیس
+        # استفاده از کوکی از دیتابیس (موقتاً غیرفعال برای تست)
         from plugins.youtube_cookie_helper import get_cookie_file
-        cookie_file = get_cookie_file()
+        cookie_file = None  # get_cookie_file()  # TEMPORARILY DISABLED FOR TESTING
 
         ydl_opts = {
             'quiet': True,
@@ -210,13 +210,15 @@ async def extract_video_info(url: str) -> dict | None:
             'skip_download': True,
             # اضافه کردن User-Agent برای جلوگیری از bot detection
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            # غیرفعال کردن age gate برای تست
+            'age_limit': None,
         }
 
         if cookie_file and os.path.exists(cookie_file):
             ydl_opts['cookiefile'] = cookie_file
             logger.info(f"✅ Using cookie for extraction: {cookie_file}")
         else:
-            logger.warning("⚠️ No cookie available for extraction")
+            logger.warning("⚠️ No cookie available - trying without cookies")
 
         # ------------------------------------------------------------------- #
         # استخراج هم‑زمان با executor سراسری
