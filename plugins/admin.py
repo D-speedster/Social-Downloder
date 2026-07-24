@@ -1018,8 +1018,26 @@ async def handle_cookie_input(client: Client, message: Message):
             ext = 'json' if filename.endswith('.json') else 'txt'
             # دانلود فایل موقت
             tmp_path = await message.download()
-            with open(tmp_path, 'r', encoding='utf-8') as f:
-                text = f.read()
+            
+            # تلاش برای خواندن با encoding‌های مختلف
+            text = None
+            for encoding in ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']:
+                try:
+                    with open(tmp_path, 'r', encoding=encoding) as f:
+                        text = f.read()
+                    break
+                except (UnicodeDecodeError, Exception):
+                    continue
+            
+            if text is None:
+                await message.reply_text("❌ خطا در خواندن فایل. لطفاً فرمت فایل را بررسی کنید.")
+                admin_step.pop('add_cookie', None)
+                try:
+                    os.remove(tmp_path)
+                except:
+                    pass
+                return
+            
             name = f"file_{int(time.time())}"
             ok, msg = import_cookie_text(name=name, text=text, source_type=ext)
             try:
