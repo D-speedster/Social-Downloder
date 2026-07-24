@@ -199,7 +199,9 @@ def normalize_youtube_url(url: str) -> str:
 async def extract_video_info(url: str) -> dict | None:
     """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async)"""
     try:
-        cookie_file = 'cookie_youtube.txt'
+        # استفاده از کوکی از دیتابیس
+        from plugins.youtube_cookie_helper import get_cookie_file
+        cookie_file = get_cookie_file()
 
         ydl_opts = {
             'quiet': True,
@@ -208,9 +210,11 @@ async def extract_video_info(url: str) -> dict | None:
             'skip_download': True,
         }
 
-        if os.path.exists(cookie_file):
+        if cookie_file and os.path.exists(cookie_file):
             ydl_opts['cookiefile'] = cookie_file
-            logger.info(f"Using cookies from: {cookie_file}")
+            logger.info(f"✅ Using cookie for extraction: {cookie_file}")
+        else:
+            logger.warning("⚠️ No cookie available for extraction")
 
         # ------------------------------------------------------------------- #
         # استخراج هم‑زمان با executor سراسری

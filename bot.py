@@ -539,6 +539,15 @@ async def main():
             except Exception as e:
                 logger.warning(f"⚠️ Cookie Validator غیرفعال شد: {e}")
             
+            # 🍪 Cleanup old temporary cookie files
+            logger.info("🍪 پاکسازی فایل‌های کوکی قدیمی...")
+            try:
+                from plugins.youtube_cookie_helper import cleanup_temp_cookies
+                cleanup_temp_cookies()
+                logger.info("✅ Cookie cleanup completed")
+            except Exception as e:
+                logger.warning(f"⚠️ Cookie cleanup warning: {e}")
+            
             # 🔥 Start Health Monitor
             logger.info("🔄 تلاش برای راه‌اندازی Health Monitor...")
             try:

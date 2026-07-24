@@ -67,8 +67,10 @@ class YouTubeDownloader:
                     except Exception as e:
                         logger.debug(f"Progress callback error: {e}")
             
-            # Check for cookie file
-            cookie_file = 'cookie_youtube.txt'
+            # Check for cookie file from database
+            from plugins.youtube_cookie_helper import get_cookie_file, mark_cookie_success, mark_cookie_failure
+            
+            cookie_file = get_cookie_file()
             
             # yt-dlp options - BALANCED: Speed + Stability
             ydl_opts = {
@@ -135,10 +137,12 @@ class YouTubeDownloader:
                     ],
                 })
             
-            # Add cookies if file exists
-            if os.path.exists(cookie_file):
+            # Add cookies if available
+            if cookie_file and os.path.exists(cookie_file):
                 ydl_opts['cookiefile'] = cookie_file
-                logger.info(f"Using cookies from: {cookie_file}")
+                logger.info(f"✅ Using cookie file: {cookie_file}")
+            else:
+                logger.warning("⚠️ No cookie file available - download may fail for restricted videos")
             
             logger.info(f"Starting download: {url} with format {format_string}")
             
@@ -239,9 +243,17 @@ class YouTubeDownloader:
                 file_size_mb = os.path.getsize(result_path) / (1024 * 1024)
                 speed_mbps = file_size_mb / download_time if download_time > 0 else 0
                 logger.info(f"✅ Download completed: {file_size_mb:.2f} MB in {download_time:.2f}s ({speed_mbps:.2f} MB/s)")
+                
+                # ✅ ثبت موفقیت استفاده از کوکی
+                mark_cookie_success()
+                
                 return result_path
             else:
                 logger.error(f"Download failed: file not found or empty")
+                
+                # ❌ ثبت شکست استفاده از کوکی
+                mark_cookie_failure()
+                
                 # ✅ پاک کردن فایل‌های موقت در صورت شکست
                 try:
                     temp_files = glob.glob(f"{output_path}.*")
@@ -258,9 +270,14 @@ class YouTubeDownloader:
         except KeyboardInterrupt:
             # ✅ مدیریت KeyboardInterrupt در سطح بالا
             logger.warning("Download interrupted by user at top level")
+            mark_cookie_failure()  # ثبت شکست
             raise
         except Exception as e:
             logger.error(f"Download error: {e}")
+            
+            # ❌ ثبت شکست استفاده از کوکی
+            mark_cookie_failure()
+            
             # ✅ پاک کردن فایل‌های موقت در صورت exception با بررسی امن
             try:
                 if 'output_path' in locals():
