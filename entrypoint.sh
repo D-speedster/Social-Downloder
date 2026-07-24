@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ============================================================
 # entrypoint.sh — Social-Downloader
 # Phase 1: Proper error handling without silencing failures

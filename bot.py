@@ -81,20 +81,42 @@ try:
 except Exception as e:
     print(f"Warning: Could not create downloads directory: {e}")
 
-# Logging
+# Logging with both file and console output
 log_format = '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s'
 os.makedirs('./logs', exist_ok=True)
+
+# CRITICAL FIX: Add console handler for Docker logs visibility
+import logging
+
+# Check environment variable for console logging
+LOG_TO_CONSOLE = os.getenv('LOG_TO_CONSOLE', '1').strip().lower() in ('1', 'true', 'yes')
+
+# Create handlers
+handlers = [
+    logging.FileHandler('./logs/bot.log', mode='a', encoding='utf-8')
+]
+
+# Add console handler (CRITICAL for Docker)
+if LOG_TO_CONSOLE:
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.ERROR)  # At minimum, ERROR to console
+    console_handler.setFormatter(logging.Formatter(log_format))
+    handlers.append(console_handler)
 
 basicConfig(
     level=INFO,
     format=log_format,
-    filename='./logs/bot.log',
-    filemode='a',
-    encoding='utf-8'
+    handlers=handlers
 )
 
-import logging
 logger = logging.getLogger(__name__)
+
+# Log configuration
+if LOG_TO_CONSOLE:
+    logger.info("✅ Console logging enabled (LOG_TO_CONSOLE=1)")
+    logger.info("✅ ERROR and above will be visible in Docker logs")
+else:
+    logger.warning("⚠️ Console logging disabled - only file logging active")
 
 # 🔥 بررسی و توقف پروسس‌های قدیمی
 def check_and_stop_old_instances():
@@ -376,10 +398,93 @@ async def main():
         import plugins.universal_downloader  # 🌐 Universal downloader (Instagram, etc.)
         logger.info("✅ All handlers imported and registered")
         
-        # شروع client
-        await client.start()
-        logger.info("Bot client started successfully")
-        logger.info("🔗 متصل به تلگرام شد")
+        # ========================================================
+        # CRITICAL FIX: Start client with SessionRevoked handling
+        # ========================================================
+        max_retries = 2
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"🔄 Starting client (attempt {attempt}/{max_retries})...")
+                await client.start()
+                logger.info("Bot client started successfully")
+                logger.info("🔗 متصل به تلگرام شد")
+                break  # Success - exit retry loop
+                
+            except Exception as e:
+                import traceback
+                error_type = type(e).__name__
+                
+                # 🔥 Special handling for SessionRevoked
+                if 'SessionRevoked' in error_type or 'SessionRevoked' in str(e):
+                    error_msg = (
+                        f"❌ CRITICAL: Session has been revoked by Telegram\n"
+                        f"This usually happens when:\n"
+                        f"  1. Bot token was regenerated via @BotFather\n"
+                        f"  2. Session file is corrupted\n"
+                        f"  3. Authorization was terminated\n"
+                    )
+                    
+                    # Print to stdout for Docker logs
+                    print(error_msg, file=sys.stdout, flush=True)
+                    logger.error(error_msg)
+                    
+                    # Cleanup session file
+                    session_file = f"{DOWNLOAD_LOCATION}/ytdownloader3_dev2.session"
+                    if os.path.exists(session_file):
+                        try:
+                            os.remove(session_file)
+                            cleanup_msg = f"✅ Removed corrupted session: {session_file}"
+                            print(cleanup_msg, file=sys.stdout, flush=True)
+                            logger.info(cleanup_msg)
+                            
+                            # Retry once after cleanup
+                            if attempt < max_retries:
+                                retry_msg = f"🔄 Retrying with fresh session (attempt {attempt + 1}/{max_retries})..."
+                                print(retry_msg, file=sys.stdout, flush=True)
+                                logger.info(retry_msg)
+                                continue
+                        except Exception as cleanup_error:
+                            cleanup_error_msg = f"⚠️ Could not remove session file: {cleanup_error}"
+                            print(cleanup_error_msg, file=sys.stdout, flush=True)
+                            logger.warning(cleanup_error_msg)
+                    
+                    # Failed after retries
+                    final_error = (
+                        f"❌ FATAL: Could not start bot after {attempt} attempts\n"
+                        f"Please check:\n"
+                        f"  1. BOT_TOKEN is valid and not revoked\n"
+                        f"  2. Regenerate token via @BotFather if needed\n"
+                        f"  3. Remove all .session files and restart\n"
+                    )
+                    print(final_error, file=sys.stdout, flush=True)
+                    logger.critical(final_error)
+                    
+                    # Exit with error code for Docker
+                    sys.exit(1)
+                
+                # Other errors
+                else:
+                    error_details = (
+                        f"❌ ERROR starting client: {error_type}\n"
+                        f"Message: {str(e)}\n"
+                        f"Traceback:\n{traceback.format_exc()}"
+                    )
+                    print(error_details, file=sys.stdout, flush=True)
+                    logger.error(error_details)
+                    
+                    # Retry for other errors too
+                    if attempt < max_retries:
+                        retry_msg = f"🔄 Retrying... (attempt {attempt + 1}/{max_retries})"
+                        print(retry_msg, file=sys.stdout, flush=True)
+                        logger.info(retry_msg)
+                        await asyncio.sleep(2)
+                        continue
+                    else:
+                        # Failed after all retries
+                        final_msg = f"❌ FATAL: Could not start client after {max_retries} attempts"
+                        print(final_msg, file=sys.stdout, flush=True)
+                        logger.critical(final_msg)
+                        sys.exit(1)
         
         try:
             # 🔥 بهینه‌سازی اضافی بعد از ساخت client

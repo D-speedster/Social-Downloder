@@ -26,6 +26,10 @@ from plugins.start import join  # 🔒 Import فیلتر عضویت اسپانس
 import yt_dlp
 
 # ------------------------------------------------------------------- #
+# Logger
+logger = get_logger('youtube_handler')
+
+# ------------------------------------------------------------------- #
 # PHASE 2 FIX: TTL Cache with background cleanup to prevent memory leaks
 # کش موقت با TTL (Time To Live) و پاکسازی خودکار
 import asyncio
