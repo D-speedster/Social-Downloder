@@ -175,7 +175,7 @@ class YouTubeDownloader:
                         # اگر تلاش قبلی با format خاص شکست خورد، از fallback استفاده کن
                         if attempt > 0:
                             fallback_format = format_fallbacks[min(attempt - 1, len(format_fallbacks) - 1)]
-                            logger.info(f"Using fallback format: {fallback_format}")
+                            logger.warning(f"Attempt {attempt + 1}: Using fallback format: {fallback_format}")
                             current_opts['format'] = fallback_format
                         
                         with yt_dlp.YoutubeDL(current_opts) as ydl:
@@ -195,6 +195,13 @@ class YouTubeDownloader:
                     except Exception as e:
                         error_msg = str(e).lower()
                         logger.warning(f"Download attempt {attempt + 1} failed: {e}")
+                        
+                        # بررسی خطای format unavailable - استفاده فوری از fallback
+                        if 'requested format is not available' in error_msg or 'format' in error_msg:
+                            logger.error(f"Format not available error detected")
+                            if attempt < max_attempts - 1:
+                                logger.info("Will use fallback format in next attempt")
+                                continue  # برو به تلاش بعدی که fallback استفاده می‌کند
                         
                         # Check for "did not get any data blocks" specifically
                         if 'did not get any data blocks' in error_msg:
