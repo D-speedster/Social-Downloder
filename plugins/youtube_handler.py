@@ -197,54 +197,86 @@ def normalize_youtube_url(url: str) -> str:
 
 # ------------------------------------------------------------------- #
 async def extract_video_info(url: str) -> dict | None:
-    """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async)"""
+    """استخراج اطلاعات ویدیو با yt‑dlp (به صورت async) با fallback strategy"""
     try:
         # استفاده از کوکی از دیتابیس
         from plugins.youtube_cookie_helper import get_cookie_file
         cookie_file = get_cookie_file()
 
-        ydl_opts = {
+        # 🔥 استراتژی 1: تنظیمات پیش‌فرض (تمام کیفیت‌ها) - نیاز به کوکی معتبر
+        ydl_opts_default = {
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'skip_download': True,
-            
-            # 🤖 Bot Detection Prevention (Updated to Chrome 124)
             'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            
-            # غیرفعال کردن age gate
             'age_limit': None,
         }
 
+        # 🔥 استراتژی 2: با محدودیت player_client (فقط 360p) - بدون نیاز به کوکی
+        ydl_opts_fallback = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': False,
+            'skip_download': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web', 'mweb']
+                }
+            },
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'age_limit': None,
+        }
+
+        # افزودن کوکی به هر دو استراتژی
         if cookie_file and os.path.exists(cookie_file):
-            ydl_opts['cookiefile'] = cookie_file
+            ydl_opts_default['cookiefile'] = cookie_file
+            ydl_opts_fallback['cookiefile'] = cookie_file
             logger.info(f"✅ Using cookie for extraction: {cookie_file}")
         else:
-            logger.warning("⚠️ No cookie available - trying without cookies")
+            logger.warning("⚠️ No cookie available")
 
         # ------------------------------------------------------------------- #
         # استخراج هم‑زمان با executor سراسری
         loop = asyncio.get_running_loop()
 
-        def _extract():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        def _extract_with_options(opts):
+            with yt_dlp.YoutubeDL(opts) as ydl:
                 return ydl.extract_info(url, download=False)
 
+        # 🔥 تلاش 1: با تنظیمات پیش‌فرض (همه کیفیت‌ها)
         try:
-            info = await loop.run_in_executor(_global_executor, _extract)
+            logger.info("Trying default settings (all qualities)...")
+            info = await loop.run_in_executor(_global_executor, lambda: _extract_with_options(ydl_opts_default))
+            logger.info("✅ Success with default settings!")
+            
         except Exception as e:
             error_msg = str(e).lower()
             
-            # بررسی خطاهای احراز هویت
-            if 'sign in to confirm' in error_msg or 'bot' in error_msg:
-                logger.warning(f"Video requires authentication: {url}")
-                # برگرداندن خطای واضح
-                raise Exception(
-                    "⚠️ این ویدیو نیاز به احراز هویت دارد.\n\n"
-                    "💡 لطفاً از لینک‌های عمومی استفاده کنید یا منتظر به‌روزرسانی سیستم احراز هویت باشید."
-                )
+            # اگر خطای bot detection یا sign in بود، fallback استفاده کن
+            if 'sign in' in error_msg or 'bot' in error_msg or 'confirm' in error_msg:
+                logger.warning(f"⚠️ Bot detection with default settings, trying fallback...")
+                
+                # 🔥 تلاش 2: با player_client محدود (حداقل 360p)
+                try:
+                    info = await loop.run_in_executor(_global_executor, lambda: _extract_with_options(ydl_opts_fallback))
+                    logger.info("✅ Success with fallback settings (limited qualities)")
+                    
+                except Exception as e2:
+                    error_msg2 = str(e2).lower()
+                    
+                    # اگر باز هم خطای احراز هویت بود
+                    if 'sign in' in error_msg2 or 'bot' in error_msg2:
+                        logger.error("❌ Both strategies failed - cookie may be invalid")
+                        raise Exception(
+                            "⚠️ این ویدیو نیاز به احراز هویت دارد.\n\n"
+                            "💡 لطفاً کوکی معتبر در دیتابیس اضافه کنید."
+                        )
+                    else:
+                        # خطاهای دیگر
+                        raise e2
             else:
-                # خطاهای دیگر
+                # خطاهای دیگر (غیر از bot detection)
                 raise
 
         if not info:
