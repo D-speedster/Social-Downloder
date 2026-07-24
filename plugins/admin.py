@@ -822,6 +822,128 @@ async def cookie_delete_prompt_cb(_: Client, callback_query: CallbackQuery):
     await callback_query.answer()
 
 
+# هندلر برای پردازش پیام‌های اعتبارسنجی و حذف کوکی
+@Client.on_message(filters.user(ADMIN) & filters.private & filters.text, group=7)
+async def handle_cookie_commands(client: Client, message: Message):
+    """پردازش دستورات متنی کوکی: اعتبارسنجی و حذف"""
+    text = message.text.strip()
+    
+    # بررسی دستور اعتبارسنجی (مثال: "اعتبارسنجی 5" یا "اعتبارسنجی5")
+    validate_patterns = [
+        r'^اعتبارسنجی\s+(\d+)$',
+        r'^اعتبارسنجی(\d+)$',
+    ]
+    
+    for pattern in validate_patterns:
+        match = re.match(pattern, text)
+        if match:
+            cookie_id = int(match.group(1))
+            try:
+                status_msg = await message.reply_text("🔄 در حال اعتبارسنجی...")
+                
+                # بررسی وجود کوکی
+                db = DB()
+                cookies = db.list_cookies(limit=100)
+                cookie = next((c for c in cookies if c['id'] == cookie_id), None)
+                
+                if not cookie:
+                    await status_msg.edit_text(f"❌ کوکی با شناسه {cookie_id} یافت نشد!")
+                    return
+                
+                # اعتبارسنجی
+                valid = validate_and_update_cookie_status(cookie_id)
+                
+                if valid:
+                    await status_msg.edit_text(
+                        f"✅ کوکی #{cookie_id} معتبر است\n"
+                        f"📝 نام: {cookie['name']}\n"
+                        f"📊 استفاده: {cookie['use_count']} بار"
+                    )
+                else:
+                    await status_msg.edit_text(
+                        f"❌ کوکی #{cookie_id} نامعتبر است\n"
+                        f"📝 نام: {cookie['name']}\n"
+                        f"💡 لطفاً کوکی را به‌روزرسانی یا حذف کنید"
+                    )
+                
+                admin_logger.info(f"[ADMIN] Cookie #{cookie_id} validated by {message.from_user.id}: {'valid' if valid else 'invalid'}")
+                
+            except Exception as e:
+                admin_logger.error(f"Error validating cookie #{cookie_id}: {e}")
+                await message.reply_text(f"❌ خطا در اعتبارسنجی: {e}")
+            
+            return
+    
+    # بررسی دستور حذف کوکی (مثال: "حذف کوکی 5" یا "حذف 5")
+    delete_patterns = [
+        r'^حذف\s+کوکی\s+(\d+)$',
+        r'^حذف\s+(\d+)$',
+        r'^حذف کوکی(\d+)$',
+    ]
+    
+    for pattern in delete_patterns:
+        match = re.match(pattern, text)
+        if match:
+            cookie_id = int(match.group(1))
+            try:
+                # بررسی وجود کوکی
+                db = DB()
+                cookies = db.list_cookies(limit=100)
+                cookie = next((c for c in cookies if c['id'] == cookie_id), None)
+                
+                if not cookie:
+                    await message.reply_text(f"❌ کوکی با شناسه {cookie_id} یافت نشد!")
+                    return
+                
+                # نمایش اطلاعات و درخواست تأیید
+                confirm_keyboard = InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton("✅ بله، حذف شود", callback_data=f'cookie_delete_confirm_{cookie_id}'),
+                        InlineKeyboardButton("❌ انصراف", callback_data='cookie_menu')
+                    ]
+                ])
+                
+                await message.reply_text(
+                    f"⚠️ آیا مطمئن هستید؟\n\n"
+                    f"🆔 شناسه: {cookie_id}\n"
+                    f"📝 نام: {cookie['name']}\n"
+                    f"📊 تعداد استفاده: {cookie['use_count']} بار\n"
+                    f"📅 وضعیت: {cookie['status']}",
+                    reply_markup=confirm_keyboard
+                )
+                
+                admin_logger.info(f"[ADMIN] Delete request for cookie #{cookie_id} by {message.from_user.id}")
+                
+            except Exception as e:
+                admin_logger.error(f"Error processing delete for cookie #{cookie_id}: {e}")
+                await message.reply_text(f"❌ خطا در پردازش حذف: {e}")
+            
+            return
+
+
+# کالبک تأیید حذف کوکی
+@Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_delete_confirm_(\d+)$'))
+async def cookie_delete_confirm_cb(_: Client, callback_query: CallbackQuery):
+    cookie_id = int(callback_query.data.split('_')[-1])
+    try:
+        db = DB()
+        
+        # حذف کوکی
+        db.conn.execute("DELETE FROM cookies WHERE id = ?", (cookie_id,))
+        db.conn.commit()
+        
+        await callback_query.message.edit_text(
+            f"✅ کوکی #{cookie_id} با موفقیت حذف شد"
+        )
+        
+        admin_logger.info(f"[ADMIN] Cookie #{cookie_id} deleted by {callback_query.from_user.id}")
+        await callback_query.answer("✅ حذف شد")
+        
+    except Exception as e:
+        admin_logger.error(f"Error deleting cookie #{cookie_id}: {e}")
+        await callback_query.answer(f"❌ خطا: {e}", show_alert=True)
+
+
 @Client.on_callback_query(filters.user(ADMIN) & filters.regex(r'^cookie_import_sample$'))
 async def cookie_import_sample_cb(_: Client, callback_query: CallbackQuery):
     # مسیر نمونه ارائه‌شده توسط کاربر
