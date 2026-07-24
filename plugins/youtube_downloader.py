@@ -208,24 +208,28 @@ class YouTubeDownloader:
                         error_msg = str(e).lower()
                         logger.warning(f"Download attempt {attempt + 1} failed: {e}")
                         
-                        # 🔥 بررسی خطای bot detection - استفاده از player_client محدود
+                        # 🔥 اولویت اول: بررسی خطای bot detection - استفاده از player_client محدود
                         if 'sign in' in error_msg or 'bot' in error_msg or 'confirm' in error_msg:
                             logger.error(f"🤖 Bot detection error detected!")
                             if attempt < max_attempts - 1:
-                                logger.info("Will use bot detection bypass (player_client) in next attempt")
+                                logger.warning("🔄 Will use bot detection bypass (player_client) in next attempt")
                                 use_bot_bypass = True
                                 time.sleep(2)
                                 continue
+                            else:
+                                # آخرین تلاش هم شکست خورد
+                                logger.error("❌ Bot detection bypass also failed - cookie may be completely invalid")
+                                raise e
                         
-                        # بررسی خطای format unavailable - استفاده فوری از fallback
-                        if 'requested format is not available' in error_msg or 'format' in error_msg:
+                        # اولویت دوم: بررسی خطای format unavailable - استفاده فوری از fallback
+                        elif 'requested format is not available' in error_msg:
                             logger.error(f"Format not available error detected")
                             if attempt < max_attempts - 1:
                                 logger.info("Will use fallback format in next attempt")
                                 continue  # برو به تلاش بعدی که fallback استفاده می‌کند
                         
-                        # Check for "did not get any data blocks" specifically
-                        if 'did not get any data blocks' in error_msg:
+                        # اولویت سوم: Check for "did not get any data blocks" specifically
+                        elif 'did not get any data blocks' in error_msg:
                             logger.error("Fragment download failed - this is a known YouTube issue")
                             
                             if attempt < max_attempts - 1:
