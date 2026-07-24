@@ -156,7 +156,7 @@ class YouTubeDownloader:
             def _download_with_retry():
                 max_attempts = 3
                 # ✅ لیست fallback برای format (در صورت نیاز)
-                format_fallbacks = ['bestaudio/best', 'bestaudio', 'best', 'worst']
+                format_fallbacks = ['bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best', 'bestvideo+bestaudio/best', 'best']
                 
                 for attempt in range(max_attempts):
                     try:
@@ -169,12 +169,14 @@ class YouTubeDownloader:
                             except:
                                 pass
                         
-                        # در تلاش آخر برای صوت، از format fallback استفاده کن
+                        # استفاده از format fallback در صورت خطا
                         current_opts = ydl_opts.copy()
-                        if is_audio_only and attempt == max_attempts - 1:
-                            logger.info("Last attempt: using fallback format selector")
-                            # ✅ استفاده از format_fallbacks
-                            current_opts['format'] = format_fallbacks[min(attempt, len(format_fallbacks) - 1)]
+                        
+                        # اگر تلاش قبلی با format خاص شکست خورد، از fallback استفاده کن
+                        if attempt > 0:
+                            fallback_format = format_fallbacks[min(attempt - 1, len(format_fallbacks) - 1)]
+                            logger.info(f"Using fallback format: {fallback_format}")
+                            current_opts['format'] = fallback_format
                         
                         with yt_dlp.YoutubeDL(current_opts) as ydl:
                             ydl.download([url])
